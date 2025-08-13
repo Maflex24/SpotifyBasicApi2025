@@ -9,7 +9,11 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
+
+// Konfiguracja portu 8888 dla lokalnego rozwoju - nasłuchiwanie na wszystkich adresach IP
+builder.WebHost.UseUrls("http://*:8888");
 
 var app = builder.Build();
 
@@ -21,6 +25,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
 
 app.UseAuthorization();
 

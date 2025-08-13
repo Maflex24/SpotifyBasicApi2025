@@ -1,6 +1,29 @@
-@SpotifyBasicApi2025_HostAddress = http://localhost:5123
+### Spotify Auth API Examples
 
-GET {{SpotifyBasicApi2025_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Pobierz URL autoryzacji
+GET http://127.0.0.1:8888/api/auth/login
 
-###
+### 2. Callback (automatycznie wywoływany przez Spotify)
+GET http://127.0.0.1:8888/callback?code=YOUR_AUTH_CODE&state=YOUR_STATE
+
+### 3. Odśwież token
+POST http://127.0.0.1:8888/api/auth/refresh
+Content-Type: application/json
+
+"YOUR_REFRESH_TOKEN"
+
+### 4. Przykład użycia tokenu z Spotify Web API
+GET https://api.spotify.com/v1/me
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+### 5. Pobierz profile użytkownika
+GET https://api.spotify.com/v1/me
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+### 6. Pobierz playlisty użytkownika
+GET https://api.spotify.com/v1/me/playlists
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+### 7. Wyszukaj utwory
+GET https://api.spotify.com/v1/search?q=artist:queen&type=track
+Authorization: Bearer YOUR_ACCESS_TOKEN
