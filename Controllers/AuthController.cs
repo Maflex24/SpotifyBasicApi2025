@@ -9,10 +9,12 @@ namespace SpotifyBasicApi2025.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AuthService _authService;
+        private readonly TokenManagerService _tokenManager;
 
-        public AuthController(AuthService authService)
+        public AuthController(AuthService authService, TokenManagerService tokenManager)
         {
             _authService = authService;
+            _tokenManager = tokenManager;
         }
 
         [HttpGet("login")]
@@ -39,6 +41,39 @@ namespace SpotifyBasicApi2025.Controllers
 
             return Ok(tokenResponse);
         }
+
+        [HttpPost("refresh-current")]
+        public async Task<ActionResult<SpotifyTokenResponse>> RefreshCurrentToken()
+        {
+            var tokenResponse = await _authService.RefreshCurrentTokenAsync();
+
+            if (tokenResponse == null)
+            {
+                return BadRequest("Brak zapisanego refresh token lub nie udało się odświeżyć tokenu");
+            }
+
+            return Ok(tokenResponse);
+        }
+
+        [HttpGet("current-token")]
+        public ActionResult<SpotifyTokenResponse> GetCurrentToken()
+        {
+            var token = _tokenManager.GetCurrentToken();
+
+            if (token == null)
+            {
+                return NotFound("Brak zapisanego tokenu");
+            }
+
+            return Ok(token);
+        }
+
+        [HttpDelete("clear-token")]
+        public ActionResult ClearToken()
+        {
+            _tokenManager.ClearToken();
+            return Ok("Token został wyczyszczony");
+        }
     }
 
     [Route("callback")]
@@ -46,10 +81,12 @@ namespace SpotifyBasicApi2025.Controllers
     public class CallbackController : ControllerBase
     {
         private readonly AuthService _authService;
+        private readonly TokenManagerService _tokenManager;
 
-        public CallbackController(AuthService authService)
+        public CallbackController(AuthService authService, TokenManagerService tokenManager)
         {
             _authService = authService;
+            _tokenManager = tokenManager;
         }
 
         [HttpGet]
@@ -141,17 +178,40 @@ Token Type: {tokenResponse.TokenType}
 Expires In: {tokenResponse.ExpiresIn} sekund
         </div>
 
+        <div class='success'>
+            <strong>✅ Token został zapisany w pamięci aplikacji i jest dostępny dla wszystkich serwisów!</strong>
+        </div>
+
         <h3>Przykłady użycia:</h3>
         <p>Możesz teraz używać tego tokenu do wywoływania Spotify Web API:</p>
         
         <button onclick='copyToken()'>Skopiuj Access Token</button>
         <button onclick='window.location.href=""http://127.0.0.1:8888/index.html""'>Powrót do strony głównej</button>
 
+        <h3>Testowanie API:</h3>
+        <p>Sprawdź czy token działa poprawnie:</p>
+        <button onclick='testApi(""profile"")'>Pobierz profil użytkownika</button>
+        <button onclick='testApi(""playlists"")'>Pobierz playlisty</button>
+        <button onclick='testApi(""search?q=test"")'>Wyszukaj utwory</button>
+
         <script>
             function copyToken() {{
                 navigator.clipboard.writeText('{tokenResponse.AccessToken}').then(function() {{
                     alert('Access Token skopiowany do schowka!');
                 }});
+            }}
+
+            function testApi(endpoint) {{
+                fetch(`http://127.0.0.1:8888/api/spotify/${{endpoint}}`)
+                    .then(response => response.json())
+                    .then(data => {{
+                        alert('API działa poprawnie! Sprawdź konsolę przeglądarki dla szczegółów.');
+                        console.log('API Response:', data);
+                    }})
+                    .catch(error => {{
+                        alert('Błąd API: ' + error.message);
+                        console.error('API Error:', error);
+                    }});
             }}
         </script>
     </div>

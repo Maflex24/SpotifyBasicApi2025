@@ -12,18 +12,38 @@ Content-Type: application/json
 
 "YOUR_REFRESH_TOKEN"
 
-### 4. Przykład użycia tokenu z Spotify Web API
+### 4. Odśwież aktualny token (zapisany w pamięci)
+POST http://127.0.0.1:8888/api/auth/refresh-current
+
+### 5. Pobierz aktualny token
+GET http://127.0.0.1:8888/api/auth/current-token
+
+### 6. Wyczyść token
+DELETE http://127.0.0.1:8888/api/auth/clear-token
+
+### Spotify API Endpoints (używają zapisanego tokenu)
+
+### 7. Pobierz profil użytkownika
+GET http://127.0.0.1:8888/api/spotify/profile
+
+### 8. Pobierz playlisty użytkownika
+GET http://127.0.0.1:8888/api/spotify/playlists
+
+### 9. Wyszukaj utwory
+GET http://127.0.0.1:8888/api/spotify/search?q=queen&limit=10
+
+### 10. Przykład bezpośredniego użycia tokenu z Spotify Web API
 GET https://api.spotify.com/v1/me
 Authorization: Bearer YOUR_ACCESS_TOKEN
 
-### 5. Pobierz profile użytkownika
+### 11. Pobierz profile użytkownika (bezpośrednio)
 GET https://api.spotify.com/v1/me
 Authorization: Bearer YOUR_ACCESS_TOKEN
 
-### 6. Pobierz playlisty użytkownika
+### 12. Pobierz playlisty użytkownika (bezpośrednio)
 GET https://api.spotify.com/v1/me/playlists
 Authorization: Bearer YOUR_ACCESS_TOKEN
 
-### 7. Wyszukaj utwory
+### 13. Wyszukaj utwory (bezpośrednio)
 GET https://api.spotify.com/v1/search?q=artist:queen&type=track
 Authorization: Bearer YOUR_ACCESS_TOKEN

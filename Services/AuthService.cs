@@ -9,11 +9,13 @@ namespace SpotifyBasicApi2025.Services
     {
         private readonly IConfiguration _configuration;
         private readonly HttpClient _httpClient;
+        private readonly TokenManagerService _tokenManager;
 
-        public AuthService(IConfiguration configuration, HttpClient httpClient)
+        public AuthService(IConfiguration configuration, HttpClient httpClient, TokenManagerService tokenManager)
         {
             _configuration = configuration;
             _httpClient = httpClient;
+            _tokenManager = tokenManager;
         }
 
         public string GetAuthorizationUrl()
@@ -66,7 +68,14 @@ namespace SpotifyBasicApi2025.Services
             if (response.IsSuccessStatusCode)
             {
                 var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<SpotifyTokenResponse>(responseContent);
+                var tokenResponse = JsonSerializer.Deserialize<SpotifyTokenResponse>(responseContent);
+
+                if (tokenResponse != null)
+                {
+                    _tokenManager.SetToken(tokenResponse);
+                }
+
+                return tokenResponse;
             }
 
             return null;
@@ -99,10 +108,29 @@ namespace SpotifyBasicApi2025.Services
             if (response.IsSuccessStatusCode)
             {
                 var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<SpotifyTokenResponse>(responseContent);
+                var tokenResponse = JsonSerializer.Deserialize<SpotifyTokenResponse>(responseContent);
+
+                if (tokenResponse != null)
+                {
+                    _tokenManager.SetToken(tokenResponse);
+                }
+
+                return tokenResponse;
             }
 
             return null;
+        }
+
+        public async Task<SpotifyTokenResponse?> RefreshCurrentTokenAsync()
+        {
+            var refreshToken = _tokenManager.GetRefreshToken();
+
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                return null;
+            }
+
+            return await RefreshTokenAsync(refreshToken);
         }
     }
 }

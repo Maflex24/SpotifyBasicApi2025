@@ -11,6 +11,8 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<TokenManagerService>();
+builder.Services.AddScoped<SpotifyApiService>();
 
 // Konfiguracja portu 8888 dla lokalnego rozwoju - nasłuchiwanie na wszystkich adresach IP
 builder.WebHost.UseUrls("http://*:8888");
