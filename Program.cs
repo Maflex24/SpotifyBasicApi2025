@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +24,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<TokenManagerService>();
 builder.Services.AddScoped<SpotifyApiService>();
+
+builder.Services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnectionString")));
 
 // Konfiguracja portu 8888 dla lokalnego rozwoju - nasłuchiwanie na wszystkich adresach IP
 builder.WebHost.UseUrls("http://*:8888");
