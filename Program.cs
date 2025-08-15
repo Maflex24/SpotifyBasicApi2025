@@ -23,7 +23,11 @@ builder.Services.AddHttpClient("SpotifyApi", client =>
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<TokenManagerService>();
+
+// Serwisy API
+builder.Services.AddScoped<SpotifyRequestService>();
 builder.Services.AddScoped<SpotifyApiService>();
+builder.Services.AddScoped<SpotifyMyProfileService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnectionString")));
 
