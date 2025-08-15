@@ -9,6 +9,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Konfiguracja HttpClientFactory dla Spotify API
+builder.Services.AddHttpClient("SpotifyApi", client =>
+{
+    var spotifyApiUrl = builder.Configuration["Spotify:ApiUrl"] ?? "https://api.spotify.com/v1/";
+    client.BaseAddress = new Uri(spotifyApiUrl);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("User-Agent", "SpotifyBasicApi2025/1.0");
+});
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<TokenManagerService>();
