@@ -58,6 +58,54 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("LibTags");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAssign", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"), 1L, 1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ItemType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("SpotifyItemId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<float>("Strength")
+                        .HasColumnType("real");
+
+                    b.Property<long>("TagId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemType");
+
+                    b.HasIndex("SpotifyItemId");
+
+                    b.HasIndex("TagId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "TagId", "SpotifyItemId", "ItemType")
+                        .IsUnique();
+
+                    b.ToTable("LibTagAssigns");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagGroup", b =>
                 {
                     b.Property<long>("Id")
@@ -494,12 +542,63 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("TagGroup");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAssign", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpAlbum", "Album")
+                        .WithMany()
+                        .HasForeignKey("SpotifyItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpArtist", "Artist")
+                        .WithMany()
+                        .HasForeignKey("SpotifyItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpPlaylist", "Playlist")
+                        .WithMany()
+                        .HasForeignKey("SpotifyItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpTrack", "Track")
+                        .WithMany()
+                        .HasForeignKey("SpotifyItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.LibTag", "Tag")
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Album");
+
+                    b.Navigation("Artist");
+
+                    b.Navigation("Playlist");
+
+                    b.Navigation("Tag");
+
+                    b.Navigation("Track");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagGroup", b =>
                 {
                     b.HasOne("SpotifyBasicApi2025.Entities.SpUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
 

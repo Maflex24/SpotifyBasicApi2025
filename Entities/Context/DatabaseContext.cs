@@ -25,6 +25,7 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<LibTag> LibTags { get; set; }
 
         public DbSet<LibTagGroup> LibTagGroups { get; set; }
+        public DbSet<LibTagAssign> LibTagAssigns { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -126,7 +127,7 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .HasOne<SpUser>()
                 .WithMany()
                 .HasForeignKey(g => g.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction); // Zmienione z Cascade na NoAction
 
             // Konfiguracja indeksów dla Library Entities
             modelBuilder.Entity<LibTagGroup>()
@@ -140,6 +141,62 @@ namespace SpotifyBasicApi2025.Entities.Context
 
             modelBuilder.Entity<LibTag>()
                 .HasIndex(t => t.TagGroupId);
+
+            // Konfiguracja relacji LibTagAssign
+            modelBuilder.Entity<LibTagAssign>()
+                .HasOne(ti => ti.Tag)
+                .WithMany()
+                .HasForeignKey(ti => ti.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasOne(ti => ti.User)
+                .WithMany()
+                .HasForeignKey(ti => ti.UserId)
+                .OnDelete(DeleteBehavior.NoAction); // Zmienione z Cascade na NoAction
+
+            // Relacje do elementów Spotify (opcjonalne) - bez kaskadowego usuwania
+            modelBuilder.Entity<LibTagAssign>()
+                .HasOne(ti => ti.Artist)
+                .WithMany()
+                .HasForeignKey(ti => ti.SpotifyItemId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasOne(ti => ti.Album)
+                .WithMany()
+                .HasForeignKey(ti => ti.SpotifyItemId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasOne(ti => ti.Track)
+                .WithMany()
+                .HasForeignKey(ti => ti.SpotifyItemId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasOne(ti => ti.Playlist)
+                .WithMany()
+                .HasForeignKey(ti => ti.SpotifyItemId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            // Konfiguracja indeksów dla LibTagAssign
+            modelBuilder.Entity<LibTagAssign>()
+                .HasIndex(ti => ti.UserId);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasIndex(ti => ti.TagId);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasIndex(ti => ti.ItemType);
+
+            modelBuilder.Entity<LibTagAssign>()
+                .HasIndex(ti => ti.SpotifyItemId);
+
+            // Unikalny indeks - jeden tag na element dla danego użytkownika
+            modelBuilder.Entity<LibTagAssign>()
+                .HasIndex(ti => new { ti.UserId, ti.TagId, ti.SpotifyItemId, ti.ItemType })
+                .IsUnique();
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
         }
