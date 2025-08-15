@@ -82,11 +82,15 @@ namespace SpotifyBasicApi2025.Controllers
     {
         private readonly AuthService _authService;
         private readonly TokenManagerService _tokenManager;
+        private readonly SpotifyDataService _spotifyDataService;
+        private readonly SpotifyApiService _spotifyApiService;
 
-        public CallbackController(AuthService authService, TokenManagerService tokenManager)
+        public CallbackController(AuthService authService, TokenManagerService tokenManager, SpotifyDataService spotifyDataService, SpotifyApiService spotifyApiService)
         {
             _authService = authService;
             _tokenManager = tokenManager;
+            _spotifyDataService = spotifyDataService;
+            _spotifyApiService = spotifyApiService;
         }
 
         [HttpGet]
@@ -102,6 +106,23 @@ namespace SpotifyBasicApi2025.Controllers
             if (tokenResponse == null)
             {
                 return BadRequest("Nie udało się uzyskać tokenu");
+            }
+
+            // Automatycznie zapisz użytkownika w bazie danych
+            try
+            {
+                var userProfile = await _spotifyApiService.GetCurrentUserProfileAsync();
+                
+                if (userProfile != null)
+                {
+                    var savedUser = await _spotifyDataService.SaveUserFromSpotifyProfileAsync(userProfile);
+                    Console.WriteLine($"Użytkownik {savedUser.DisplayName} (ID: {savedUser.Id}) został zapisany w bazie danych");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Loguj błąd, ale nie przerywaj procesu autoryzacji
+                Console.WriteLine($"Błąd podczas zapisywania profilu użytkownika: {ex.Message}");
             }
 
             // Zwracamy stronę HTML z informacją o sukcesie

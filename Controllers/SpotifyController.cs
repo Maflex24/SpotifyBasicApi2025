@@ -140,6 +140,39 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("profile/database")]
+        public async Task<ActionResult<object>> GetCurrentUserFromDatabase()
+        {
+            try
+            {
+                // Pobierz profil z Spotify API
+                var spotifyProfile = await _spotifyApiService.GetCurrentUserProfileAsync();
+
+                if (spotifyProfile == null)
+                {
+                    return NotFound("Nie udało się pobrać profilu użytkownika z Spotify");
+                }
+
+                // Pobierz użytkownika z bazy danych
+                var dbUser = await spotifyDataService.GetUserByIdAsync(spotifyProfile.Id);
+
+                if (dbUser == null)
+                {
+                    return NotFound("Użytkownik nie został znaleziony w bazie danych");
+                }
+
+                return Ok(new
+                {
+                    spotifyProfile = spotifyProfile,
+                    databaseUser = dbUser
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         #endregion Profile
 
         #region Search

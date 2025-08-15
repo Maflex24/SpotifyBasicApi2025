@@ -75,9 +75,14 @@ namespace SpotifyBasicApi2025.Services
 
         #region Profile
 
-        public async Task<object?> GetCurrentUserProfileAsync()
+        public async Task<SpotifyUserProfile?> GetCurrentUserProfileAsync()
         {
-            return await requestService.MakeSpotifyRequestAsync("me");
+            var response = await requestService.MakeSpotifyRequestAsync("me");
+            
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyUserProfile>(response.ToString()!);
         }
 
         #endregion Profile
