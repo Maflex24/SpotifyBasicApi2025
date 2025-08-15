@@ -22,6 +22,79 @@ namespace SpotifyBasicApi2025.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder, 1L, 1);
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"), 1L, 1);
+
+                    b.Property<bool>("ForAlbum")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ForArtist")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ForPlaylist")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ForTrack")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<long>("TagGroupId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("TagGroupId");
+
+                    b.ToTable("LibTags");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagGroup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"), 1L, 1);
+
+                    b.Property<bool>("ForAlbum")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ForArtist")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ForPlaylist")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ForTrack")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("LibTagGroups");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpAlbum", b =>
                 {
                     b.Property<string>("Id")
@@ -410,6 +483,26 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("SpUsers");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.LibTagGroup", "TagGroup")
+                        .WithMany("Tags")
+                        .HasForeignKey("TagGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TagGroup");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagGroup", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpAlbum", b =>
                 {
                     b.HasOne("SpotifyBasicApi2025.Entities.SpArtist", "Artist")
@@ -514,6 +607,11 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("Artist");
 
                     b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagGroup", b =>
+                {
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpAlbum", b =>

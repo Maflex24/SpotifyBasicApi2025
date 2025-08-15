@@ -11,6 +11,7 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         // Spotify Entities
         public DbSet<SpArtist> SpArtists { get; set; }
+
         public DbSet<SpAlbum> SpAlbums { get; set; }
         public DbSet<SpTrack> SpTracks { get; set; }
         public DbSet<SpPlaylist> SpPlaylists { get; set; }
@@ -19,6 +20,11 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<SpSavedAlbum> SpSavedAlbums { get; set; }
         public DbSet<SpTrackArtist> SpTrackArtists { get; set; }
         public DbSet<SpPlaylistTrack> SpPlaylistTracks { get; set; }
+
+        // Library Entities
+        public DbSet<LibTag> LibTags { get; set; }
+
+        public DbSet<LibTagGroup> LibTagGroups { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -107,6 +113,33 @@ namespace SpotifyBasicApi2025.Entities.Context
 
             modelBuilder.Entity<SpUser>()
                 .HasIndex(u => u.DisplayName);
+
+            // Konfiguracja relacji Library Entities
+            modelBuilder.Entity<LibTag>()
+                .HasOne(t => t.TagGroup)
+                .WithMany(g => g.Tags)
+                .HasForeignKey(t => t.TagGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relacje z użytkownikami Spotify
+            modelBuilder.Entity<LibTagGroup>()
+                .HasOne<SpUser>()
+                .WithMany()
+                .HasForeignKey(g => g.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Konfiguracja indeksów dla Library Entities
+            modelBuilder.Entity<LibTagGroup>()
+                .HasIndex(g => g.Name);
+
+            modelBuilder.Entity<LibTagGroup>()
+                .HasIndex(g => g.UserId);
+
+            modelBuilder.Entity<LibTag>()
+                .HasIndex(t => t.Name);
+
+            modelBuilder.Entity<LibTag>()
+                .HasIndex(t => t.TagGroupId);
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
         }
