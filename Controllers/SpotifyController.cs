@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SpotifyBasicApi2025.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SpotifyBasicApi2025.Controllers
 {
@@ -8,10 +9,12 @@ namespace SpotifyBasicApi2025.Controllers
     public class SpotifyController : ControllerBase
     {
         private readonly SpotifyApiService _spotifyApiService;
+        private readonly SpotifyDataService spotifyDataService;
 
-        public SpotifyController(SpotifyApiService spotifyApiService)
+        public SpotifyController(SpotifyApiService spotifyApiService, SpotifyDataService spotifyDataService)
         {
             _spotifyApiService = spotifyApiService;
+            this.spotifyDataService = spotifyDataService;
         }
 
         [HttpGet("playlists")]
@@ -52,6 +55,79 @@ namespace SpotifyBasicApi2025.Controllers
                 }
 
                 return Ok(tracks);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("artists/followed")]
+        public async Task<ActionResult<object>> GetFollowedArtists([FromQuery] int limit = 50)
+        {
+            try
+            {
+                var artists = await _spotifyApiService.GetFollowedArtists(limit);
+
+                if (artists == null)
+                {
+                    return NotFound("Nie udało się pobrać śledzonych artystów");
+                }
+
+                return Ok(artists);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("artists/followed/all")]
+        public async Task<ActionResult<object>> GetAllFollowedArtists()
+        {
+            try
+            {
+                var artists = await _spotifyApiService.GetAllFollowedArtists();
+
+                if (artists == null)
+                {
+                    return NotFound("Nie udało się pobrać wszystkich śledzonych artystów");
+                }
+
+                return Ok(new
+                {
+                    total = artists.Count,
+                    artists = artists
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("artists/sync")]
+        public async Task<ActionResult<object>> SyncFollowedArtistsToDatabase()
+        {
+            try
+            {
+                // Pobierz wszystkich śledzonych artystów z Spotify API
+                var spotifyArtists = await _spotifyApiService.GetAllFollowedArtists();
+
+                if (spotifyArtists == null || spotifyArtists.Count == 0)
+                {
+                    return NotFound("Nie znaleziono śledzonych artystów");
+                }
+
+                // Zapisz artystów w bazie danych
+                var savedCount = await spotifyDataService.SaveFollowedArtistsAsync(spotifyArtists);
+
+                return Ok(new
+                {
+                    message = $"Zapisano {savedCount} artystów w bazie danych",
+                    totalArtists = spotifyArtists.Count,
+                    savedCount = savedCount
+                });
             }
             catch (InvalidOperationException ex)
             {

@@ -1,6 +1,7 @@
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Entities.Helpers;
+using SpotifyBasicApi2025.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace SpotifyBasicApi2025.Services
@@ -129,16 +130,6 @@ namespace SpotifyBasicApi2025.Services
             return user;
         }
 
-        // Przykład wyszukiwania artystów po gatunku
-        public async Task<List<SpArtist>> GetArtistsByGenreAsync(string genre)
-        {
-            var artists = await _context.SpArtists
-                .Where(a => a.Genres != null && a.Genres.Contains(genre))
-                .ToListAsync();
-
-            return artists;
-        }
-
         // Przykład pobierania wszystkich obrazów artysty
         public async Task<List<string>> GetArtistImagesAsync(string spotifyId)
         {
@@ -149,6 +140,82 @@ namespace SpotifyBasicApi2025.Services
                 return new List<string>();
 
             return StringListConverter.StringToList(artist.Images);
+        }
+
+        // Zapisywanie śledzonych artystów z Spotify API
+        public async Task<int> SaveFollowedArtistsAsync(List<SpotifyArtistObject> spotifyArtists)
+        {
+            var savedCount = 0;
+
+            foreach (var spotifyArtist in spotifyArtists)
+            {
+                // Sprawdź czy artysta już istnieje
+                var existingArtist = await _context.SpArtists
+                    .FirstOrDefaultAsync(a => a.Id == spotifyArtist.Id);
+
+                if (existingArtist != null)
+                {
+                    // Aktualizuj istniejącego artystę
+                    existingArtist.Name = spotifyArtist.Name;
+                    existingArtist.Type = spotifyArtist.Type;
+                    existingArtist.Uri = spotifyArtist.Uri;
+                    existingArtist.Href = spotifyArtist.Href;
+                    existingArtist.Genres = StringListConverter.ListToString(spotifyArtist.Genres);
+                    existingArtist.Popularity = spotifyArtist.Popularity;
+                    existingArtist.Images = StringListConverter.ListToString(spotifyArtist.Images.Select(img => img.Url).ToList());
+                    existingArtist.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    // Dodaj nowego artystę
+                    var newArtist = new SpArtist
+                    {
+                        Id = spotifyArtist.Id,
+                        Name = spotifyArtist.Name,
+                        Type = spotifyArtist.Type,
+                        Uri = spotifyArtist.Uri,
+                        Href = spotifyArtist.Href,
+                        Genres = StringListConverter.ListToString(spotifyArtist.Genres),
+                        Popularity = spotifyArtist.Popularity,
+                        Images = StringListConverter.ListToString(spotifyArtist.Images.Select(img => img.Url).ToList()),
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    _context.SpArtists.Add(newArtist);
+                }
+
+                savedCount++;
+            }
+
+            await _context.SaveChangesAsync();
+            return savedCount;
+        }
+
+        // Pobieranie wszystkich artystów z bazy danych
+        public async Task<List<SpArtist>> GetAllArtistsAsync()
+        {
+            return await _context.SpArtists
+                .OrderByDescending(a => a.Popularity)
+                .ToListAsync();
+        }
+
+        // Pobieranie artystów po gatunku
+        public async Task<List<SpArtist>> GetArtistsByGenreAsync(string genre)
+        {
+            return await _context.SpArtists
+                .Where(a => a.Genres != null && a.Genres.Contains(genre))
+                .OrderByDescending(a => a.Popularity)
+                .ToListAsync();
+        }
+
+        // Pobieranie artystów o najwyższej popularności
+        public async Task<List<SpArtist>> GetTopArtistsAsync(int limit = 10)
+        {
+            return await _context.SpArtists
+                .OrderByDescending(a => a.Popularity)
+                .Take(limit)
+                .ToListAsync();
         }
     }
 }
