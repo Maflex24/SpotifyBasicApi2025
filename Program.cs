@@ -29,7 +29,6 @@ builder.Services.AddScoped<SpotifyDataService>();
 
 builder.Services.AddScoped<SpotifyRequestService>();
 builder.Services.AddScoped<SpotifyApiService>();
-builder.Services.AddScoped<SpotifyMyProfileService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnectionString")));
 
