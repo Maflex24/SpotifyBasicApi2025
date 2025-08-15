@@ -32,6 +32,36 @@ namespace SpotifyBasicApi2025.Services
             return await MakeSpotifyRequestAsync($"search?q={encodedQuery}&type=track&limit={limit}");
         }
 
+        public async Task<object?> GetFollowedArtists(int limit = 10)
+        {
+            return await MakeSpotifyRequestAsync($"me/following?type=artist&limit={limit}");
+        }
+
+        public async Task<object?> GetCurrentUserTopItems(string type = "tracks", int limit = 10)
+        {
+            return await MakeSpotifyRequestAsync($"me/top/{type}?limit={limit}");
+        }
+
+        public async Task<object?> GetUserSavedTracks(int limit = 10)
+        {
+            return await MakeSpotifyRequestAsync($"me/tracks?limit={limit}");
+        }
+
+        public async Task<object?> GetUserSavedAlbums(int limit = 10)
+        {
+            return await MakeSpotifyRequestAsync($"me/albums?limit={limit}");
+        }
+
+        public async Task<object?> GetCurrentUserDevices()
+        {
+            return await MakeSpotifyRequestAsync("me/player/devices");
+        }
+
+        public async Task<object?> GetCurrentPlaybackState()
+        {
+            return await MakeSpotifyRequestAsync("me/player");
+        }
+
         private async Task<object?> MakeSpotifyRequestAsync(string endpoint)
         {
             var accessToken = _tokenManager.GetAccessToken();
@@ -67,8 +97,16 @@ namespace SpotifyBasicApi2025.Services
                 return JsonSerializer.Deserialize<object>(content);
             }
 
+            // Dodajemy logowanie błędów
+            var errorContent = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Spotify API Error: {response.StatusCode} - {errorContent}");
+            
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                throw new InvalidOperationException($"Brak uprawnień do endpointu {endpoint}. Sprawdź scope tokenu.");
+            }
+
             return null;
         }
     }
 }
-

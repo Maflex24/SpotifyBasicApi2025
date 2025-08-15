@@ -78,6 +78,85 @@ namespace SpotifyBasicApi2025.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet("artists/followed")]
+        public async Task<ActionResult<object>> GetFollowedArtists()
+        {
+            try
+            {
+                var artists = await _spotifyApiService.GetFollowedArtists();
+
+                if (artists == null)
+                {
+                    return NotFound("Nie udało się pobrać wykonawców użytkownika");
+                }
+
+                return Ok(artists);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("tracks/saved")]
+        public async Task<ActionResult<object>> GetUserSavedTracks([FromQuery] int limit = 10)
+        {
+            try
+            {
+                var tracks = await _spotifyApiService.GetUserSavedTracks(limit);
+
+                if (tracks == null)
+                {
+                    return NotFound("Nie udało się pobrać zapisanych utworów");
+                }
+
+                return Ok(tracks);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("albums/saved")]
+        public async Task<ActionResult<object>> GetUserSavedAlbums([FromQuery] int limit = 10)
+        {
+            try
+            {
+                var albums = await _spotifyApiService.GetUserSavedAlbums(limit);
+
+                if (albums == null)
+                {
+                    return NotFound("Nie udało się pobrać zapisanych albumów");
+                }
+
+                return Ok(albums);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("top-items")]
+        public async Task<ActionResult<object>> GetCurrentUserTopItems([FromQuery] string type = "tracks", [FromQuery] int limit = 10)
+        {
+            try
+            {
+                var items = await _spotifyApiService.GetCurrentUserTopItems(type, limit);
+
+                if (items == null)
+                {
+                    return NotFound("Nie udało się pobrać top elementów użytkownika");
+                }
+
+                return Ok(items);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }
-
