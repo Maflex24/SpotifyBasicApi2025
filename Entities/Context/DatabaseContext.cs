@@ -30,6 +30,8 @@ namespace SpotifyBasicApi2025.Entities.Context
         // Library connections
         public DbSet<LibArtistUserAssign> LibArtistUserAssigns { get; set; }
 
+        public DbSet<LibAlbumUserAssign> LibAlbumUserAssigns { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -214,16 +216,42 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .HasForeignKey(aua => aua.ArtistId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Konfiguracja klucza złożonego dla LibArtistUserAssign
-            modelBuilder.Entity<LibArtistUserAssign>()
-                .HasKey(aua => new { aua.UserId, aua.ArtistId });
-
             // Indeksy dla LibArtistUserAssign
             modelBuilder.Entity<LibArtistUserAssign>()
                 .HasIndex(aua => aua.UserId);
 
             modelBuilder.Entity<LibArtistUserAssign>()
                 .HasIndex(aua => aua.ArtistId);
+
+            // Unikalny indeks - jeden artysta na użytkownika
+            modelBuilder.Entity<LibArtistUserAssign>()
+                .HasIndex(aua => new { aua.UserId, aua.ArtistId })
+                .IsUnique();
+
+            // Konfiguracja relacji many-to-many Album-User
+            modelBuilder.Entity<LibAlbumUserAssign>()
+                .HasOne(aua => aua.User)
+                .WithMany(u => u.AlbumAssignments)
+                .HasForeignKey(aua => aua.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibAlbumUserAssign>()
+                .HasOne(aua => aua.Album)
+                .WithMany(a => a.AlbumAssignments)
+                .HasForeignKey(aua => aua.AlbumId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indeksy dla LibAlbumUserAssign
+            modelBuilder.Entity<LibAlbumUserAssign>()
+                .HasIndex(aua => aua.UserId);
+
+            modelBuilder.Entity<LibAlbumUserAssign>()
+                .HasIndex(aua => aua.AlbumId);
+
+            // Unikalny indeks - jeden album na użytkownika
+            modelBuilder.Entity<LibAlbumUserAssign>()
+                .HasIndex(aua => new { aua.UserId, aua.AlbumId })
+                .IsUnique();
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
         }

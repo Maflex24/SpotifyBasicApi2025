@@ -6,11 +6,10 @@ namespace SpotifyBasicApi2025.Entities
     public class LibArtistUserAssign
     {
         [Key]
-        [Column(Order = 0)]
+        public long Id { get; set; }
+        
         public string UserId { get; set; } = string.Empty;
         
-        [Key]
-        [Column(Order = 1)]
         public string ArtistId { get; set; } = string.Empty;
         
         public string ArtistName { get; set; } = string.Empty;

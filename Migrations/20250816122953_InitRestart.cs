@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SpotifyBasicApi2025.Migrations
 {
-    public partial class AddSpotifyEntities : Migration
+    public partial class InitRestart : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -84,6 +84,57 @@ namespace SpotifyBasicApi2025.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "LibArtistUserAssigns",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    ArtistId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    ArtistName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    DateCreatedUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LibArtistUserAssigns", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LibArtistUserAssigns_SpArtists_ArtistId",
+                        column: x => x.ArtistId,
+                        principalTable: "SpArtists",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_LibArtistUserAssigns_SpUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "SpUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "LibTagGroups",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    ForAlbum = table.Column<bool>(type: "bit", nullable: false),
+                    ForArtist = table.Column<bool>(type: "bit", nullable: false),
+                    ForTrack = table.Column<bool>(type: "bit", nullable: false),
+                    ForPlaylist = table.Column<bool>(type: "bit", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LibTagGroups", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LibTagGroups_SpUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "SpUsers",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
                 name: "SpPlaylists",
                 columns: table => new
                 {
@@ -111,6 +162,34 @@ namespace SpotifyBasicApi2025.Migrations
                         principalTable: "SpUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "LibAlbumUserAssigns",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    AlbumId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    AlbumName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    DateCreatedUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LibAlbumUserAssigns", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LibAlbumUserAssigns_SpAlbums_AlbumId",
+                        column: x => x.AlbumId,
+                        principalTable: "SpAlbums",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_LibAlbumUserAssigns_SpUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "SpUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -173,6 +252,30 @@ namespace SpotifyBasicApi2025.Migrations
                         principalTable: "SpAlbums",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "LibTags",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    ForAlbum = table.Column<bool>(type: "bit", nullable: false),
+                    ForArtist = table.Column<bool>(type: "bit", nullable: false),
+                    ForTrack = table.Column<bool>(type: "bit", nullable: false),
+                    ForPlaylist = table.Column<bool>(type: "bit", nullable: false),
+                    TagGroupId = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LibTags", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LibTags_LibTagGroups_TagGroupId",
+                        column: x => x.TagGroupId,
+                        principalTable: "LibTagGroups",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -258,6 +361,134 @@ namespace SpotifyBasicApi2025.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "LibTagAssigns",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TagId = table.Column<long>(type: "bigint", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    Strength = table.Column<float>(type: "real", nullable: false),
+                    ItemType = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    SpotifyItemId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LibTagAssigns", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LibTagAssigns_LibTags_TagId",
+                        column: x => x.TagId,
+                        principalTable: "LibTags",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_LibTagAssigns_SpAlbums_SpotifyItemId",
+                        column: x => x.SpotifyItemId,
+                        principalTable: "SpAlbums",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_LibTagAssigns_SpArtists_SpotifyItemId",
+                        column: x => x.SpotifyItemId,
+                        principalTable: "SpArtists",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_LibTagAssigns_SpPlaylists_SpotifyItemId",
+                        column: x => x.SpotifyItemId,
+                        principalTable: "SpPlaylists",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_LibTagAssigns_SpTracks_SpotifyItemId",
+                        column: x => x.SpotifyItemId,
+                        principalTable: "SpTracks",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_LibTagAssigns_SpUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "SpUsers",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibAlbumUserAssigns_AlbumId",
+                table: "LibAlbumUserAssigns",
+                column: "AlbumId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibAlbumUserAssigns_UserId",
+                table: "LibAlbumUserAssigns",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibAlbumUserAssigns_UserId_AlbumId",
+                table: "LibAlbumUserAssigns",
+                columns: new[] { "UserId", "AlbumId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibArtistUserAssigns_ArtistId",
+                table: "LibArtistUserAssigns",
+                column: "ArtistId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibArtistUserAssigns_UserId",
+                table: "LibArtistUserAssigns",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibArtistUserAssigns_UserId_ArtistId",
+                table: "LibArtistUserAssigns",
+                columns: new[] { "UserId", "ArtistId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagAssigns_ItemType",
+                table: "LibTagAssigns",
+                column: "ItemType");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagAssigns_SpotifyItemId",
+                table: "LibTagAssigns",
+                column: "SpotifyItemId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagAssigns_TagId",
+                table: "LibTagAssigns",
+                column: "TagId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagAssigns_UserId",
+                table: "LibTagAssigns",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagAssigns_UserId_TagId_SpotifyItemId_ItemType",
+                table: "LibTagAssigns",
+                columns: new[] { "UserId", "TagId", "SpotifyItemId", "ItemType" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagGroups_Name",
+                table: "LibTagGroups",
+                column: "Name");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTagGroups_UserId",
+                table: "LibTagGroups",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTags_Name",
+                table: "LibTags",
+                column: "Name");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LibTags_TagGroupId",
+                table: "LibTags",
+                column: "TagGroupId");
+
             migrationBuilder.CreateIndex(
                 name: "IX_SpAlbums_ArtistId",
                 table: "SpAlbums",
@@ -342,6 +573,15 @@ namespace SpotifyBasicApi2025.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "LibAlbumUserAssigns");
+
+            migrationBuilder.DropTable(
+                name: "LibArtistUserAssigns");
+
+            migrationBuilder.DropTable(
+                name: "LibTagAssigns");
+
+            migrationBuilder.DropTable(
                 name: "SpPlaylistTracks");
 
             migrationBuilder.DropTable(
@@ -354,16 +594,22 @@ namespace SpotifyBasicApi2025.Migrations
                 name: "SpTrackArtists");
 
             migrationBuilder.DropTable(
+                name: "LibTags");
+
+            migrationBuilder.DropTable(
                 name: "SpPlaylists");
 
             migrationBuilder.DropTable(
                 name: "SpTracks");
 
             migrationBuilder.DropTable(
-                name: "SpUsers");
+                name: "LibTagGroups");
 
             migrationBuilder.DropTable(
                 name: "SpAlbums");
+
+            migrationBuilder.DropTable(
+                name: "SpUsers");
 
             migrationBuilder.DropTable(
                 name: "SpArtists");

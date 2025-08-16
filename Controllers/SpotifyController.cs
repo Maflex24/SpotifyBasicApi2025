@@ -80,6 +80,7 @@ namespace SpotifyBasicApi2025.Controllers
                 var savedCount = await spotifyDataService.SaveFollowedArtistsAsync(spotifyArtists);
 
                 var savedAssing = await spotifyDataService.SaveArtistUserAssign(spotifyArtists);
+
                 return Ok(new
                 {
                     message = $"Zapisano {savedCount} artystów w bazie danych",
