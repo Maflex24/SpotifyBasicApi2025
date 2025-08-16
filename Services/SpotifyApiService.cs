@@ -487,5 +487,259 @@ namespace SpotifyBasicApi2025.Services
         }
 
         #endregion Database Operations
+
+        #region Albums
+
+        public async Task<SpotifySavedAlbumsResponse?> GetUserSavedAlbums(int limit = 50)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"me/albums?limit={limit}");
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifySavedAlbumsResponse>(response.ToString()!);
+        }
+
+        public async Task<List<SpotifySavedAlbumItem>> GetAllUserSavedAlbums()
+        {
+            var allSavedAlbums = new List<SpotifySavedAlbumItem>();
+            string? next = null;
+            const int limit = 50;
+
+            do
+            {
+                var endpoint = $"me/albums?limit={limit}";
+
+                if (!string.IsNullOrEmpty(next))
+                {
+                    endpoint = next;
+                }
+
+                var response = await requestService.MakeSpotifyRequestAsync(endpoint);
+
+                if (response == null)
+                    break;
+
+                var savedAlbumsResponse = JsonSerializer.Deserialize<SpotifySavedAlbumsResponse>(response.ToString()!);
+
+                if (savedAlbumsResponse?.Items == null)
+                    break;
+
+                allSavedAlbums.AddRange(savedAlbumsResponse.Items);
+                next = savedAlbumsResponse.Next;
+
+            } while (!string.IsNullOrEmpty(next));
+
+            return allSavedAlbums;
+        }
+
+        public async Task<object> SyncUserSavedAlbums()
+        {
+            var userProfile = await GetCurrentUserProfileAsync();
+            if (userProfile == null)
+                throw new InvalidOperationException("Nie można pobrać profilu użytkownika");
+
+            var userId = userProfile.Id;
+            var allSavedAlbums = await GetAllUserSavedAlbums();
+
+            if (allSavedAlbums == null || !allSavedAlbums.Any())
+                return new { message = "Brak zapisanych albumów do synchronizacji", savedCount = 0 };
+
+            var savedCount = 0;
+            var artistsCount = 0;
+            var albumsCount = 0;
+            var tracksCount = 0;
+
+            // Kolekcje do zbierania wszystkich encji przed zapisaniem
+            var allArtists = new Dictionary<string, SpotifyArtistObject>();
+            var allAlbums = new Dictionary<string, SpotifyAlbumObject>();
+            var allTracks = new Dictionary<string, SpotifyTrackObject>();
+            var allTrackArtists = new List<(string TrackId, SpotifyArtistObject Artist)>();
+
+            // Krok 1: Zbierz wszystkie encje
+            foreach (var savedAlbumItem in allSavedAlbums)
+            {
+                var album = savedAlbumItem.Album;
+
+                // Zbierz artystów albumu
+                if (album.Artists != null)
+                {
+                    foreach (var artist in album.Artists)
+                    {
+                        if (!allArtists.ContainsKey(artist.Id))
+                        {
+                            allArtists[artist.Id] = artist;
+                        }
+                    }
+                }
+
+                // Zbierz album
+                if (!allAlbums.ContainsKey(album.Id))
+                {
+                    allAlbums[album.Id] = album;
+                }
+
+                // Zbierz utwory albumu
+                if (album.Tracks?.Items != null)
+                {
+                    foreach (var track in album.Tracks.Items)
+                    {
+                        if (!allTracks.ContainsKey(track.Id))
+                        {
+                            allTracks[track.Id] = track;
+                        }
+
+                        // Zbierz artystów utworu
+                        if (track.Artists != null)
+                        {
+                            foreach (var trackArtist in track.Artists)
+                            {
+                                allTrackArtists.Add((track.Id, trackArtist));
+                                
+                                // Dodaj artystę utworu do ogólnej listy artystów
+                                if (!allArtists.ContainsKey(trackArtist.Id))
+                                {
+                                    allArtists[trackArtist.Id] = trackArtist;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                savedCount++;
+            }
+
+            // Krok 2: Zapisz artystów
+            foreach (var artist in allArtists.Values)
+            {
+                var existingArtist = await context.SpArtists.FirstOrDefaultAsync(a => a.Id == artist.Id);
+                if (existingArtist == null)
+                {
+                    var newArtist = artist.MapToEntity(true);
+                    context.SpArtists.Add(newArtist);
+                    artistsCount++;
+                }
+            }
+
+            // Krok 3: Zapisz albumy
+            foreach (var album in allAlbums.Values)
+            {
+                var existingAlbum = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == album.Id);
+                if (existingAlbum == null)
+                {
+                    var newAlbum = album.MapToEntity(true);
+                    context.SpAlbums.Add(newAlbum);
+                    albumsCount++;
+                }
+            }
+
+            // Krok 4: Zapisz utwory
+            foreach (var track in allTracks.Values)
+            {
+                var existingTrack = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == track.Id);
+                if (existingTrack == null)
+                {
+                    var newTrack = track.MapToEntity(true);
+                    // Znajdź album dla tego utworu
+                    var album = allAlbums.Values.FirstOrDefault(a => a.Tracks?.Items?.Any(t => t.Id == track.Id) == true);
+                    if (album != null)
+                    {
+                        newTrack.AlbumId = album.Id;
+                    }
+                    context.SpTracks.Add(newTrack);
+                    tracksCount++;
+                }
+            }
+
+            // Zapisz zmiany przed tworzeniem relacji
+            await context.SaveChangesAsync();
+
+            // Krok 5: Zapisz relacje artystów do utworów
+            var addedTrackArtists = new HashSet<string>(); // TrackId + ArtistId
+            foreach (var (trackId, artist) in allTrackArtists)
+            {
+                var trackArtistKey = $"{trackId}_{artist.Id}";
+                if (!addedTrackArtists.Contains(trackArtistKey))
+                {
+                    var existingTrackArtist = await context.SpTrackArtists
+                        .FirstOrDefaultAsync(ta => ta.TrackId == trackId && ta.ArtistId == artist.Id);
+                    
+                    if (existingTrackArtist == null)
+                    {
+                        var newTrackArtist = artist.MapToTrackArtistEntity(trackId, true);
+                        context.SpTrackArtists.Add(newTrackArtist);
+                        addedTrackArtists.Add(trackArtistKey);
+                    }
+                }
+            }
+
+            // Zapisz zmiany przed zapisaniem zapisanych albumów
+            await context.SaveChangesAsync();
+
+            // Krok 6: Zapisz zapisane albumy użytkownika
+            var existingSavedAlbums = await context.SpSavedAlbums
+                .Where(sa => sa.UserId == userId)
+                .ToListAsync();
+
+            foreach (var savedAlbum in allSavedAlbums)
+            {
+                var existingSavedAlbum = existingSavedAlbums
+                    .FirstOrDefault(sa => sa.AlbumId == savedAlbum.Album.Id && sa.UserId == userId);
+
+                if (existingSavedAlbum == null)
+                {
+                    var newSavedAlbum = savedAlbum.MapToEntity(userId);
+                    context.SpSavedAlbums.Add(newSavedAlbum);
+                }
+            }
+
+            // Usuń zapisane albumy, które nie są już w bibliotece użytkownika
+            foreach (var existingSavedAlbum in existingSavedAlbums)
+            {
+                var albumStillInLibrary = allSavedAlbums.Exists(sa => sa.Album.Id == existingSavedAlbum.AlbumId);
+
+                if (!albumStillInLibrary)
+                    context.SpSavedAlbums.Remove(existingSavedAlbum);
+            }
+
+            // Krok 7: Zapisz przypisania albumów do użytkownika
+            var existingAssigns = await context.LibAlbumUserAssigns
+                .Where(a => a.UserId == userId)
+                .ToListAsync();
+
+            foreach (var savedAlbum in allSavedAlbums)
+            {
+                var existingAssign = existingAssigns
+                    .FirstOrDefault(a => a.AlbumId == savedAlbum.Album.Id && a.UserId == userId);
+
+                if (existingAssign == null)
+                {
+                    var newAssign = savedAlbum.Album.MapToAlbumUserAssignEntity(userId);
+                    context.LibAlbumUserAssigns.Add(newAssign);
+                }
+            }
+
+            // Usuń przypisania, które nie są już w bibliotece użytkownika
+            foreach (var assign in existingAssigns)
+            {
+                var albumStillInLibrary = allSavedAlbums.Exists(sa => sa.Album.Id == assign.AlbumId);
+
+                if (!albumStillInLibrary)
+                    context.LibAlbumUserAssigns.Remove(assign);
+            }
+
+            await context.SaveChangesAsync();
+
+            return new
+            {
+                message = "Synchronizacja zapisanych albumów zakończona pomyślnie",
+                totalAlbums = savedCount,
+                newArtists = artistsCount,
+                newAlbums = albumsCount,
+                newTracks = tracksCount
+            };
+        }
+
+        #endregion Albums
     }
 }

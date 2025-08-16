@@ -45,6 +45,7 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 Images = model.Images.ToJsonCompact(),
                 Popularity = model.Popularity,
                 Label = model.Label,
+                ArtistId = model.Artists?.FirstOrDefault()?.Id,
                 UpdatedAt = DateTime.UtcNow
             };
 
