@@ -9,10 +9,12 @@ namespace SpotifyBasicApi2025.Services
     public class SpotifyDataService
     {
         private readonly DatabaseContext _context;
+        private readonly UserService userService;
 
-        public SpotifyDataService(DatabaseContext context)
+        public SpotifyDataService(DatabaseContext context, UserService userService)
         {
             _context = context;
+            this.userService = userService;
         }
 
         // Przykład zapisywania artysty z listą gatunków
@@ -236,6 +238,65 @@ namespace SpotifyBasicApi2025.Services
                 }
 
                 savedCount++;
+            }
+
+            await _context.SaveChangesAsync();
+            return savedCount;
+        }
+
+        public async Task<int> SaveArtistUserAssign(List<SpotifyArtistObject> spotifyArtists)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                return 0;
+
+            var existedAssigns = await _context.LibArtistUserAssigns
+                .Where(a => a.UserId == userId)
+                .ToListAsync();
+
+            var savedCount = 0;
+
+            foreach (var spotifyArtist in spotifyArtists)
+            {
+                // Sprawdź czy przypis już istnieje
+                var existingAssign = existedAssigns
+                    .FirstOrDefault(a =>
+                        a.ArtistId == spotifyArtist.Id &&
+                        a.UserId == userId
+                    );
+
+                if (existingAssign != null)
+                {
+                    // Aktualizuj
+                    existingAssign.UserId = userId;
+                    existingAssign.ArtistId = spotifyArtist.Id;
+                    existingAssign.ArtistName = spotifyArtist.Name;
+                }
+                else
+                {
+                    // Dodaj
+                    var newAssign = new LibArtistUserAssign
+                    {
+                        UserId = userId,
+                        ArtistId = spotifyArtist.Id,
+                        ArtistName = spotifyArtist.Name,
+                        DateCreatedUtc = DateTime.UtcNow
+                    };
+
+                    _context.LibArtistUserAssigns.Add(newAssign);
+                }
+
+                savedCount++;
+            }
+
+            // Sprawdzamy, czy nie ma jakiś przypisań, które powinny zostać usunięte
+            foreach (var assign in existedAssigns)
+            {
+                var artistStillInLibrary = spotifyArtists.Exists(a => a.Id == assign.ArtistId);
+
+                if (!artistStillInLibrary)
+                    _context.LibArtistUserAssigns.Remove(assign);
             }
 
             await _context.SaveChangesAsync();

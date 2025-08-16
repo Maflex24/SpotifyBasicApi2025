@@ -35,5 +35,7 @@ namespace SpotifyBasicApi2025.Entities
         public virtual ICollection<SpSavedTrack> SavedTracks { get; set; } = new List<SpSavedTrack>();
         
         public virtual ICollection<SpSavedAlbum> SavedAlbums { get; set; } = new List<SpSavedAlbum>();
+        
+        public virtual ICollection<LibArtistUserAssign> ArtistAssignments { get; set; } = new List<LibArtistUserAssign>();
     }
 }

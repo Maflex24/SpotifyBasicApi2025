@@ -27,6 +27,9 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<LibTagGroup> LibTagGroups { get; set; }
         public DbSet<LibTagAssign> LibTagAssigns { get; set; }
 
+        // Library connections
+        public DbSet<LibArtistUserAssign> LibArtistUserAssigns { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -197,6 +200,30 @@ namespace SpotifyBasicApi2025.Entities.Context
             modelBuilder.Entity<LibTagAssign>()
                 .HasIndex(ti => new { ti.UserId, ti.TagId, ti.SpotifyItemId, ti.ItemType })
                 .IsUnique();
+
+            // Konfiguracja relacji many-to-many Artist-User
+            modelBuilder.Entity<LibArtistUserAssign>()
+                .HasOne(aua => aua.User)
+                .WithMany(u => u.ArtistAssignments)
+                .HasForeignKey(aua => aua.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibArtistUserAssign>()
+                .HasOne(aua => aua.Artist)
+                .WithMany(a => a.UserAssignments)
+                .HasForeignKey(aua => aua.ArtistId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Konfiguracja klucza złożonego dla LibArtistUserAssign
+            modelBuilder.Entity<LibArtistUserAssign>()
+                .HasKey(aua => new { aua.UserId, aua.ArtistId });
+
+            // Indeksy dla LibArtistUserAssign
+            modelBuilder.Entity<LibArtistUserAssign>()
+                .HasIndex(aua => aua.UserId);
+
+            modelBuilder.Entity<LibArtistUserAssign>()
+                .HasIndex(aua => aua.ArtistId);
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
         }
