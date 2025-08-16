@@ -2,7 +2,7 @@
 
 namespace SpotifyBasicApi2025.Models.Extensions
 {
-    public static class MappingExtensions
+    public static class LibraryMappingExtensions
     {
         #region TagGroups
 

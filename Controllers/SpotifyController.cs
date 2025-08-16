@@ -19,6 +19,27 @@ namespace SpotifyBasicApi2025.Controllers
 
         #region Artists
 
+        [HttpGet("artists/{artistId}")]
+        public async Task<ActionResult<object>> GetFollowedArtists(
+            [FromRoute] string artistId)
+        {
+            try
+            {
+                var artist = await _spotifyApiService.GetAndSaveArtist(artistId);
+
+                if (artist == null)
+                {
+                    return NotFound("Nie udało się pobrać śledzonych artystów");
+                }
+
+                return Ok(artist);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpGet("artists/followed")]
         public async Task<ActionResult<object>> GetFollowedArtists([FromQuery] int limit = 50)
         {

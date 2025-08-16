@@ -3,6 +3,7 @@ using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Entities.Helpers;
 using SpotifyBasicApi2025.Models;
 using Microsoft.EntityFrameworkCore;
+using SpotifyBasicApi2025.Models.Extensions;
 
 namespace SpotifyBasicApi2025.Services
 {
@@ -15,25 +16,6 @@ namespace SpotifyBasicApi2025.Services
         {
             _context = context;
             this.userService = userService;
-        }
-
-        // Przykład zapisywania artysty z listą gatunków
-        public async Task<SpArtist> SaveArtistAsync(string spotifyId, string name, List<string> genres, List<string> images)
-        {
-            var artist = new SpArtist
-            {
-                Id = spotifyId,
-                Name = name,
-                Genres = StringListConverter.ListToString(genres),
-                Images = StringListConverter.ListToString(images),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            _context.SpArtists.Add(artist);
-            await _context.SaveChangesAsync();
-
-            return artist;
         }
 
         // Przykład pobierania artysty z konwersją list

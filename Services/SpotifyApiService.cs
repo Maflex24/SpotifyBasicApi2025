@@ -1,18 +1,69 @@
-using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using SpotifyBasicApi2025.Entities;
+using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
+using SpotifyBasicApi2025.Models.Extensions;
+using System.Text.Json;
 
 namespace SpotifyBasicApi2025.Services
 {
     public class SpotifyApiService
     {
         private readonly SpotifyRequestService requestService;
+        private readonly DatabaseContext context;
 
-        public SpotifyApiService(SpotifyRequestService requestService)
+        public SpotifyApiService(SpotifyRequestService requestService, DatabaseContext context)
         {
             this.requestService = requestService;
+            this.context = context;
         }
 
         #region Artists
+
+        public async Task<SpotifyArtistObject?> GetArtist(string id)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"artists/{id}");
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyArtistObject>(response.ToString()!);
+        }
+
+        public async Task<SpotifyArtistObject?> GetAndSaveArtist(string id)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"artists/{id}");
+
+            if (response == null)
+                return null;
+
+            var model = JsonSerializer.Deserialize<SpotifyArtistObject>(response.ToString()!);
+
+            await SaveOrUpdateArtistAsync(model);
+
+            return model;
+        }
+
+        public async Task<SpArtist> SaveOrUpdateArtistAsync(SpotifyArtistObject model)
+        {
+            var artist = context.SpArtists.FirstOrDefault(a => a.Id == model.Id);
+
+            if (artist is null)
+            {
+                //artist = new SpArtist();
+                artist = model.MapToEntity(true);
+
+                context.SpArtists.Add(artist);
+            }
+            else
+            {
+                artist = model.MapToEntity();
+            }
+
+            await context.SaveChangesAsync();
+
+            return artist;
+        }
 
         public async Task<SpotifyFollowedArtistsResponse?> GetFollowedArtists(int limit = 50)
         {
@@ -78,7 +129,7 @@ namespace SpotifyBasicApi2025.Services
         public async Task<SpotifyUserProfile?> GetCurrentUserProfileAsync()
         {
             var response = await requestService.MakeSpotifyRequestAsync("me");
-            
+
             if (response == null)
                 return null;
 
