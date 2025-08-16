@@ -25,8 +25,6 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<TokenManagerService>();
 
 // Serwisy Spotify API
-builder.Services.AddScoped<SpotifyDataService>();
-
 builder.Services.AddScoped<SpotifyRequestService>();
 builder.Services.AddScoped<SpotifyApiService>();
 

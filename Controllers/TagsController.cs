@@ -1,38 +1,107 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Services;
 
 namespace SpotifyBasicApi2025.Controllers
 {
     [ApiController]
-    [Route("api/tags")]
+    [Route("api/[controller]")]
     public class TagsController : ControllerBase
     {
         private readonly TagsService tagsService;
-        private readonly SpotifyDataService spotifyDataService;
+        private readonly SpotifyApiService spotifyApiService;
         private readonly UserService userService;
 
-        public TagsController(TagsService tagsService, SpotifyDataService spotifyDataService, UserService userService)
+        public TagsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService)
         {
             this.tagsService = tagsService;
-            this.spotifyDataService = spotifyDataService;
+            this.spotifyApiService = spotifyApiService;
             this.userService = userService;
         }
 
-        // TODO: Pozostałe endpointy
+        [HttpGet]
+        public async Task<IActionResult> GetAllTags()
+        {
+            try
+            {
+                var tags = await tagsService.GetAllTagsAsync();
+                return Ok(tags);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Błąd podczas pobierania tagów: {ex.Message}");
+            }
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetTagById(int id)
+        {
+            try
+            {
+                var tag = await tagsService.GetTagByIdAsync(id);
+                if (tag == null)
+                    return NotFound($"Tag o ID {id} nie został znaleziony");
+
+                return Ok(tag);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Błąd podczas pobierania tagu: {ex.Message}");
+            }
+        }
 
         [HttpPost]
-        public async Task<ActionResult<LibTagGroup>> CreateTagGroup([FromBody] TagModel model)
+        public async Task<IActionResult> CreateTag([FromBody] TagModel tagModel)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
 
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized("Użytkownik nie jest zalogowany");
+                var createdTag = await tagsService.CreateTagAsync(tagModel);
+                return CreatedAtAction(nameof(GetTagById), new { id = createdTag.Id }, createdTag);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Błąd podczas tworzenia tagu: {ex.Message}");
+            }
+        }
 
-            var outModel = await tagsService.CreateTagAsync(model);
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateTag(int id, [FromBody] TagModel tagModel)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
 
-            return StatusCode(StatusCodes.Status202Accepted, outModel);
+                var updatedTag = await tagsService.UpdateTagAsync(id, tagModel);
+                if (updatedTag == null)
+                    return NotFound($"Tag o ID {id} nie został znaleziony");
+
+                return Ok(updatedTag);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Błąd podczas aktualizacji tagu: {ex.Message}");
+            }
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteTag(int id)
+        {
+            try
+            {
+                var success = await tagsService.DeleteTagAsync(id);
+                if (!success)
+                    return NotFound($"Tag o ID {id} nie został znaleziony");
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Błąd podczas usuwania tagu: {ex.Message}");
+            }
         }
     }
 }

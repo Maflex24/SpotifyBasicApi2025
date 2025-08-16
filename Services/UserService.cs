@@ -42,7 +42,7 @@ namespace SpotifyBasicApi2025.Services
                 }
 
                 // Zapisz/aktualizuj użytkownika w bazie danych
-                await SaveUserFromSpotifyProfileAsync(userProfile);
+                await _spotifyApiService.SaveUserFromSpotifyProfileAsync(userProfile);
 
                 return userProfile.Id;
             }
@@ -102,59 +102,7 @@ namespace SpotifyBasicApi2025.Services
                 .ToListAsync();
         }
 
-        /// <summary>
-        /// Zapisuje lub aktualizuje użytkownika w bazie danych na podstawie profilu Spotify
-        /// </summary>
-        /// <param name="spotifyProfile">Profil użytkownika z Spotify API</param>
-        /// <returns>Zapisany/aktualizowany użytkownik</returns>
-        private async Task<SpUser> SaveUserFromSpotifyProfileAsync(SpotifyUserProfile spotifyProfile)
-        {
-            // Sprawdź czy użytkownik już istnieje
-            var existingUser = await _context.SpUsers
-                .FirstOrDefaultAsync(u => u.Id == spotifyProfile.Id);
 
-            if (existingUser != null)
-            {
-                // Aktualizuj istniejącego użytkownika
-                existingUser.DisplayName = spotifyProfile.DisplayName;
-                existingUser.Type = spotifyProfile.Type;
-                existingUser.Uri = spotifyProfile.Uri;
-                existingUser.Href = spotifyProfile.Href;
-                existingUser.Country = spotifyProfile.Country;
-                existingUser.Email = spotifyProfile.Email;
-                existingUser.Product = spotifyProfile.Product;
-                existingUser.Followers = spotifyProfile.Followers.Total;
-                existingUser.Images = StringListConverter.ListToString(spotifyProfile.Images.Select(img => img.Url).ToList());
-                existingUser.UpdatedAt = DateTime.UtcNow;
-
-                await _context.SaveChangesAsync();
-                return existingUser;
-            }
-            else
-            {
-                // Dodaj nowego użytkownika
-                var newUser = new SpUser
-                {
-                    Id = spotifyProfile.Id,
-                    DisplayName = spotifyProfile.DisplayName,
-                    Type = spotifyProfile.Type,
-                    Uri = spotifyProfile.Uri,
-                    Href = spotifyProfile.Href,
-                    Country = spotifyProfile.Country,
-                    Email = spotifyProfile.Email,
-                    Product = spotifyProfile.Product,
-                    Followers = spotifyProfile.Followers.Total,
-                    Images = StringListConverter.ListToString(spotifyProfile.Images.Select(img => img.Url).ToList()),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.SpUsers.Add(newUser);
-                await _context.SaveChangesAsync();
-
-                return newUser;
-            }
-        }
 
         /// <summary>
         /// Wymusza odświeżenie profilu użytkownika z Spotify API
@@ -176,7 +124,7 @@ namespace SpotifyBasicApi2025.Services
                     return null;
                 }
 
-                return await SaveUserFromSpotifyProfileAsync(userProfile);
+                return await _spotifyApiService.SaveUserFromSpotifyProfileAsync(userProfile);
             }
             catch (Exception ex)
             {

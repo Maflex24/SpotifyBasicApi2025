@@ -130,5 +130,28 @@ namespace SpotifyBasicApi2025.Models.Extensions
 
             return entity;
         }
+
+        public static SpUser MapToEntity(this SpotifyUserProfile model, bool newEntity = false)
+        {
+            var entity = new SpUser
+            {
+                Id = model.Id,
+                DisplayName = model.DisplayName,
+                Type = model.Type,
+                Uri = model.Uri,
+                Href = model.Href,
+                Country = model.Country,
+                Email = model.Email,
+                Product = model.Product,
+                Followers = model.Followers.Total,
+                Images = model.Images.ToJsonCompact(),
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            if (newEntity)
+                entity.CreatedAt = DateTime.UtcNow;
+
+            return entity;
+        }
     }
 }
