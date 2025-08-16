@@ -24,11 +24,16 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<TokenManagerService>();
 
-// Serwisy API
+// Serwisy Spotify API
 builder.Services.AddScoped<SpotifyDataService>();
 
 builder.Services.AddScoped<SpotifyRequestService>();
 builder.Services.AddScoped<SpotifyApiService>();
+
+// Serwisy Library
+builder.Services.AddScoped<TagsService>();
+// Serwisy User
+builder.Services.AddScoped<UserService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnectionString")));
 
