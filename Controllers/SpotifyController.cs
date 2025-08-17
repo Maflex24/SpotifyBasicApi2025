@@ -214,5 +214,28 @@ namespace SpotifyBasicApi2025.Controllers
         }
 
         #endregion Search
+
+        [HttpPost("sync")]
+        public async Task<ActionResult<object>> SyncSpotifyLibrary()
+        {
+            try
+            {
+                // Pobierz wszystkich śledzonych artystów z Spotify API
+                var artistSyncResults = await _spotifyApiService.SyncUserArtists();
+                var albumsSyncResults = await _spotifyApiService.SyncUserSavedAlbums();
+                var stacksSyncResults = await _spotifyApiService.SyncUserSavedTracks();
+
+                return Ok(new
+                {
+                    artistSyncResults = artistSyncResults,
+                    albumsSyncResults = albumsSyncResults,
+                    stacksSyncResults = stacksSyncResults,
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }
