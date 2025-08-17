@@ -213,6 +213,41 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("LibTagGroups");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTrackUserAssign", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"), 1L, 1);
+
+                    b.Property<DateTime>("DateCreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TrackId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("TrackName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "TrackId")
+                        .IsUnique();
+
+                    b.ToTable("LibTrackUserAssigns");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpAlbum", b =>
                 {
                     b.Property<string>("Id")
@@ -749,6 +784,25 @@ namespace SpotifyBasicApi2025.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTrackUserAssign", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpTrack", "Track")
+                        .WithMany("UserAssignments")
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpUser", "User")
+                        .WithMany("TrackAssignments")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpAlbum", b =>
                 {
                     b.HasOne("SpotifyBasicApi2025.Entities.SpArtist", null)
@@ -906,6 +960,8 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("PlaylistTracks");
 
                     b.Navigation("TrackArtists");
+
+                    b.Navigation("UserAssignments");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpUser", b =>
@@ -919,6 +975,8 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("SavedAlbums");
 
                     b.Navigation("SavedTracks");
+
+                    b.Navigation("TrackAssignments");
                 });
 #pragma warning restore 612, 618
         }

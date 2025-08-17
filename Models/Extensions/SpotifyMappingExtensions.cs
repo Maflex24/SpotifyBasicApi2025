@@ -145,6 +145,19 @@ namespace SpotifyBasicApi2025.Models.Extensions
             return entity;
         }
 
+        public static LibTrackUserAssign MapToTrackUserAssignEntity(this SpotifyTrackObject model, string userId, bool newEntity = false)
+        {
+            var entity = new LibTrackUserAssign
+            {
+                UserId = userId,
+                TrackId = model.Id,
+                TrackName = model.Name,
+                DateCreatedUtc = DateTime.UtcNow
+            };
+
+            return entity;
+        }
+
         public static SpUser MapToEntity(this SpotifyUserProfile model, bool newEntity = false)
         {
             var entity = new SpUser

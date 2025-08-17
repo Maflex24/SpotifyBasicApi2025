@@ -7,6 +7,9 @@ namespace SpotifyBasicApi2025.Models
         [JsonPropertyName("artists")]
         public List<SpotifyArtistObject> Artists { get; set; } = new();
 
+        [JsonPropertyName("album")]
+        public SpotifyAlbumObject? Album { get; set; }
+
         [JsonPropertyName("available_markets")]
         public List<string> AvailableMarkets { get; set; } = new();
 

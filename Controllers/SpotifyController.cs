@@ -119,6 +119,25 @@ namespace SpotifyBasicApi2025.Controllers
 
         #endregion Albums
 
+        #region Tracks
+
+        [HttpPost("tracks/sync")]
+        public async Task<ActionResult<object>> SyncUserSavedTracks()
+        {
+            try
+            {
+                var syncResults = await _spotifyApiService.SyncUserSavedTracks();
+
+                return Ok(syncResults);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        #endregion Tracks
+
         #region Playlists
 
         [HttpGet("playlists")]

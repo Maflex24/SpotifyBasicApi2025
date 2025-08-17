@@ -33,6 +33,8 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         public DbSet<LibAlbumUserAssign> LibAlbumUserAssigns { get; set; }
 
+        public DbSet<LibTrackUserAssign> LibTrackUserAssigns { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -271,6 +273,31 @@ namespace SpotifyBasicApi2025.Entities.Context
             // Unikalny indeks - jeden album na użytkownika
             modelBuilder.Entity<LibAlbumUserAssign>()
                 .HasIndex(aua => new { aua.UserId, aua.AlbumId })
+                .IsUnique();
+
+            // Konfiguracja relacji many-to-many Track-User
+            modelBuilder.Entity<LibTrackUserAssign>()
+                .HasOne(tua => tua.User)
+                .WithMany(u => u.TrackAssignments)
+                .HasForeignKey(tua => tua.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibTrackUserAssign>()
+                .HasOne(tua => tua.Track)
+                .WithMany(t => t.UserAssignments)
+                .HasForeignKey(tua => tua.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indeksy dla LibTrackUserAssign
+            modelBuilder.Entity<LibTrackUserAssign>()
+                .HasIndex(tua => tua.UserId);
+
+            modelBuilder.Entity<LibTrackUserAssign>()
+                .HasIndex(tua => tua.TrackId);
+
+            // Unikalny indeks - jeden utwór na użytkownika
+            modelBuilder.Entity<LibTrackUserAssign>()
+                .HasIndex(tua => new { tua.UserId, tua.TrackId })
                 .IsUnique();
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
