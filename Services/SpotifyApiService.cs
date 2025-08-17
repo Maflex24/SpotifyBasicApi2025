@@ -1117,8 +1117,10 @@ namespace SpotifyBasicApi2025.Services
             return allPlaylists;
         }
 
-        public async Task<SpotifyPlaylistTracksResponse?> GetPlaylistTracks(string playlistId, int limit = 100)
+        public async Task<SpotifyPlaylistTracksResponse?> GetPlaylistTracks(string playlistId, int limit = 50)
         {
+            // Limit 50 jest maksymalnym limitem dla endpointu /playlists/{playlist_id}/tracks
+            // zgodnie z dokumentacją Spotify API
             var url = $"https://api.spotify.com/v1/playlists/{playlistId}/tracks?limit={limit}";
             var response = await requestService.MakeSpotifyRequestAsync(url);
 
@@ -1131,7 +1133,7 @@ namespace SpotifyBasicApi2025.Services
         public async Task<List<SpotifyPlaylistTrackItem>> GetAllPlaylistTracks(string playlistId)
         {
             var allTracks = new List<SpotifyPlaylistTrackItem>();
-            var limit = 100;
+            var limit = 50; // Maksymalny limit zgodnie z dokumentacją Spotify API
             var offset = 0;
 
             while (true)
@@ -1182,6 +1184,29 @@ namespace SpotifyBasicApi2025.Services
             var allTrackArtists = new List<(string TrackId, SpotifyArtistObject Artist)>();
             var allPlaylistTracks = new List<(string PlaylistId, SpotifyPlaylistTrackItem TrackItem)>();
             var allPlaylistOwners = new Dictionary<string, SpotifyUserProfile>();
+
+            // Krok 0: Pobierz istniejące ID z bazy danych (optymalizacja)
+            var existingArtistIds = (await context.SpArtists.Select(a => a.Id).ToListAsync()).ToHashSet();
+            var existingAlbumIds = (await context.SpAlbums.Select(a => a.Id).ToListAsync()).ToHashSet();
+            var existingTrackIds = (await context.SpTracks.Select(t => t.Id).ToListAsync()).ToHashSet();
+            var existingUserIds = (await context.SpUsers.Select(u => u.Id).ToListAsync()).ToHashSet();
+            var existingTrackArtistKeys = (await context.SpTrackArtists
+                .Select(ta => $"{ta.TrackId}_{ta.ArtistId}")
+                .ToListAsync()).ToHashSet();
+            
+            // Pobierz istniejące encje do aktualizacji (optymalizacja)
+            var existingArtists = await context.SpArtists
+                .Where(a => allArtists.Keys.Contains(a.Id))
+                .ToDictionaryAsync(a => a.Id);
+            var existingAlbums = await context.SpAlbums
+                .Where(a => allAlbums.Keys.Contains(a.Id))
+                .ToDictionaryAsync(a => a.Id);
+            var existingTracks = await context.SpTracks
+                .Where(t => allTracks.Keys.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id);
+            var existingUsers = await context.SpUsers
+                .Where(u => allPlaylistOwners.Keys.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id);
 
             // Krok 1: Zbierz wszystkie playlisty i ich utwory
             foreach (var playlist in allPlaylists)
@@ -1236,38 +1261,44 @@ namespace SpotifyBasicApi2025.Services
             // Krok 2: Zapisz artystów
             foreach (var artist in allArtists.Values)
             {
-                var existingArtist = await context.SpArtists.FirstOrDefaultAsync(a => a.Id == artist.Id);
-                if (existingArtist == null)
+                if (!existingArtistIds.Contains(artist.Id))
                 {
                     var newArtist = artist.MapToEntity(true);
                     context.SpArtists.Add(newArtist);
+                    existingArtistIds.Add(artist.Id); // Aktualizuj HashSet
                     artistsCount++;
                 }
                 else
                 {
                     // Aktualizuj istniejący artysta
-                    var updatedArtist = artist.MapToEntity();
-                    updatedArtist.CreatedAt = existingArtist.CreatedAt;
-                    context.Entry(existingArtist).CurrentValues.SetValues(updatedArtist);
+                    if (existingArtists.TryGetValue(artist.Id, out var existingArtist))
+                    {
+                        var updatedArtist = artist.MapToEntity();
+                        updatedArtist.CreatedAt = existingArtist.CreatedAt;
+                        context.Entry(existingArtist).CurrentValues.SetValues(updatedArtist);
+                    }
                 }
             }
 
             // Krok 3: Zapisz albumy
             foreach (var album in allAlbums.Values)
             {
-                var existingAlbum = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == album.Id);
-                if (existingAlbum == null)
+                if (!existingAlbumIds.Contains(album.Id))
                 {
                     var newAlbum = album.MapToEntity(true);
                     context.SpAlbums.Add(newAlbum);
+                    existingAlbumIds.Add(album.Id); // Aktualizuj HashSet
                     albumsCount++;
                 }
                 else
                 {
                     // Aktualizuj istniejący album
-                    var updatedAlbum = album.MapToEntity();
-                    updatedAlbum.CreatedAt = existingAlbum.CreatedAt;
-                    context.Entry(existingAlbum).CurrentValues.SetValues(updatedAlbum);
+                    if (existingAlbums.TryGetValue(album.Id, out var existingAlbum))
+                    {
+                        var updatedAlbum = album.MapToEntity();
+                        updatedAlbum.CreatedAt = existingAlbum.CreatedAt;
+                        context.Entry(existingAlbum).CurrentValues.SetValues(updatedAlbum);
+                    }
                 }
             }
 
@@ -1276,8 +1307,7 @@ namespace SpotifyBasicApi2025.Services
             // Krok 4: Zapisz utwory
             foreach (var track in allTracks.Values)
             {
-                var existingTrack = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == track.Id);
-                if (existingTrack == null)
+                if (!existingTrackIds.Contains(track.Id))
                 {
                     var newTrack = track.MapToEntity(true);
                     if (track.Album != null)
@@ -1285,24 +1315,28 @@ namespace SpotifyBasicApi2025.Services
                         newTrack.AlbumId = track.Album.Id;
                     }
                     context.SpTracks.Add(newTrack);
+                    existingTrackIds.Add(track.Id); // Aktualizuj HashSet
                     tracksCount++;
                 }
                 else
                 {
                     // Aktualizuj istniejący utwór
-                    var updatedTrack = track.MapToEntity();
-                    updatedTrack.CreatedAt = existingTrack.CreatedAt;
-                    
-                    if (string.IsNullOrEmpty(existingTrack.AlbumId) && track.Album != null)
+                    if (existingTracks.TryGetValue(track.Id, out var existingTrack))
                     {
-                        updatedTrack.AlbumId = track.Album.Id;
+                        var updatedTrack = track.MapToEntity();
+                        updatedTrack.CreatedAt = existingTrack.CreatedAt;
+                        
+                        if (string.IsNullOrEmpty(existingTrack.AlbumId) && track.Album != null)
+                        {
+                            updatedTrack.AlbumId = track.Album.Id;
+                        }
+                        else if (!string.IsNullOrEmpty(existingTrack.AlbumId))
+                        {
+                            updatedTrack.AlbumId = existingTrack.AlbumId;
+                        }
+                        
+                        context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
                     }
-                    else if (!string.IsNullOrEmpty(existingTrack.AlbumId))
-                    {
-                        updatedTrack.AlbumId = existingTrack.AlbumId;
-                    }
-                    
-                    context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
                 }
             }
 
@@ -1311,18 +1345,21 @@ namespace SpotifyBasicApi2025.Services
             // Krok 5: Zapisz właścicieli playlist
             foreach (var owner in allPlaylistOwners.Values)
             {
-                var existingOwner = await context.SpUsers.FirstOrDefaultAsync(u => u.Id == owner.Id);
-                if (existingOwner == null)
+                if (!existingUserIds.Contains(owner.Id))
                 {
                     var newOwner = owner.MapToEntity(true);
                     context.SpUsers.Add(newOwner);
+                    existingUserIds.Add(owner.Id); // Aktualizuj HashSet
                 }
                 else
                 {
                     // Aktualizuj istniejącego właściciela
-                    var updatedOwner = owner.MapToEntity();
-                    updatedOwner.CreatedAt = existingOwner.CreatedAt;
-                    context.Entry(existingOwner).CurrentValues.SetValues(updatedOwner);
+                    if (existingUsers.TryGetValue(owner.Id, out var existingOwner))
+                    {
+                        var updatedOwner = owner.MapToEntity();
+                        updatedOwner.CreatedAt = existingOwner.CreatedAt;
+                        context.Entry(existingOwner).CurrentValues.SetValues(updatedOwner);
+                    }
                 }
             }
 
@@ -1355,13 +1392,11 @@ namespace SpotifyBasicApi2025.Services
                 var trackArtistKey = $"{trackId}_{artist.Id}";
                 if (!addedTrackArtists.Contains(trackArtistKey))
                 {
-                    var existingTrackArtist = await context.SpTrackArtists
-                        .FirstOrDefaultAsync(ta => ta.TrackId == trackId && ta.ArtistId == artist.Id);
-
-                    if (existingTrackArtist == null)
+                    if (!existingTrackArtistKeys.Contains(trackArtistKey))
                     {
                         var newTrackArtist = artist.MapToTrackArtistEntity(trackId, true);
                         context.SpTrackArtists.Add(newTrackArtist);
+                        existingTrackArtistKeys.Add(trackArtistKey); // Aktualizuj HashSet
                         addedTrackArtists.Add(trackArtistKey);
                     }
                 }
@@ -1370,28 +1405,33 @@ namespace SpotifyBasicApi2025.Services
             await context.SaveChangesAsync();
 
             // Krok 8: Zapisz utwory playlist
-            var existingPlaylistTracks = await context.SpPlaylistTracks
+            var existingPlaylistTrackKeys = (await context.SpPlaylistTracks
                 .Where(pt => allPlaylists.Select(p => p.Id).Contains(pt.PlaylistId))
-                .ToListAsync();
+                .Select(pt => $"{pt.PlaylistId}_{pt.TrackId}")
+                .ToListAsync()).ToHashSet();
 
             foreach (var (playlistId, trackItem) in allPlaylistTracks)
             {
                 if (trackItem.Track == null)
                     continue;
 
-                var existingPlaylistTrack = existingPlaylistTracks
-                    .FirstOrDefault(pt => pt.PlaylistId == playlistId && pt.TrackId == trackItem.Track.Id);
-
-                if (existingPlaylistTrack == null)
+                var playlistTrackKey = $"{playlistId}_{trackItem.Track.Id}";
+                if (!existingPlaylistTrackKeys.Contains(playlistTrackKey))
                 {
                     var newPlaylistTrack = trackItem.MapToPlaylistTrackEntity(playlistId);
                     context.SpPlaylistTracks.Add(newPlaylistTrack);
+                    existingPlaylistTrackKeys.Add(playlistTrackKey); // Aktualizuj HashSet
                     playlistTracksCount++;
                 }
             }
 
             // Usuń utwory playlist, które nie są już w playlistach
-            foreach (var existingPlaylistTrack in existingPlaylistTracks)
+            // Pobierz wszystkie istniejące utwory playlist do usunięcia
+            var existingPlaylistTracksToRemove = await context.SpPlaylistTracks
+                .Where(pt => allPlaylists.Select(p => p.Id).Contains(pt.PlaylistId))
+                .ToListAsync();
+
+            foreach (var existingPlaylistTrack in existingPlaylistTracksToRemove)
             {
                 var trackStillInPlaylist = allPlaylistTracks.Exists(pt => 
                     pt.PlaylistId == existingPlaylistTrack.PlaylistId && 
