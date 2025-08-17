@@ -5,7 +5,7 @@ using SpotifyBasicApi2025.Services;
 namespace SpotifyBasicApi2025.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/tags")]
     public class TagsController : ControllerBase
     {
         private readonly TagsService tagsService;
@@ -22,9 +22,36 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAllTags()
         {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (userId is null)
+                return StatusCode(403);
+
             try
             {
-                var tags = await tagsService.GetAllTagsAsync();
+                var tags = await tagsService.GetAllTagsAsync(userId);
+
+                return Ok(tags);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Błąd podczas pobierania tagów: {ex.Message}");
+            }
+        }
+
+        [HttpGet("list")]
+        public async Task<IActionResult> GetTagsList(
+            [FromQuery] string categoriesIds)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (userId is null)
+                return StatusCode(403);
+
+            try
+            {
+                var tags = await tagsService.GetTagsList(userId, categoriesIds);
+
                 return Ok(tags);
             }
             catch (Exception ex)
@@ -39,6 +66,7 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var tag = await tagsService.GetTagByIdAsync(id);
+
                 if (tag == null)
                     return NotFound($"Tag o ID {id} nie został znaleziony");
 
@@ -59,6 +87,7 @@ namespace SpotifyBasicApi2025.Controllers
                     return BadRequest(ModelState);
 
                 var createdTag = await tagsService.CreateTagAsync(tagModel);
+
                 return CreatedAtAction(nameof(GetTagById), new { id = createdTag.Id }, createdTag);
             }
             catch (Exception ex)
@@ -76,6 +105,7 @@ namespace SpotifyBasicApi2025.Controllers
                     return BadRequest(ModelState);
 
                 var updatedTag = await tagsService.UpdateTagAsync(id, tagModel);
+
                 if (updatedTag == null)
                     return NotFound($"Tag o ID {id} nie został znaleziony");
 
@@ -93,6 +123,7 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var success = await tagsService.DeleteTagAsync(id);
+
                 if (!success)
                     return NotFound($"Tag o ID {id} nie został znaleziony");
 

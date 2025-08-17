@@ -57,7 +57,8 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 ForAlbum = entity.ForAlbum,
                 ForArtist = entity.ForArtist,
                 ForPlaylist = entity.ForPlaylist,
-                ForTrack = entity.ForTrack
+                ForTrack = entity.ForTrack,
+                TagGroupId = entity.TagGroupId
             };
         }
     }

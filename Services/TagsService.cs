@@ -3,6 +3,7 @@ using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
+using System;
 
 namespace SpotifyBasicApi2025.Services
 {
@@ -91,9 +92,30 @@ namespace SpotifyBasicApi2025.Services
             return entity.MapToTagModel();
         }
 
-        public async Task<List<TagModel>> GetAllTagsAsync()
+        public async Task<List<TagModel>> GetAllTagsAsync(string userId)
         {
             var entities = await context.LibTags
+                .Where(t => t.TagGroup.UserId == userId)
+                .OrderBy(t => t.Name)
+                .ToListAsync();
+
+            return entities.Select(e => e.MapToTagModel()).ToList();
+        }
+
+        public async Task<List<TagModel>> GetTagsList(string userId, string categoriesStringIds)
+        {
+            var categoriesIds = new List<long>();
+
+            if (!string.IsNullOrEmpty(categoriesStringIds))
+                categoriesIds = categoriesStringIds.Trim().Split(',').ToList().Select(id => long.Parse(id)).ToList();
+
+            var query = context.LibTags.AsQueryable();
+
+            if (categoriesIds.Any())
+                query = query.Where(t => categoriesIds.Contains(t.TagGroupId));
+
+            var entities = await query
+                .Where(t => t.TagGroup.UserId == userId)
                 .OrderBy(t => t.Name)
                 .ToListAsync();
 

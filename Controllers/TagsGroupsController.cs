@@ -5,7 +5,7 @@ using SpotifyBasicApi2025.Services;
 namespace SpotifyBasicApi2025.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/tags-group")]
     public class TagsGroupsController : ControllerBase
     {
         private readonly TagsService tagsService;
@@ -25,6 +25,7 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var tagGroups = await tagsService.GetAllTagGroupsAsync();
+
                 return Ok(tagGroups);
             }
             catch (Exception ex)
@@ -39,6 +40,7 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var tagGroup = await tagsService.GetTagGroupByIdAsync(id);
+
                 if (tagGroup == null)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");
 
@@ -59,6 +61,7 @@ namespace SpotifyBasicApi2025.Controllers
                     return BadRequest(ModelState);
 
                 var userId = await userService.GetCurrentUserIdAsync();
+
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized("Użytkownik nie jest zalogowany");
 
@@ -81,6 +84,7 @@ namespace SpotifyBasicApi2025.Controllers
                     return BadRequest(ModelState);
 
                 var updatedTagGroup = await tagsService.UpdateTagGroupAsync(id, tagGroupModel);
+
                 if (updatedTagGroup == null)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");
 
@@ -98,6 +102,7 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var success = await tagsService.DeleteTagGroupAsync(id);
+
                 if (!success)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");
 
