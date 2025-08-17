@@ -20,6 +20,7 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<SpSavedAlbum> SpSavedAlbums { get; set; }
         public DbSet<SpTrackArtist> SpTrackArtists { get; set; }
         public DbSet<SpPlaylistTrack> SpPlaylistTracks { get; set; }
+        public DbSet<SpAlbumArtistAssign> SpAlbumArtistAssigns { get; set; }
 
         // Library Entities
         public DbSet<LibTag> LibTags { get; set; }
@@ -62,17 +63,36 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Konfiguracja relacji one-to-many
-            modelBuilder.Entity<SpAlbum>()
-                .HasOne(a => a.Artist)
-                .WithMany(ar => ar.Albums)
-                .HasForeignKey(a => a.ArtistId)
-                .OnDelete(DeleteBehavior.SetNull);
-
             modelBuilder.Entity<SpTrack>()
                 .HasOne(t => t.Album)
                 .WithMany(al => al.Tracks)
                 .HasForeignKey(t => t.AlbumId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Konfiguracja relacji many-to-many Album-Artist
+            modelBuilder.Entity<SpAlbumArtistAssign>()
+                .HasOne(aaa => aaa.Album)
+                .WithMany(a => a.AlbumArtistAssigns)
+                .HasForeignKey(aaa => aaa.AlbumId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<SpAlbumArtistAssign>()
+                .HasOne(aaa => aaa.Artist)
+                .WithMany(a => a.AlbumArtistAssigns)
+                .HasForeignKey(aaa => aaa.ArtistId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indeksy dla SpAlbumArtistAssign
+            modelBuilder.Entity<SpAlbumArtistAssign>()
+                .HasIndex(aaa => aaa.AlbumId);
+
+            modelBuilder.Entity<SpAlbumArtistAssign>()
+                .HasIndex(aaa => aaa.ArtistId);
+
+            // Unikalny indeks - jeden artysta na album
+            modelBuilder.Entity<SpAlbumArtistAssign>()
+                .HasIndex(aaa => new { aaa.AlbumId, aaa.ArtistId })
+                .IsUnique();
 
             modelBuilder.Entity<SpPlaylist>()
                 .HasOne(p => p.Owner)

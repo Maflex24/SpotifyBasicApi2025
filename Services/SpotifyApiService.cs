@@ -177,7 +177,7 @@ namespace SpotifyBasicApi2025.Services
                 // Aktualizuj istniejącego użytkownika
                 var updatedUser = spotifyProfile.MapToEntity();
                 updatedUser.CreatedAt = existingUser.CreatedAt; // Zachowaj oryginalną datę utworzenia
-                
+
                 context.Entry(existingUser).CurrentValues.SetValues(updatedUser);
                 await context.SaveChangesAsync();
                 return existingUser;
@@ -209,7 +209,7 @@ namespace SpotifyBasicApi2025.Services
                     // Aktualizuj istniejącego artystę
                     var updatedArtist = spotifyArtist.MapToEntity();
                     updatedArtist.CreatedAt = existingArtist.CreatedAt; // Zachowaj oryginalną datę utworzenia
-                    
+
                     context.Entry(existingArtist).CurrentValues.SetValues(updatedArtist);
                 }
                 else
@@ -256,7 +256,7 @@ namespace SpotifyBasicApi2025.Services
                     var updatedAssign = spotifyArtist.MapToArtistUserAssignEntity(userId);
                     updatedAssign.Id = existingAssign.Id; // Zachowaj oryginalne ID
                     updatedAssign.DateCreatedUtc = existingAssign.DateCreatedUtc; // Zachowaj oryginalną datę utworzenia
-                    
+
                     context.Entry(existingAssign).CurrentValues.SetValues(updatedAssign);
                 }
                 else
@@ -335,7 +335,7 @@ namespace SpotifyBasicApi2025.Services
                 // Aktualizuj istniejący album
                 var updatedAlbum = spotifyAlbum.MapToEntity();
                 updatedAlbum.CreatedAt = existingAlbum.CreatedAt; // Zachowaj oryginalną datę utworzenia
-                
+
                 context.Entry(existingAlbum).CurrentValues.SetValues(updatedAlbum);
                 await context.SaveChangesAsync();
                 return existingAlbum;
@@ -363,7 +363,7 @@ namespace SpotifyBasicApi2025.Services
                 // Aktualizuj istniejący utwór
                 var updatedTrack = spotifyTrack.MapToEntity();
                 updatedTrack.CreatedAt = existingTrack.CreatedAt; // Zachowaj oryginalną datę utworzenia
-                
+
                 context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
                 await context.SaveChangesAsync();
                 return existingTrack;
@@ -403,7 +403,7 @@ namespace SpotifyBasicApi2025.Services
                     var updatedSavedAlbum = savedAlbum.MapToEntity(userId);
                     updatedSavedAlbum.Id = existingSavedAlbum.Id; // Zachowaj oryginalne ID
                     updatedSavedAlbum.CreatedAt = existingSavedAlbum.CreatedAt; // Zachowaj oryginalną datę utworzenia
-                    
+
                     context.Entry(existingSavedAlbum).CurrentValues.SetValues(updatedSavedAlbum);
                 }
                 else
@@ -460,7 +460,7 @@ namespace SpotifyBasicApi2025.Services
                     var updatedAssign = spotifyAlbum.MapToAlbumUserAssignEntity(userId);
                     updatedAssign.Id = existingAssign.Id; // Zachowaj oryginalne ID
                     updatedAssign.DateCreatedUtc = existingAssign.DateCreatedUtc; // Zachowaj oryginalną datę utworzenia
-                    
+
                     context.Entry(existingAssign).CurrentValues.SetValues(updatedAssign);
                 }
                 else
@@ -527,7 +527,6 @@ namespace SpotifyBasicApi2025.Services
 
                 allSavedAlbums.AddRange(savedAlbumsResponse.Items);
                 next = savedAlbumsResponse.Next;
-
             } while (!string.IsNullOrEmpty(next));
 
             return allSavedAlbums;
@@ -555,6 +554,7 @@ namespace SpotifyBasicApi2025.Services
             var allAlbums = new Dictionary<string, SpotifyAlbumObject>();
             var allTracks = new Dictionary<string, SpotifyTrackObject>();
             var allTrackArtists = new List<(string TrackId, SpotifyArtistObject Artist)>();
+            var allAlbumArtists = new List<(string AlbumId, SpotifyArtistObject Artist)>();
 
             // Krok 1: Zbierz wszystkie encje
             foreach (var savedAlbumItem in allSavedAlbums)
@@ -570,6 +570,7 @@ namespace SpotifyBasicApi2025.Services
                         {
                             allArtists[artist.Id] = artist;
                         }
+                        allAlbumArtists.Add((album.Id, artist));
                     }
                 }
 
@@ -595,7 +596,7 @@ namespace SpotifyBasicApi2025.Services
                             foreach (var trackArtist in track.Artists)
                             {
                                 allTrackArtists.Add((track.Id, trackArtist));
-                                
+
                                 // Dodaj artystę utworu do ogólnej listy artystów
                                 if (!allArtists.ContainsKey(trackArtist.Id))
                                 {
@@ -633,7 +634,39 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
-            // Krok 4: Zapisz utwory
+            // Zapisz zmiany przed tworzeniem relacji album-artysta
+            await context.SaveChangesAsync();
+
+            // Krok 4: Zapisz relacje albumów z artystami
+            var addedAlbumArtists = new HashSet<string>(); // AlbumId + ArtistId
+
+            foreach (var (albumId, artist) in allAlbumArtists)
+            {
+                var albumArtistKey = $"{albumId}_{artist.Id}";
+
+                if (!addedAlbumArtists.Contains(albumArtistKey))
+                {
+                    var existingAlbumArtist = await context.SpAlbumArtistAssigns
+                        .FirstOrDefaultAsync(aaa => aaa.AlbumId == albumId && aaa.ArtistId == artist.Id);
+
+                    if (existingAlbumArtist == null)
+                    {
+                        // Pobierz nazwę albumu z kolekcji allAlbums
+                        var albumName = allAlbums.ContainsKey(albumId) ? allAlbums[albumId].Name : string.Empty;
+
+                        var newAlbumArtist = artist.MapToAlbumArtistAssignEntity(albumId, albumName, true);
+
+                        context.SpAlbumArtistAssigns.Add(newAlbumArtist);
+
+                        addedAlbumArtists.Add(albumArtistKey);
+                    }
+                }
+            }
+
+            // Zapisz zmiany przed zapisaniem utworów
+            await context.SaveChangesAsync();
+
+            // Krok 5: Zapisz utwory
             foreach (var track in allTracks.Values)
             {
                 var existingTrack = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == track.Id);
@@ -654,7 +687,7 @@ namespace SpotifyBasicApi2025.Services
             // Zapisz zmiany przed tworzeniem relacji
             await context.SaveChangesAsync();
 
-            // Krok 5: Zapisz relacje artystów do utworów
+            // Krok 6: Zapisz relacje artystów do utworów
             var addedTrackArtists = new HashSet<string>(); // TrackId + ArtistId
             foreach (var (trackId, artist) in allTrackArtists)
             {
@@ -663,7 +696,7 @@ namespace SpotifyBasicApi2025.Services
                 {
                     var existingTrackArtist = await context.SpTrackArtists
                         .FirstOrDefaultAsync(ta => ta.TrackId == trackId && ta.ArtistId == artist.Id);
-                    
+
                     if (existingTrackArtist == null)
                     {
                         var newTrackArtist = artist.MapToTrackArtistEntity(trackId, true);
@@ -676,7 +709,7 @@ namespace SpotifyBasicApi2025.Services
             // Zapisz zmiany przed zapisaniem zapisanych albumów
             await context.SaveChangesAsync();
 
-            // Krok 6: Zapisz zapisane albumy użytkownika
+            // Krok 7: Zapisz zapisane albumy użytkownika
             var existingSavedAlbums = await context.SpSavedAlbums
                 .Where(sa => sa.UserId == userId)
                 .ToListAsync();
@@ -702,7 +735,7 @@ namespace SpotifyBasicApi2025.Services
                     context.SpSavedAlbums.Remove(existingSavedAlbum);
             }
 
-            // Krok 7: Zapisz przypisania albumów do użytkownika
+            // Krok 8: Zapisz przypisania albumów do użytkownika
             var existingAssigns = await context.LibAlbumUserAssigns
                 .Where(a => a.UserId == userId)
                 .ToListAsync();

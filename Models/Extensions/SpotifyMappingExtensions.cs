@@ -45,7 +45,6 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 Images = model.Images.ToJsonCompact(),
                 Popularity = model.Popularity,
                 Label = model.Label,
-                ArtistId = model.Artists?.FirstOrDefault()?.Id,
                 UpdatedAt = DateTime.UtcNow
             };
 
@@ -101,6 +100,20 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 TrackId = trackId,
                 ArtistId = model.Id,
                 CreatedAt = DateTime.UtcNow
+            };
+
+            return entity;
+        }
+
+        public static SpAlbumArtistAssign MapToAlbumArtistAssignEntity(this SpotifyArtistObject model, string albumId, string albumName, bool newEntity = false)
+        {
+            var entity = new SpAlbumArtistAssign
+            {
+                AlbumId = albumId,
+                ArtistId = model.Id,
+                CreatedAt = DateTime.UtcNow,
+                ArtistName = model.Name,
+                AlbumName = albumName
             };
 
             return entity;

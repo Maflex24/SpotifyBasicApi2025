@@ -36,15 +36,11 @@ namespace SpotifyBasicApi2025.Entities
 
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        // Klucze obce
-        public string? ArtistId { get; set; }
-
         // Relacje
-        [ForeignKey("ArtistId")]
-        public virtual SpArtist? Artist { get; set; }
-
         public virtual ICollection<SpTrack> Tracks { get; set; } = new List<SpTrack>();
 
         public virtual ICollection<LibAlbumUserAssign> AlbumAssignments { get; set; } = new List<LibAlbumUserAssign>();
+
+        public virtual ICollection<SpAlbumArtistAssign> AlbumArtistAssigns { get; set; } = new List<SpAlbumArtistAssign>();
     }
 }
