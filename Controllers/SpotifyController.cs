@@ -145,7 +145,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var playlists = await _spotifyApiService.GetUserPlaylistsAsync();
+                var playlists = await _spotifyApiService.GetUserPlaylists();
 
                 if (playlists == null)
                 {
@@ -153,6 +153,21 @@ namespace SpotifyBasicApi2025.Controllers
                 }
 
                 return Ok(playlists);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("playlists/sync")]
+        public async Task<ActionResult<object>> SyncUserPlaylists()
+        {
+            try
+            {
+                var syncResults = await _spotifyApiService.SyncUserPlaylists();
+
+                return Ok(syncResults);
             }
             catch (InvalidOperationException ex)
             {
@@ -224,12 +239,14 @@ namespace SpotifyBasicApi2025.Controllers
                 var artistSyncResults = await _spotifyApiService.SyncUserArtists();
                 var albumsSyncResults = await _spotifyApiService.SyncUserSavedAlbums();
                 var stacksSyncResults = await _spotifyApiService.SyncUserSavedTracks();
+                var playlistsSyncResults = await _spotifyApiService.SyncUserPlaylists();
 
                 return Ok(new
                 {
                     artistSyncResults = artistSyncResults,
                     albumsSyncResults = albumsSyncResults,
                     stacksSyncResults = stacksSyncResults,
+                    playlistsSyncResults = playlistsSyncResults
                 });
             }
             catch (InvalidOperationException ex)

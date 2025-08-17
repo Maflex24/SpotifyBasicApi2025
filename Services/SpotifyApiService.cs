@@ -1066,5 +1066,354 @@ namespace SpotifyBasicApi2025.Services
         }
 
         #endregion Tracks
+
+        #region Playlists
+
+        public async Task<SpotifyPlaylistsResponse?> GetUserPlaylists(int limit = 50)
+        {
+            var userProfile = await GetCurrentUserProfileAsync();
+            if (userProfile == null)
+                return null;
+
+            var url = $"https://api.spotify.com/v1/users/{userProfile.Id}/playlists?limit={limit}";
+            var response = await requestService.MakeSpotifyRequestAsync(url);
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyPlaylistsResponse>(response.ToString()!);
+        }
+
+        public async Task<List<SpotifyPlaylistObject>> GetAllUserPlaylists()
+        {
+            var allPlaylists = new List<SpotifyPlaylistObject>();
+            var limit = 50;
+            var offset = 0;
+
+            while (true)
+            {
+                var userProfile = await GetCurrentUserProfileAsync();
+                if (userProfile == null)
+                    break;
+
+                var url = $"https://api.spotify.com/v1/users/{userProfile.Id}/playlists?limit={limit}&offset={offset}";
+                var response = await requestService.MakeSpotifyRequestAsync(url);
+
+                if (response == null)
+                    break;
+
+                var playlistsResponse = JsonSerializer.Deserialize<SpotifyPlaylistsResponse>(response.ToString()!);
+                if (playlistsResponse?.Items == null || !playlistsResponse.Items.Any())
+                    break;
+
+                allPlaylists.AddRange(playlistsResponse.Items);
+
+                if (string.IsNullOrEmpty(playlistsResponse.Next))
+                    break;
+
+                offset += limit;
+            }
+
+            return allPlaylists;
+        }
+
+        public async Task<SpotifyPlaylistTracksResponse?> GetPlaylistTracks(string playlistId, int limit = 100)
+        {
+            var url = $"https://api.spotify.com/v1/playlists/{playlistId}/tracks?limit={limit}";
+            var response = await requestService.MakeSpotifyRequestAsync(url);
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyPlaylistTracksResponse>(response.ToString()!);
+        }
+
+        public async Task<List<SpotifyPlaylistTrackItem>> GetAllPlaylistTracks(string playlistId)
+        {
+            var allTracks = new List<SpotifyPlaylistTrackItem>();
+            var limit = 100;
+            var offset = 0;
+
+            while (true)
+            {
+                var url = $"https://api.spotify.com/v1/playlists/{playlistId}/tracks?limit={limit}&offset={offset}";
+                var response = await requestService.MakeSpotifyRequestAsync(url);
+
+                if (response == null)
+                    break;
+
+                var tracksResponse = JsonSerializer.Deserialize<SpotifyPlaylistTracksResponse>(response.ToString()!);
+                if (tracksResponse?.Items == null || !tracksResponse.Items.Any())
+                    break;
+
+                allTracks.AddRange(tracksResponse.Items);
+
+                if (string.IsNullOrEmpty(tracksResponse.Next))
+                    break;
+
+                offset += limit;
+            }
+
+            return allTracks;
+        }
+
+        public async Task<object> SyncUserPlaylists()
+        {
+            var userProfile = await GetCurrentUserProfileAsync();
+            if (userProfile == null)
+                throw new InvalidOperationException("Nie można pobrać profilu użytkownika");
+
+            var userId = userProfile.Id;
+            var allPlaylists = await GetAllUserPlaylists();
+
+            if (allPlaylists == null || !allPlaylists.Any())
+                return new { message = "Brak playlist do synchronizacji", playlistsCount = 0 };
+
+            var playlistsCount = 0;
+            var artistsCount = 0;
+            var albumsCount = 0;
+            var tracksCount = 0;
+            var playlistTracksCount = 0;
+
+            // Kolekcje do zbierania wszystkich encji przed zapisaniem
+            var allArtists = new Dictionary<string, SpotifyArtistObject>();
+            var allAlbums = new Dictionary<string, SpotifyAlbumObject>();
+            var allTracks = new Dictionary<string, SpotifyTrackObject>();
+            var allTrackArtists = new List<(string TrackId, SpotifyArtistObject Artist)>();
+            var allPlaylistTracks = new List<(string PlaylistId, SpotifyPlaylistTrackItem TrackItem)>();
+            var allPlaylistOwners = new Dictionary<string, SpotifyUserProfile>();
+
+            // Krok 1: Zbierz wszystkie playlisty i ich utwory
+            foreach (var playlist in allPlaylists)
+            {
+                var playlistTracks = await GetAllPlaylistTracks(playlist.Id);
+                
+                foreach (var trackItem in playlistTracks)
+                {
+                    if (trackItem.Track == null)
+                        continue;
+
+                    var track = trackItem.Track;
+
+                    // Zbierz artystów utworu
+                    if (track.Artists != null)
+                    {
+                        foreach (var artist in track.Artists)
+                        {
+                            if (!allArtists.ContainsKey(artist.Id))
+                            {
+                                allArtists[artist.Id] = artist;
+                            }
+                            allTrackArtists.Add((track.Id, artist));
+                        }
+                    }
+
+                    // Zbierz album utworu
+                    if (track.Album != null && !allAlbums.ContainsKey(track.Album.Id))
+                    {
+                        allAlbums[track.Album.Id] = track.Album;
+                    }
+
+                    // Zbierz utwór
+                    if (!allTracks.ContainsKey(track.Id))
+                    {
+                        allTracks[track.Id] = track;
+                    }
+
+                                    // Zbierz utwór playlisty
+                allPlaylistTracks.Add((playlist.Id, trackItem));
+            }
+
+            // Zbierz właściciela playlisty
+            if (!allPlaylistOwners.ContainsKey(playlist.Owner.Id))
+            {
+                allPlaylistOwners[playlist.Owner.Id] = playlist.Owner;
+            }
+
+            playlistsCount++;
+            }
+
+            // Krok 2: Zapisz artystów
+            foreach (var artist in allArtists.Values)
+            {
+                var existingArtist = await context.SpArtists.FirstOrDefaultAsync(a => a.Id == artist.Id);
+                if (existingArtist == null)
+                {
+                    var newArtist = artist.MapToEntity(true);
+                    context.SpArtists.Add(newArtist);
+                    artistsCount++;
+                }
+                else
+                {
+                    // Aktualizuj istniejący artysta
+                    var updatedArtist = artist.MapToEntity();
+                    updatedArtist.CreatedAt = existingArtist.CreatedAt;
+                    context.Entry(existingArtist).CurrentValues.SetValues(updatedArtist);
+                }
+            }
+
+            // Krok 3: Zapisz albumy
+            foreach (var album in allAlbums.Values)
+            {
+                var existingAlbum = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == album.Id);
+                if (existingAlbum == null)
+                {
+                    var newAlbum = album.MapToEntity(true);
+                    context.SpAlbums.Add(newAlbum);
+                    albumsCount++;
+                }
+                else
+                {
+                    // Aktualizuj istniejący album
+                    var updatedAlbum = album.MapToEntity();
+                    updatedAlbum.CreatedAt = existingAlbum.CreatedAt;
+                    context.Entry(existingAlbum).CurrentValues.SetValues(updatedAlbum);
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            // Krok 4: Zapisz utwory
+            foreach (var track in allTracks.Values)
+            {
+                var existingTrack = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == track.Id);
+                if (existingTrack == null)
+                {
+                    var newTrack = track.MapToEntity(true);
+                    if (track.Album != null)
+                    {
+                        newTrack.AlbumId = track.Album.Id;
+                    }
+                    context.SpTracks.Add(newTrack);
+                    tracksCount++;
+                }
+                else
+                {
+                    // Aktualizuj istniejący utwór
+                    var updatedTrack = track.MapToEntity();
+                    updatedTrack.CreatedAt = existingTrack.CreatedAt;
+                    
+                    if (string.IsNullOrEmpty(existingTrack.AlbumId) && track.Album != null)
+                    {
+                        updatedTrack.AlbumId = track.Album.Id;
+                    }
+                    else if (!string.IsNullOrEmpty(existingTrack.AlbumId))
+                    {
+                        updatedTrack.AlbumId = existingTrack.AlbumId;
+                    }
+                    
+                    context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            // Krok 5: Zapisz właścicieli playlist
+            foreach (var owner in allPlaylistOwners.Values)
+            {
+                var existingOwner = await context.SpUsers.FirstOrDefaultAsync(u => u.Id == owner.Id);
+                if (existingOwner == null)
+                {
+                    var newOwner = owner.MapToEntity(true);
+                    context.SpUsers.Add(newOwner);
+                }
+                else
+                {
+                    // Aktualizuj istniejącego właściciela
+                    var updatedOwner = owner.MapToEntity();
+                    updatedOwner.CreatedAt = existingOwner.CreatedAt;
+                    context.Entry(existingOwner).CurrentValues.SetValues(updatedOwner);
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            // Krok 6: Zapisz playlisty
+            foreach (var playlist in allPlaylists)
+            {
+                var existingPlaylist = await context.SpPlaylists.FirstOrDefaultAsync(p => p.Id == playlist.Id);
+                if (existingPlaylist == null)
+                {
+                    var newPlaylist = playlist.MapToEntity(true);
+                    context.SpPlaylists.Add(newPlaylist);
+                }
+                else
+                {
+                    // Aktualizuj istniejącą playlistę
+                    var updatedPlaylist = playlist.MapToEntity();
+                    updatedPlaylist.CreatedAt = existingPlaylist.CreatedAt;
+                    context.Entry(existingPlaylist).CurrentValues.SetValues(updatedPlaylist);
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            // Krok 7: Zapisz relacje artystów do utworów
+            var addedTrackArtists = new HashSet<string>();
+            foreach (var (trackId, artist) in allTrackArtists)
+            {
+                var trackArtistKey = $"{trackId}_{artist.Id}";
+                if (!addedTrackArtists.Contains(trackArtistKey))
+                {
+                    var existingTrackArtist = await context.SpTrackArtists
+                        .FirstOrDefaultAsync(ta => ta.TrackId == trackId && ta.ArtistId == artist.Id);
+
+                    if (existingTrackArtist == null)
+                    {
+                        var newTrackArtist = artist.MapToTrackArtistEntity(trackId, true);
+                        context.SpTrackArtists.Add(newTrackArtist);
+                        addedTrackArtists.Add(trackArtistKey);
+                    }
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            // Krok 8: Zapisz utwory playlist
+            var existingPlaylistTracks = await context.SpPlaylistTracks
+                .Where(pt => allPlaylists.Select(p => p.Id).Contains(pt.PlaylistId))
+                .ToListAsync();
+
+            foreach (var (playlistId, trackItem) in allPlaylistTracks)
+            {
+                if (trackItem.Track == null)
+                    continue;
+
+                var existingPlaylistTrack = existingPlaylistTracks
+                    .FirstOrDefault(pt => pt.PlaylistId == playlistId && pt.TrackId == trackItem.Track.Id);
+
+                if (existingPlaylistTrack == null)
+                {
+                    var newPlaylistTrack = trackItem.MapToPlaylistTrackEntity(playlistId);
+                    context.SpPlaylistTracks.Add(newPlaylistTrack);
+                    playlistTracksCount++;
+                }
+            }
+
+            // Usuń utwory playlist, które nie są już w playlistach
+            foreach (var existingPlaylistTrack in existingPlaylistTracks)
+            {
+                var trackStillInPlaylist = allPlaylistTracks.Exists(pt => 
+                    pt.PlaylistId == existingPlaylistTrack.PlaylistId && 
+                    pt.TrackItem.Track?.Id == existingPlaylistTrack.TrackId);
+
+                if (!trackStillInPlaylist)
+                    context.SpPlaylistTracks.Remove(existingPlaylistTrack);
+            }
+
+            await context.SaveChangesAsync();
+
+            return new
+            {
+                message = "Synchronizacja playlist zakończona pomyślnie",
+                totalPlaylists = playlistsCount,
+                newArtists = artistsCount,
+                newAlbums = albumsCount,
+                newTracks = tracksCount,
+                newPlaylistTracks = playlistTracksCount
+            };
+        }
+
+        #endregion Playlists
     }
 }

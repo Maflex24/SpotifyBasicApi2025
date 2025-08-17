@@ -180,5 +180,43 @@ namespace SpotifyBasicApi2025.Models.Extensions
 
             return entity;
         }
+
+        public static SpPlaylist MapToEntity(this SpotifyPlaylistObject model, bool newEntity = false)
+        {
+            var entity = new SpPlaylist
+            {
+                Id = model.Id,
+                Name = model.Name,
+                Type = model.Type,
+                Uri = model.Uri,
+                Href = model.Href,
+                Description = model.Description,
+                Collaborative = model.Collaborative,
+                Public = model.Public ?? false,
+                TotalTracks = model.Tracks.Total,
+                Images = model.Images.ToJsonCompact(),
+                SnapshotId = model.SnapshotId,
+                OwnerId = model.Owner.Id,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            if (newEntity)
+                entity.CreatedAt = DateTime.UtcNow;
+
+            return entity;
+        }
+
+        public static SpPlaylistTrack MapToPlaylistTrackEntity(this SpotifyPlaylistTrackItem model, string playlistId, bool newEntity = false)
+        {
+            var entity = new SpPlaylistTrack
+            {
+                PlaylistId = playlistId,
+                TrackId = model.Track?.Id ?? string.Empty,
+                AddedAt = DateTime.Parse(model.AddedAt),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            return entity;
+        }
     }
 }
