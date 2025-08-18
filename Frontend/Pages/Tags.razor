@@ -1,0 +1,63 @@
+@page "/tags"
+
+<div class="container py-3">
+    <h4>Tagi i grupy</h4>
+    <div class="row">
+        <div class="col-md-5">
+            <h6>Grupy tagów</h6>
+            <button class="btn btn-sm btn-outline-light mb-2" @onclick="LoadGroups">Odśwież</button>
+            <ul class="list-group">
+                @foreach (var g in groups)
+                {
+                    <li class="list-group-item bg-transparent text-light">@g.Name</li>
+                }
+            </ul>
+        </div>
+        <div class="col-md-7">
+            <h6>Tagi</h6>
+            <button class="btn btn-sm btn-outline-light mb-2" @onclick="LoadTags">Odśwież</button>
+            <ul class="list-group">
+                @foreach (var t in tags)
+                {
+                    <li class="list-group-item bg-transparent text-light">@t.Name</li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<TagGroup> groups = new();
+    private List<Tag> tags = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGroups();
+        await LoadTags();
+    }
+
+    private async Task LoadGroups()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync("api/tags-group");
+
+        if (res.IsSuccessStatusCode)
+            groups = (await res.Content.ReadFromJsonAsync<List<TagGroup>>()) ?? new();
+    }
+
+    private async Task LoadTags()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync("api/tags");
+
+        if (res.IsSuccessStatusCode)
+            tags = (await res.Content.ReadFromJsonAsync<List<Tag>>()) ?? new();
+    }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+
+    private sealed class TagGroup { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
+}
+
+

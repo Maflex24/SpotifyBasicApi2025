@@ -1,0 +1,39 @@
+@page "/sync"
+
+<div class="container py-3">
+    <h4>Synchronizacja</h4>
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-light" @onclick="SyncAll">Pełna synchronizacja</button>
+        <button class="btn btn-outline-light" @onclick="SyncArtists">Artyści</button>
+        <button class="btn btn-outline-light" @onclick="SyncAlbums">Albumy</button>
+        <button class="btn btn-outline-light" @onclick="SyncTracks">Utwory</button>
+        <button class="btn btn-outline-light" @onclick="SyncPlaylists">Playlisty</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <pre class="mt-3 text-light">@Message</pre>
+    }
+</div>
+
+@code {
+    private string? Message;
+
+    private async Task SyncAll() => await Call("api/spotify/sync");
+    private async Task SyncArtists() => await Call("api/spotify/artists/sync");
+    private async Task SyncAlbums() => await Call("api/spotify/albums/sync");
+    private async Task SyncTracks() => await Call("api/spotify/tracks/sync");
+    private async Task SyncPlaylists() => await Call("api/spotify/playlists/sync");
+
+    private async Task Call(string path)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.PostAsync(path, null);
+        var text = await res.Content.ReadAsStringAsync();
+        Message = text;
+    }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+}
+
+

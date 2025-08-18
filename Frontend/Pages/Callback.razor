@@ -1,0 +1,58 @@
+@page "/callback"
+
+<div class="container py-3">
+    <h4>Kończenie logowania...</h4>
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="mt-2">@Message</div>
+    }
+</div>
+
+@code {
+    private string? Message;
+
+    [Microsoft.AspNetCore.Components.Inject]
+    public required NavigationManager Navigation { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var code = query.Get("code");
+        var error = query.Get("error");
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            Message = $"Błąd autoryzacji: {error}";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(code))
+        {
+            Message = "Brak kodu autoryzacji";
+            return;
+        }
+
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+            var response = await client.PostAsJsonAsync("api/auth/exchange-code", code);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Message = "Nie udało się wymienić kodu na token";
+                return;
+            }
+
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+        }
+    }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+}
+
+
