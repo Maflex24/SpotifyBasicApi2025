@@ -22,7 +22,19 @@ namespace SpotifyBasicApi2025.Services
         {
             var clientId = _configuration["Spotify:ClientId"];
             var redirectUri = _configuration["Spotify:RedirectUri"];
-            var scope = "user-read-private user-read-email user-follow-read user-library-read playlist-read-private playlist-read-collaborative";
+            var scope = string.Join(' ', new[]
+            {
+                "user-read-private",
+                "user-read-email",
+                "user-follow-read",
+                "user-library-read",
+                "playlist-read-private",
+                "playlist-read-collaborative",
+                // Player scopes
+                "user-read-playback-state",
+                "user-modify-playback-state",
+                "user-read-currently-playing"
+            });
 
             var state = Guid.NewGuid().ToString();
 
