@@ -1,8 +1,278 @@
 @page "/artists"
 
 <div class="container py-3">
-    <h4>Artyści</h4>
-    <p class="text-secondary">Widok listy artystów (filtry po tagach i sortowanie po wadze do dodania).</p>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Artyści</h4>
+        <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm w-auto" @bind="selectedTagFilter">
+                <option value="">Wszystkie tagi</option>
+                @foreach (var t in availableTags)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+
+            <select class="form-select form-select-sm w-auto" @bind="sortKey">
+                <option value="name">Nazwa</option>
+                <option value="popularity">Popularność</option>
+                <option value="weight">Waga tagu</option>
+            </select>
+            <select class="form-select form-select-sm w-auto" @bind="sortOrder">
+                <option value="asc">Rosnąco</option>
+                <option value="desc">Malejąco</option>
+            </select>
+
+            <select class="form-select form-select-sm w-auto" @bind="selectedTagSort">
+                <option value="">— tag do sortowania —</option>
+                @foreach (var t in availableTags)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+
+            <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        @foreach (var a in artists)
+        {
+            <div class="col">
+                <div class="card bg-dark text-light h-100">
+                    @if (a.Images?.Any() == true)
+                    {
+                        <img src="@GetBestImageUrl(a.Images)" class="card-img-top" alt="@a.Name" style="height: 200px; object-fit: cover;">
+                    }
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-1">@a.Name</h6>
+                            <span class="badge bg-secondary">@a.Popularity</span>
+                        </div>
+                        
+                        @if (a.Genres?.Any() == true)
+                        {
+                            <div class="mb-2">
+                                <small class="text-muted">Gatunki:</small>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    @foreach (var genre in a.Genres.Take(3))
+                                    {
+                                        <span class="badge bg-outline-light text-light" style="font-size: 0.7rem;">@genre</span>
+                                    }
+                                    @if (a.Genres.Count > 3)
+                                    {
+                                        <span class="badge bg-outline-light text-light" style="font-size: 0.7rem;">+@(a.Genres.Count - 3)</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (a.Tags?.Any() == true)
+                        {
+                            <div class="mb-2">
+                                <small class="text-muted">Tagi:</small>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    @foreach (var tag in a.Tags.Take(3))
+                                    {
+                                        <span class="badge bg-primary" style="font-size: 0.7rem;">
+                                            @tag.TagName (@tag.Strength)
+                                        </span>
+                                    }
+                                    @if (a.Tags.Count > 3)
+                                    {
+                                        <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@(a.Tags.Count - 3)</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        
+                        <div class="mt-2">
+                            @if (!string.IsNullOrEmpty(selectedTagSort))
+                            {
+                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <small class="text-secondary">Waga (@availableTags.FirstOrDefault(x=> x.Id.ToString() == selectedTagSort)?.Name):</small>
+                                        @StarRating(a.TagStrength, v => SetArtistTagStrength(a.Id, long.Parse(selectedTagSort), v))
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, long.Parse(selectedTagSort))">Usuń przypisanie</button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 </div>
+
+@code {
+    private string sortKey = "name";
+    private string sortOrder = "asc";
+    private string? selectedTagFilter;
+    private string? selectedTagSort;
+    private List<Artist> artists = new();
+    private List<TagDto> availableTags = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableTags();
+        await LoadArtists();
+    }
+
+    private async Task LoadArtists()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var query = new List<string>();
+        query.Add($"sort={sortKey}");
+        query.Add($"order={sortOrder}");
+
+        if (!string.IsNullOrEmpty(selectedTagFilter))
+            query.Add($"tags={selectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(selectedTagSort))
+            query.Add($"sortTagId={selectedTagSort}");
+
+        var res = await client.GetAsync($"api/library/artists?{string.Join('&', query)}");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var payload = await res.Content.ReadFromJsonAsync<ArtistsResponse>();
+        artists = payload?.items ?? new List<Artist>();
+    }
+
+    private async Task LoadAvailableTags()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        // Pobierz wszystkie tagi użytkownika i filtruj tylko ForArtist
+        var res = await client.GetAsync("api/tags");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
+        availableTags = allTags.Where(t => t.ForArtist).ToList();
+    }
+
+    private RenderFragment StarRating(float value, Func<float, Task> onChange) => builder =>
+    {
+        int seq = 0;
+        for (int i = 1; i <= 6; i++)
+        {
+            var fill = value >= i ? 1.0f : (value >= i - 0.5f ? 0.5f : 0f);
+
+            // kontener gwiazdki
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "style", "position:relative; display:inline-block; width:1.2rem; height:1.2rem; line-height:1.2rem; font-size:1.2rem; margin-right:4px;");
+
+            // pusty kontur
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "text-secondary");
+            builder.AddAttribute(seq++, "style", "position:absolute; inset:0; pointer-events:none;");
+            builder.AddContent(seq++, "☆");
+            builder.CloseElement();
+
+            // wypełnienie (połówka/całość) przycięte szerokością
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "text-warning");
+            var width = fill >= 1.0f ? "100%" : (fill >= 0.5f ? "50%" : "0%");
+            builder.AddAttribute(seq++, "style", $"position:absolute; inset:0; width:{width}; overflow:hidden; white-space:nowrap; pointer-events:none;");
+            builder.AddContent(seq++, "★");
+            builder.CloseElement();
+
+            // hit area lewa połowa
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "role", "button");
+            builder.AddAttribute(seq++, "style", "position:absolute; left:0; top:0; width:50%; height:100%; background:transparent;");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(i - 0.5f)));
+            builder.CloseElement();
+
+            // hit area prawa połowa
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "role", "button");
+            builder.AddAttribute(seq++, "style", "position:absolute; right:0; top:0; width:50%; height:100%; background:transparent;");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(i)));
+            builder.CloseElement();
+
+            builder.CloseElement();
+        }
+    };
+
+    private async Task SetArtistTagStrength(string artistId, long tagId, float strength)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var model = new AssignDto { TagId = tagId, ItemType = "artist", SpotifyItemId = artistId, Strength = strength };
+
+        // Spróbuj update; jeśli 404, zrób create
+        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+            if (!resCreate.IsSuccessStatusCode)
+                return;
+        }
+
+        await LoadArtists();
+    }
+
+    private async Task RemoveArtistTag(string artistId, long tagId)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var model = new AssignDto { TagId = tagId, ItemType = "artist", SpotifyItemId = artistId, Strength = 0 };
+        var req = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        {
+            Content = JsonContent.Create(model)
+        });
+
+        if (!req.IsSuccessStatusCode)
+            return;
+
+        await LoadArtists();
+    }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+
+    private sealed class ArtistsResponse { public int total { get; set; } public List<Artist> items { get; set; } = new(); }
+    private sealed class Artist 
+    { 
+        public string Id { get; set; } = string.Empty; 
+        public string Name { get; set; } = string.Empty; 
+        public int Popularity { get; set; } 
+        public float TagStrength { get; set; }
+        public List<string> Genres { get; set; } = new();
+        public List<SpotifyImage> Images { get; set; } = new();
+        public List<ArtistTag> Tags { get; set; } = new();
+    }
+    
+    private sealed class SpotifyImage
+    {
+        public string Url { get; set; } = string.Empty;
+        public int? Height { get; set; }
+        public int? Width { get; set; }
+    }
+    private sealed class ArtistTag
+    {
+        public long TagId { get; set; }
+        public string TagName { get; set; } = string.Empty;
+        public string TagGroupName { get; set; } = string.Empty;
+        public float Strength { get; set; }
+    }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForArtist { get; set; } }
+    private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
+
+    private string? GetBestImageUrl(List<SpotifyImage> images)
+    {
+        if (images == null || images.Count == 0)
+            return null;
+
+        var ordered = images
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .OrderByDescending(i => i.Width ?? 0)
+            .ThenByDescending(i => i.Height ?? 0)
+            .ToList();
+
+        return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
+    }
+}
 
 

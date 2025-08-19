@@ -114,29 +114,34 @@ namespace SpotifyBasicApi2025.Controllers
             if (model.TagId <= 0 || string.IsNullOrWhiteSpace(model.ItemType) || string.IsNullOrWhiteSpace(model.SpotifyItemId))
                 return BadRequest("Nieprawidłowe dane przypisania tagu");
 
+            var existing = await dbContext.LibTagAssigns
+                .FirstOrDefaultAsync(a => a.UserId == userId && a.TagId == model.TagId && a.SpotifyItemId == model.SpotifyItemId && a.ItemType == model.ItemType);
+
+            var strength = Math.Clamp(model.Strength, 0.0f, 6.0f);
+
+            if (existing is not null)
+            {
+                existing.Strength = strength;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync();
+                return NoContent();
+            }
+
             var entity = new LibTagAssign
             {
                 TagId = model.TagId,
                 UserId = userId,
                 SpotifyItemId = model.SpotifyItemId,
                 ItemType = model.ItemType,
-                Strength = model.Strength,
+                Strength = strength,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
 
             dbContext.LibTagAssigns.Add(entity);
+            await dbContext.SaveChangesAsync();
 
-            try
-            {
-                await dbContext.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                return Conflict("Tag już przypisany do elementu dla tego użytkownika");
-            }
-
-            return Ok(entity.Id);
+            return Created($"api/tags/assign/{entity.Id}", entity.Id);
         }
 
         [HttpPut("assign")]
@@ -150,10 +155,27 @@ namespace SpotifyBasicApi2025.Controllers
             var entity = await dbContext.LibTagAssigns
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.TagId == model.TagId && a.SpotifyItemId == model.SpotifyItemId && a.ItemType == model.ItemType);
 
-            if (entity is null)
-                return NotFound();
+            var strength = Math.Clamp(model.Strength, 0.0f, 6.0f);
 
-            entity.Strength = model.Strength;
+            if (entity is null)
+            {
+                // Upsert: utwórz jeśli nie istnieje
+                var created = new LibTagAssign
+                {
+                    TagId = model.TagId,
+                    UserId = userId,
+                    SpotifyItemId = model.SpotifyItemId,
+                    ItemType = model.ItemType,
+                    Strength = strength,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                dbContext.LibTagAssigns.Add(created);
+                await dbContext.SaveChangesAsync();
+                return NoContent();
+            }
+
+            entity.Strength = strength;
             entity.UpdatedAt = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync();

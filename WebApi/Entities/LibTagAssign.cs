@@ -33,17 +33,7 @@ namespace SpotifyBasicApi2025.Entities
         [ForeignKey("UserId")]
         public virtual SpUser User { get; set; } = null!;
 
-        // Relacje do elementów Spotify (opcjonalne, dla Include)
-        [ForeignKey("SpotifyItemId")]
-        public virtual SpArtist? Artist { get; set; }
-
-        [ForeignKey("SpotifyItemId")]
-        public virtual SpAlbum? Album { get; set; }
-
-        [ForeignKey("SpotifyItemId")]
-        public virtual SpTrack? Track { get; set; }
-
-        [ForeignKey("SpotifyItemId")]
-        public virtual SpPlaylist? Playlist { get; set; }
+        // Referencje do elementów Spotify przechowujemy jako miękkie powiązanie (ItemType + SpotifyItemId)
+        // Bez bezpośrednich kluczy obcych do tabel SpArtist/SpAlbum/SpTrack/SpPlaylist
     }
 }

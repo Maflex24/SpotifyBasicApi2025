@@ -1,4 +1,6 @@
 ﻿using SpotifyBasicApi2025.Entities;
+using SpotifyBasicApi2025.Models;
+using System.Text.Json;
 
 namespace SpotifyBasicApi2025.Models.Extensions
 {
@@ -34,6 +36,8 @@ namespace SpotifyBasicApi2025.Models.Extensions
 
         #endregion TagGroups
 
+        #region Tags
+
         public static LibTag MapToEntity(this TagModel model)
         {
             return new LibTag
@@ -61,5 +65,125 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 TagGroupId = entity.TagGroupId
             };
         }
+
+        #endregion Tags
+
+        #region Artists
+
+        public static ArtistModel MapToArtistModel(this SpArtist entity, List<ArtistTagModel>? tags = null)
+        {
+            var images = new List<SpotifyImage>();
+            
+            if (!string.IsNullOrEmpty(entity.Images))
+            {
+                try
+                {
+                    // Próbujemy sparsować jako JSON array z ignorowaniem wielkości liter
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var imageArray = JsonSerializer.Deserialize<List<SpotifyImage>>(entity.Images, options);
+                    if (imageArray != null)
+                    {
+                        images.AddRange(imageArray);
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Jeśli nie udało się sparsować jako JSON array, próbujemy jako string z separatorem
+                    var imageStrings = entity.Images.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(i => i.Trim())
+                        .Where(i => !string.IsNullOrEmpty(i))
+                        .ToList();
+                    
+                    // Grupujemy stringi w pary (każdy obrazek ma kilka pól)
+                    for (int i = 0; i < imageStrings.Count; i += 3)
+                    {
+                        if (i + 2 < imageStrings.Count)
+                        {
+                            var urlStr = imageStrings[i];
+                            var heightStr = imageStrings[i + 1];
+                            var widthStr = imageStrings[i + 2];
+                            
+                            // Wyciągamy URL z formatu "{\"url\":\"...\""
+                            var url = urlStr;
+                            if (urlStr.Contains("\"url\":"))
+                            {
+                                var urlStart = urlStr.IndexOf("\"url\":\"") + 7;
+                                var urlEnd = urlStr.IndexOf("\"", urlStart);
+                                if (urlEnd > urlStart)
+                                {
+                                    url = urlStr.Substring(urlStart, urlEnd - urlStart);
+                                }
+                            }
+                            
+                            // Wyciągamy height z formatu "\"height\":640"
+                            int? height = null;
+                            if (heightStr.Contains("\"height\":"))
+                            {
+                                var heightStart = heightStr.IndexOf("\"height\":") + 9;
+                                if (int.TryParse(heightStr.Substring(heightStart), out var h))
+                                {
+                                    height = h;
+                                }
+                            }
+                            
+                            // Wyciągamy width z formatu "\"width\":640}"
+                            int? width = null;
+                            if (widthStr.Contains("\"width\":"))
+                            {
+                                var widthStart = widthStr.IndexOf("\"width\":") + 8;
+                                var widthEnd = widthStr.IndexOf("}", widthStart);
+                                var widthStrClean = widthEnd > widthStart 
+                                    ? widthStr.Substring(widthStart, widthEnd - widthStart)
+                                    : widthStr.Substring(widthStart);
+                                if (int.TryParse(widthStrClean, out var w))
+                                {
+                                    width = w;
+                                }
+                            }
+                            
+                            if (!string.IsNullOrEmpty(url))
+                            {
+                                images.Add(new SpotifyImage 
+                                { 
+                                    Url = url,
+                                    Height = height,
+                                    Width = width
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return new ArtistModel
+            {
+                Id = entity.Id,
+                Name = entity.Name,
+                Type = entity.Type,
+                Uri = entity.Uri,
+                Href = entity.Href,
+                Genres = !string.IsNullOrEmpty(entity.Genres)
+                    ? entity.Genres.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(g => g.Trim()).ToList()
+                    : new List<string>(),
+                Popularity = entity.Popularity,
+                Images = images,
+                CreatedAt = entity.CreatedAt,
+                UpdatedAt = entity.UpdatedAt,
+                Tags = tags ?? new List<ArtistTagModel>()
+            };
+        }
+
+        public static ArtistTagModel MapToArtistTagModel(this LibTagAssign tagAssign, LibTag tag, LibTagGroup tagGroup)
+        {
+            return new ArtistTagModel
+            {
+                TagId = tagAssign.TagId,
+                TagName = tag.Name,
+                TagGroupName = tagGroup.Name,
+                Strength = tagAssign.Strength
+            };
+        }
+
+        #endregion Artists
     }
 }

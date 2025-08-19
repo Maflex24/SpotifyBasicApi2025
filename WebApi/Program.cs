@@ -49,6 +49,8 @@ builder.Services.AddScoped<SpotifyApiService>();
 builder.Services.AddScoped<TagsService>();
 // Serwisy User
 builder.Services.AddScoped<UserService>();
+// Serwis Library
+builder.Services.AddScoped<LibraryService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnectionString")));
 
