@@ -1,0 +1,83 @@
+@code {
+    [Parameter] public string ApiBase { get; set; } = "http://127.0.0.1:8889/";
+
+    private PlaybackState? state;
+    private System.Timers.Timer? timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshState();
+
+        timer = new System.Timers.Timer(5000);
+        timer.Elapsed += async (_, __) => await InvokeAsync(RefreshState);
+        timer.AutoReset = true;
+        timer.Enabled = true;
+    }
+
+    private async Task RefreshState()
+    {
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+            var res = await client.GetAsync("api/player/state");
+            if (!res.IsSuccessStatusCode)
+                return;
+            state = await res.Content.ReadFromJsonAsync<PlaybackState>();
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task TogglePlay()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        if (state?.is_playing == true)
+            await client.PutAsync("api/player/pause", null);
+        else
+            await client.PutAsync("api/player/play", null);
+        await RefreshState();
+    }
+
+    private async Task Next() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/next", null); await RefreshState(); }
+    private async Task Prev() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/previous", null); await RefreshState(); }
+}
+
+<div class="player-bar bg-dark text-light">
+    <div class="container d-flex align-items-center justify-content-between py-2">
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-light" @onclick="Prev"><i class="bi bi-skip-backward-fill"></i></button>
+            <button class="btn btn-sm btn-outline-light" @onclick="TogglePlay">
+                @if (state?.is_playing == true) { <i class="bi bi-pause-fill"></i> } else { <i class="bi bi-play-fill"></i> }
+            </button>
+            <button class="btn btn-sm btn-outline-light" @onclick="Next"><i class="bi bi-skip-forward-fill"></i></button>
+        </div>
+        <div class="text-truncate" style="max-width: 60%">
+            @if (state?.item != null)
+            {
+                <span class="small text-secondary">@state.item.name</span>
+            }
+            else
+            {
+                <span class="small text-secondary">Brak aktywnego odtwarzania</span>
+            }
+        </div>
+        <div></div>
+    </div>
+</div>
+
+@code {
+    private sealed class PlaybackState
+    {
+        public bool is_playing { get; set; }
+        public Item? item { get; set; }
+        public int progress_ms { get; set; }
+        public string? currently_playing_type { get; set; }
+    }
+
+    private sealed class Item
+    {
+        public string name { get; set; } = string.Empty;
+    }
+}
+
+

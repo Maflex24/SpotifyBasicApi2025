@@ -8,6 +8,14 @@ main {
     flex: 1;
 }
 
+.player-bar {
+    position: sticky;
+    bottom: 0;
+    width: 100%;
+    border-top: 1px solid #1f2937;
+    z-index: 2;
+}
+
 .sidebar {
     background-color: #0f1117;
 }

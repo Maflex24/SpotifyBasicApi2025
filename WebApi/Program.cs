@@ -44,6 +44,7 @@ builder.Services.AddSingleton<TokenManagerService>();
 // Serwisy Spotify API
 builder.Services.AddScoped<SpotifyRequestService>();
 builder.Services.AddScoped<SpotifyApiService>();
+builder.Services.AddScoped<PlayerService>();
 
 // Serwisy Library
 builder.Services.AddScoped<TagsService>();
