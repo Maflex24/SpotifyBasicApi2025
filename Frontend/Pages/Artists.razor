@@ -56,13 +56,9 @@
                             <div class="mb-2">
                                 <small class="text-muted">Gatunki:</small>
                                 <div class="d-flex flex-wrap gap-1 mt-1">
-                                    @foreach (var genre in a.Genres.Take(3))
+                                    @foreach (var genre in a.Genres)
                                     {
                                         <span class="badge bg-outline-light text-light" style="font-size: 0.7rem;">@genre</span>
-                                    }
-                                    @if (a.Genres.Count > 3)
-                                    {
-                                        <span class="badge bg-outline-light text-light" style="font-size: 0.7rem;">+@(a.Genres.Count - 3)</span>
                                     }
                                 </div>
                             </div>
