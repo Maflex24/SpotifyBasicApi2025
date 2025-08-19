@@ -1,19 +1,25 @@
 .page {
     position: relative;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
 }
 
 main {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding-bottom: 56px;
 }
 
 .player-bar {
-    position: sticky;
+    position: fixed;
+    left: 0;
+    right: 0;
     bottom: 0;
     width: 100%;
     border-top: 1px solid #1f2937;
-    z-index: 2;
+    z-index: 1000;
 }
 
 .sidebar {
