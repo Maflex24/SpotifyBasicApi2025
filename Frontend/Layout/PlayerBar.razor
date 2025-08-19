@@ -40,43 +40,102 @@
 
     private async Task Next() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/next", null); await RefreshState(); }
     private async Task Prev() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/previous", null); await RefreshState(); }
+
+    private string? GetItemImageUrl()
+    {
+        var images = state?.item?.album?.images;
+        if (images == null || images.Length == 0) return null;
+        return images.OrderByDescending(i => i.width ?? 0).First().url;
+    }
+
+    private string GetArtists()
+    {
+        var artists = state?.item?.artists;
+        if (artists == null || artists.Length == 0) return string.Empty;
+        return string.Join(", ", artists.Select(a => a.name));
+    }
+
+    private string GetProgressPercent()
+    {
+        var duration = state?.item?.duration_ms ?? 0;
+        var progress = state?.progress_ms ?? 0;
+        if (duration <= 0) return "0%";
+        var p = Math.Clamp((int)(progress * 100.0 / duration), 0, 100);
+        return $"{p}%";
+    }
+
+    private string FormatTime(int ms)
+    {
+        if (ms <= 0) return "0:00";
+        var ts = TimeSpan.FromMilliseconds(ms);
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:00}";
+    }
 }
 
 <div class="player-bar bg-dark text-light">
-    <div class="container d-flex align-items-center justify-content-between py-2">
+    <div class="container d-flex align-items-center justify-content-between py-2 gap-3">
+        <div class="d-flex align-items-center gap-2 text-truncate" style="min-width: 0;">
+            @if (!string.IsNullOrEmpty(GetItemImageUrl()))
+            {
+                <img src="@GetItemImageUrl()" alt="cover" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" />
+            }
+            <div class="text-truncate" style="min-width:0;">
+                <div class="small text-light text-truncate">@state?.item?.name</div>
+                <div class="small text-secondary text-truncate">@GetArtists()</div>
+            </div>
+        </div>
         <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-outline-light" @onclick="Prev"><i class="bi bi-skip-backward-fill"></i></button>
-            <button class="btn btn-sm btn-outline-light" @onclick="TogglePlay">
-                @if (state?.is_playing == true) { <i class="bi bi-pause-fill"></i> } else { <i class="bi bi-play-fill"></i> }
-            </button>
-            <button class="btn btn-sm btn-outline-light" @onclick="Next"><i class="bi bi-skip-forward-fill"></i></button>
+            <button class="btn btn-sm btn-outline-light" title="Poprzedni" @onclick="Prev">⏮</button>
+            <button class="btn btn-sm btn-outline-light" title="Odtwórz/Wstrzymaj" @onclick="TogglePlay">@(state?.is_playing == true ? "⏸" : "▶")</button>
+            <button class="btn btn-sm btn-outline-light" title="Następny" @onclick="Next">⏭</button>
         </div>
-        <div class="text-truncate" style="max-width: 60%">
-            @if (state?.item != null)
-            {
-                <span class="small text-secondary">@state.item.name</span>
-            }
-            else
-            {
-                <span class="small text-secondary">Brak aktywnego odtwarzania</span>
-            }
+        <div class="flex-grow-1" style="max-width: 40%; min-width: 150px;">
+            <div class="d-flex align-items-center gap-2">
+                <small class="text-secondary">@FormatTime(state?.progress_ms ?? 0)</small>
+                <div class="progress w-100" style="height:4px;">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: @GetProgressPercent();"></div>
+                </div>
+                <small class="text-secondary">@FormatTime(state?.item?.duration_ms ?? 0)</small>
+            </div>
         </div>
-        <div></div>
     </div>
 </div>
 
 @code {
     private sealed class PlaybackState
     {
+        public Device? device { get; set; }
         public bool is_playing { get; set; }
-        public Item? item { get; set; }
         public int progress_ms { get; set; }
+        public Item? item { get; set; }
         public string? currently_playing_type { get; set; }
+    }
+
+    private sealed class Device
+    {
+        public string? id { get; set; }
+        public string? name { get; set; }
+        public bool? is_active { get; set; }
+        public int? volume_percent { get; set; }
     }
 
     private sealed class Item
     {
         public string name { get; set; } = string.Empty;
+        public int duration_ms { get; set; }
+        public Artist[]? artists { get; set; }
+        public Album? album { get; set; }
+    }
+
+    private sealed class Artist { public string name { get; set; } = string.Empty; }
+
+    private sealed class Album { public Img[]? images { get; set; } }
+
+    private sealed class Img
+    {
+        public string url { get; set; } = string.Empty;
+        public int? width { get; set; }
+        public int? height { get; set; }
     }
 }
 
