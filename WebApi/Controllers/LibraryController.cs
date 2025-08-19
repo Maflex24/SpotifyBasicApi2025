@@ -15,11 +15,11 @@ namespace SpotifyBasicApi2025.Controllers
         }
 
         [HttpGet("artists")] 
-        public async Task<IActionResult> GetUserArtists([FromQuery] string? sort = null, [FromQuery] string? order = null, [FromQuery] string? tags = null, [FromQuery] long? sortTagId = null)
+        public async Task<IActionResult> GetUserArtists([FromQuery] string? sort = null, [FromQuery] string? order = null, [FromQuery] string? tags = null, [FromQuery] long? sortTagId = null, [FromQuery] string? genre = null)
         {
             try
             {
-                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId);
+                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre);
 
                 return Ok(result);
             }
@@ -44,6 +44,20 @@ namespace SpotifyBasicApi2025.Controllers
             catch (InvalidOperationException ex)
             {
                 return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("artists/genres")]
+        public async Task<IActionResult> GetArtistsGenres()
+        {
+            try
+            {
+                var result = await libraryService.GetArtistsLibraryGenres();
+                return Ok(result);
             }
             catch (Exception ex)
             {

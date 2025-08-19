@@ -16,7 +16,7 @@ namespace SpotifyBasicApi2025.Services
             this.userService = userService;
         }
 
-        public async Task<object> GetUserArtistsAsync(string? sort = null, string? order = null, string? tags = null, long? sortTagId = null)
+        public async Task<object> GetUserArtistsAsync(string? sort = null, string? order = null, string? tags = null, long? sortTagId = null, string? genre = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -40,6 +40,22 @@ namespace SpotifyBasicApi2025.Services
                     query = query.Where(artist => context.LibTagAssigns.Any(ass =>
                         ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
                 }
+            }
+
+            // Filtrowanie po gatunku
+            if (!string.IsNullOrWhiteSpace(genre))
+            {
+                var g = genre.Trim();
+
+                query = query.Where(a => a.Genres != null && (
+                    EF.Functions.Like(a.Genres!, g) ||
+                    EF.Functions.Like(a.Genres!, g + ",%") ||
+                    EF.Functions.Like(a.Genres!, g + ", %") ||
+                    EF.Functions.Like(a.Genres!, "%, " + g + ", %") ||
+                    EF.Functions.Like(a.Genres!, "%," + g + ",%") ||
+                    EF.Functions.Like(a.Genres!, "%, " + g) ||
+                    EF.Functions.Like(a.Genres!, "%," + g)
+                ));
             }
 
             // Sortowanie
@@ -78,7 +94,7 @@ namespace SpotifyBasicApi2025.Services
                 .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToArtistTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
 
             // Mapuj artystów do modeli z tagami
-            var artistModels = artists.Select(artist => 
+            var artistModels = artists.Select(artist =>
             {
                 var tags = tagsByArtist.GetValueOrDefault(artist.Id, new List<ArtistTagModel>());
                 return artist.MapToArtistModel(tags);
@@ -121,7 +137,32 @@ namespace SpotifyBasicApi2025.Services
 
             return tags;
         }
+
+        public async Task<List<string>> GetArtistsLibraryGenres()
+        {
+            var genresValues = context.SpArtists
+                .AsNoTracking()
+                .Where(a => a.Genres != string.Empty && a.Genres != null)
+                .Select(a => a.Genres);
+
+            var genres = new List<string>();
+
+            foreach (var genre in genresValues)
+            {
+                var values = genre!.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                foreach (var value in values)
+                {
+                    var v = value.Trim();
+
+                    if (!string.IsNullOrEmpty(v) && !genres.Contains(v))
+                        genres.Add(v);
+                }
+            }
+
+            genres = genres.Order().ToList();
+
+            return genres;
+        }
     }
 }
-
-

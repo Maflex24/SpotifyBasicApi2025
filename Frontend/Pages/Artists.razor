@@ -4,6 +4,13 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">Artyści</h4>
         <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm w-auto" @bind="selectedGenre">
+                <option value="">Wszystkie gatunki</option>
+                @foreach (var g in availableGenres)
+                {
+                    <option value="@g">@g</option>
+                }
+            </select>
             <select class="form-select form-select-sm w-auto" @bind="selectedTagFilter">
                 <option value="">Wszystkie tagi</option>
                 @foreach (var t in availableTags)
@@ -105,13 +112,16 @@
 @code {
     private string sortKey = "name";
     private string sortOrder = "asc";
+    private string? selectedGenre;
     private string? selectedTagFilter;
     private string? selectedTagSort;
     private List<Artist> artists = new();
     private List<TagDto> availableTags = new();
+    private List<string> availableGenres = new();
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadGenres();
         await LoadAvailableTags();
         await LoadArtists();
     }
@@ -125,6 +135,9 @@
 
         if (!string.IsNullOrEmpty(selectedTagFilter))
             query.Add($"tags={selectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(selectedGenre))
+            query.Add($"genre={Uri.EscapeDataString(selectedGenre)}");
 
         if (!string.IsNullOrEmpty(selectedTagSort))
             query.Add($"sortTagId={selectedTagSort}");
@@ -149,6 +162,16 @@
 
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForArtist).ToList();
+    }
+
+    private async Task LoadGenres()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync("api/library/artists/genres");
+        if (!res.IsSuccessStatusCode)
+            return;
+        var list = await res.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>();
+        availableGenres = list;
     }
 
     private RenderFragment StarRating(float value, Func<float, Task> onChange) => builder =>
