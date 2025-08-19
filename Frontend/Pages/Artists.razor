@@ -41,7 +41,9 @@
                 <div class="card bg-dark text-light h-100">
                     @if (a.Images?.Any() == true)
                     {
-                        <img src="@GetBestImageUrl(a.Images)" class="card-img-top" alt="@a.Name" style="height: 200px; object-fit: cover;">
+                        <div class="artist-image-square">
+                            <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
+                        </div>
                     }
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
