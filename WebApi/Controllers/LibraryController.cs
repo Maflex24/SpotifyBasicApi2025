@@ -73,6 +73,51 @@ namespace SpotifyBasicApi2025.Controllers
                 return StatusCode(500, ex.Message);
             }
         }
+
+        [HttpGet("albums")] 
+        public async Task<IActionResult> GetUserAlbums(
+            [FromQuery] string? sort = null,
+            [FromQuery] string? order = null,
+            [FromQuery] string? tags = null,
+            [FromQuery] long? sortTagId = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null)
+        {
+            try
+            {
+                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, includeTags, includeMode, excludeTags, excludeMode);
+
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("albums/tags")]
+        public async Task<IActionResult> GetUserAlbumTags()
+        {
+            try
+            {
+                var result = await libraryService.GetUserAlbumTagsAsync();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
     }
 }
 

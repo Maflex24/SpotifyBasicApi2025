@@ -220,5 +220,153 @@ namespace SpotifyBasicApi2025.Services
 
             return genres;
         }
+
+        public async Task<object> GetUserAlbumsAsync(
+            string? sort = null,
+            string? order = null,
+            string? tags = null,
+            long? sortTagId = null,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.LibAlbumUserAssigns
+                .Where(a => a.UserId == userId)
+                .Select(a => a.Album)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(tags))
+            {
+                var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.Parse(id))
+                    .ToList();
+
+                if (tagIds.Count > 0)
+                    query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+                    if (andMode)
+                    {
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+                    if (andMode)
+                    {
+                        query = query.Where(album => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && ass.TagId == tid)));
+                    }
+                    else
+                    {
+                        query = query.Where(album => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            var sortKey = (sort ?? "name").ToLowerInvariant();
+            var sortOrderDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
+
+            if (sortKey == "weight" && sortTagId.HasValue)
+            {
+                query = sortOrderDesc
+                    ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault())
+                    : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault());
+            }
+            else
+            {
+                query = sortKey switch
+                {
+                    "popularity" => sortOrderDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
+                    _ => sortOrderDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
+                };
+            }
+
+            var albums = await query.ToListAsync();
+
+            var albumIds = albums.Select(a => a.Id).ToList();
+            var albumTags = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "album" && albumIds.Contains(ass.SpotifyItemId))
+                .Include(ass => ass.Tag)
+                .ThenInclude(t => t.TagGroup)
+                .ToListAsync();
+
+            var tagsByAlbum = albumTags
+                .GroupBy(ass => ass.SpotifyItemId)
+                .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToAlbumTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
+
+            var albumModels = albums.Select(album =>
+            {
+                var tagsList = tagsByAlbum.GetValueOrDefault(album.Id, new List<AlbumTagModel>());
+                return album.MapToAlbumModel(tagsList);
+            }).ToList();
+
+            if (sortTagId.HasValue)
+            {
+                var albumDtos = albumModels
+                    .Select(a => new
+                    {
+                        a.Id,
+                        a.Name,
+                        a.Uri,
+                        a.AlbumType,
+                        a.TotalTracks,
+                        a.Popularity,
+                        a.Images,
+                        TagStrength = a.Tags.FirstOrDefault(t => t.TagId == sortTagId.Value)?.Strength ?? 0f,
+                        Tags = a.Tags
+                    })
+                    .ToList();
+
+                return new { total = albumDtos.Count, items = albumDtos };
+            }
+
+            return new { total = albumModels.Count, items = albumModels };
+        }
+
+        public async Task<object> GetUserAlbumTagsAsync()
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var tagsList = await context.LibTags
+                .Where(t => t.TagGroup.UserId == userId && t.ForAlbum)
+                .OrderBy(t => t.Name)
+                .Select(t => new { t.Id, t.Name, t.TagGroupId })
+                .ToListAsync();
+
+            return tagsList;
+        }
     }
 }
