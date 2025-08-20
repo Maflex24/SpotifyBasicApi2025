@@ -66,11 +66,10 @@
                         @if (a.Artists?.Any() == true)
                         {
                             <div class="mb-2">
-                                <small class="text-muted">Wykonawca:</small>
                                 <div class="d-flex flex-wrap gap-1 mt-1">
                                     @foreach (var art in a.Artists)
                                     {
-                                        <span class="badge bg-outline-light text-light" style="font-size: 0.7rem;">@art.Name</span>
+                                        <span class="badge bg-outline-light text-light" style="font-size: 0.8rem;">@art.Name</span>
                                     }
                                 </div>
                             </div>
