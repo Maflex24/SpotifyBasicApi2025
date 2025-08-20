@@ -11,13 +11,7 @@
                     <option value="@g">@g</option>
                 }
             </select>
-            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedTagFilter">
-                <option value="">Wszystkie tagi</option>
-                @foreach (var t in availableTags)
-                {
-                    <option value="@t.Id">@t.Name</option>
-                }
-            </select>
+
 
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
                 <option value="name">Nazwa</option>
@@ -27,14 +21,6 @@
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
-            </select>
-
-            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedTagSort">
-                <option value="">— tag do sortowania —</option>
-                @foreach (var t in availableTags)
-                {
-                    <option value="@t.Id">@t.Name</option>
-                }
             </select>
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
