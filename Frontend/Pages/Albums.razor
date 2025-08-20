@@ -1,4 +1,5 @@
 @page "/albums"
+@inject LocalStorageService Store
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -147,6 +148,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadFromStore();
         await LoadAvailableTags();
         await LoadAlbumArtists();
         await LoadAlbums();
@@ -193,6 +195,8 @@
             if (!selectedTagByAlbum.ContainsKey(a.Id))
                 selectedTagByAlbum[a.Id] = null;
         }
+
+        await SaveToStore();
     }
 
     private async Task LoadAlbumArtists()
@@ -283,6 +287,7 @@
         }
 
         await LoadAlbums();
+        await SaveToStore();
     }
 
     private async Task RemoveAlbumTag(string albumId, long tagId)
@@ -298,6 +303,7 @@
             return;
 
         await LoadAlbums();
+        await SaveToStore();
     }
 
     private async Task PlayAlbum(string? uri)
@@ -334,6 +340,7 @@
         excludeMode = "or";
 
         await LoadAlbums();
+        await SaveToStore();
     }
 
     private async Task ApplyFilterByTag(long tagId)
@@ -400,6 +407,58 @@
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
 
     private string ApiBase => "http://127.0.0.1:8889/";
+
+    private const string StoreKey = "filters:albums";
+
+    private async Task SaveToStore()
+    {
+        var state = new
+        {
+            sortKey,
+            sortOrder,
+            selectedTagFilter,
+            selectedTagSort,
+            selectedArtistId,
+            includeTagIds = includeTagIds.ToArray(),
+            excludeTagIds = excludeTagIds.ToArray(),
+            includeMode,
+            excludeMode
+        };
+
+        await Store.SetItemAsync(StoreKey, state);
+    }
+
+    private async Task LoadFromStore()
+    {
+        var state = await Store.GetItemAsync<AlbumsState>(StoreKey);
+
+        if (state == null)
+            return;
+
+        sortKey = state.sortKey ?? sortKey;
+        sortOrder = state.sortOrder ?? sortOrder;
+        selectedTagFilter = state.selectedTagFilter;
+        selectedTagSort = state.selectedTagSort;
+        selectedArtistId = state.selectedArtistId;
+        includeMode = state.includeMode ?? includeMode;
+        excludeMode = state.excludeMode ?? excludeMode;
+
+        includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
+        excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+    }
+
+    private sealed class AlbumsState
+    {
+        public string? sortKey { get; set; }
+        public string? sortOrder { get; set; }
+        public string? selectedTagFilter { get; set; }
+        public string? selectedTagSort { get; set; }
+        public string? selectedArtistId { get; set; }
+        public string? includeMode { get; set; }
+        public string? excludeMode { get; set; }
+        public long[]? includeTagIds { get; set; }
+        public long[]? excludeTagIds { get; set; }
+    }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
     {

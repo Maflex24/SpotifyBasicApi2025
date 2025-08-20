@@ -15,4 +15,6 @@ builder.Services.AddSingleton(new FrontendTheme
     ForegroundHex = "#e5e7eb"
 });
 
+builder.Services.AddScoped<LocalStorageService>();
+
 await builder.Build().RunAsync();
