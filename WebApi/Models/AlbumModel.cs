@@ -14,6 +14,10 @@ namespace SpotifyBasicApi2025.Models
 
 		public int Popularity { get; set; }
 
+		public string? ReleaseDate { get; set; }
+
+		public int? ReleaseYear { get; set; }
+
 		public List<SpotifyImage> Images { get; set; } = new List<SpotifyImage>();
 
 		public DateTime CreatedAt { get; set; }
@@ -21,6 +25,8 @@ namespace SpotifyBasicApi2025.Models
 		public DateTime UpdatedAt { get; set; }
 
 		public List<AlbumTagModel> Tags { get; set; } = new List<AlbumTagModel>();
+
+		public List<SimpleArtist> Artists { get; set; } = new List<SimpleArtist>();
 	}
 
 	public class AlbumTagModel
@@ -32,6 +38,13 @@ namespace SpotifyBasicApi2025.Models
 		public string TagGroupName { get; set; } = string.Empty;
 
 		public float Strength { get; set; }
+	}
+
+	public class SimpleArtist
+	{
+		public string Id { get; set; } = string.Empty;
+
+		public string Name { get; set; } = string.Empty;
 	}
 }
 

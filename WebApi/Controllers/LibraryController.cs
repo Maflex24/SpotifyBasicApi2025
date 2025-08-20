@@ -80,6 +80,7 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? order = null,
             [FromQuery] string? tags = null,
             [FromQuery] long? sortTagId = null,
+            [FromQuery] string? artistId = null,
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
             [FromQuery] string? excludeTags = null,
@@ -87,7 +88,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, includeTags, includeMode, excludeTags, excludeMode);
+                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeTags, includeMode, excludeTags, excludeMode);
 
                 return Ok(result);
             }
@@ -107,6 +108,24 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var result = await libraryService.GetUserAlbumTagsAsync();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("albums/artists")]
+        public async Task<IActionResult> GetAlbumsArtists()
+        {
+            try
+            {
+                var result = await libraryService.GetAlbumsArtistsForUserAsync();
                 return Ok(result);
             }
             catch (InvalidOperationException ex)

@@ -1,4 +1,5 @@
 @page "/albums"
+@inject LocalStorageService Store
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -8,10 +9,19 @@
                 <option value="name">Nazwa</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
+                <option value="year">Rok</option>
             </select>
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
+            </select>
+
+            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedArtistId">
+                <option value="">Wszyscy wykonawcy</option>
+                @foreach (var ar in availableAlbumArtists)
+                {
+                    <option value="@ar.Id">@ar.Name</option>
+                }
             </select>
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
@@ -50,9 +60,21 @@
                     }
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="card-title mb-1">@a.Name</h6>
+                            <h6 class="card-title mb-1">@a.Name @if (a.ReleaseYear.HasValue) { <text> (@a.ReleaseYear)</text> }</h6>
                             <span class="badge bg-secondary">@a.Popularity</span>
                         </div>
+
+                        @if (a.Artists?.Any() == true)
+                        {
+                            <div class="mb-2">
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    @foreach (var art in a.Artists)
+                                    {
+                                        <span class="badge bg-outline-light text-light" style="font-size: 0.8rem;">@art.Name</span>
+                                    }
+                                </div>
+                            </div>
+                        }
 
                         @if (a.Tags?.Any() == true)
                         {
@@ -112,8 +134,10 @@
     private string sortOrder = "asc";
     private string? selectedTagFilter;
     private string? selectedTagSort;
+    private string? selectedArtistId;
     private List<Album> albums = new();
     private List<TagDto> availableTags = new();
+    private List<AlbumArtistOption> availableAlbumArtists = new();
     private HashSet<long> includeTagIds = new();
     private HashSet<long> excludeTagIds = new();
     private string includeMode = "or";
@@ -124,7 +148,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadFromStore();
         await LoadAvailableTags();
+        await LoadAlbumArtists();
         await LoadAlbums();
     }
 
@@ -140,6 +166,9 @@
 
         if (!string.IsNullOrEmpty(selectedTagSort))
             query.Add($"sortTagId={selectedTagSort}");
+
+        if (!string.IsNullOrEmpty(selectedArtistId))
+            query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
 
         if (includeTagIds.Count > 0)
         {
@@ -166,6 +195,20 @@
             if (!selectedTagByAlbum.ContainsKey(a.Id))
                 selectedTagByAlbum[a.Id] = null;
         }
+
+        await SaveToStore();
+    }
+
+    private async Task LoadAlbumArtists()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync("api/library/albums/artists");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var list = await res.Content.ReadFromJsonAsync<List<AlbumArtistOption>>() ?? new List<AlbumArtistOption>();
+        availableAlbumArtists = list;
     }
 
     private async Task LoadAvailableTags()
@@ -244,6 +287,7 @@
         }
 
         await LoadAlbums();
+        await SaveToStore();
     }
 
     private async Task RemoveAlbumTag(string albumId, long tagId)
@@ -259,6 +303,7 @@
             return;
 
         await LoadAlbums();
+        await SaveToStore();
     }
 
     private async Task PlayAlbum(string? uri)
@@ -295,6 +340,7 @@
         excludeMode = "or";
 
         await LoadAlbums();
+        await SaveToStore();
     }
 
     private async Task ApplyFilterByTag(long tagId)
@@ -325,10 +371,13 @@
         public string Name { get; set; } = string.Empty; 
         public string? Uri { get; set; }
         public string AlbumType { get; set; } = string.Empty; 
+        public string? ReleaseDate { get; set; }
+        public int? ReleaseYear { get; set; }
         public int TotalTracks { get; set; }
         public int Popularity { get; set; } 
         public List<SpotifyImage> Images { get; set; } = new(); 
         public List<AlbumTag> Tags { get; set; } = new();
+        public List<SimpleArtist> Artists { get; set; } = new();
     }
 
     private sealed class SpotifyImage
@@ -348,12 +397,68 @@
 
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } }
 
+    private sealed class AlbumArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+
+    private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
 
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
 
     private string ApiBase => "http://127.0.0.1:8889/";
+
+    private const string StoreKey = "filters:albums";
+
+    private async Task SaveToStore()
+    {
+        var state = new
+        {
+            sortKey,
+            sortOrder,
+            selectedTagFilter,
+            selectedTagSort,
+            selectedArtistId,
+            includeTagIds = includeTagIds.ToArray(),
+            excludeTagIds = excludeTagIds.ToArray(),
+            includeMode,
+            excludeMode
+        };
+
+        await Store.SetItemAsync(StoreKey, state);
+    }
+
+    private async Task LoadFromStore()
+    {
+        var state = await Store.GetItemAsync<AlbumsState>(StoreKey);
+
+        if (state == null)
+            return;
+
+        sortKey = state.sortKey ?? sortKey;
+        sortOrder = state.sortOrder ?? sortOrder;
+        selectedTagFilter = state.selectedTagFilter;
+        selectedTagSort = state.selectedTagSort;
+        selectedArtistId = state.selectedArtistId;
+        includeMode = state.includeMode ?? includeMode;
+        excludeMode = state.excludeMode ?? excludeMode;
+
+        includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
+        excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+    }
+
+    private sealed class AlbumsState
+    {
+        public string? sortKey { get; set; }
+        public string? sortOrder { get; set; }
+        public string? selectedTagFilter { get; set; }
+        public string? selectedTagSort { get; set; }
+        public string? selectedArtistId { get; set; }
+        public string? includeMode { get; set; }
+        public string? excludeMode { get; set; }
+        public long[]? includeTagIds { get; set; }
+        public long[]? excludeTagIds { get; set; }
+    }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
     {
