@@ -78,7 +78,7 @@
                                 <div class="d-flex flex-wrap gap-1 mt-1">
                                     @foreach (var tag in a.Tags.Take(3))
                                     {
-                                        <span class="badge bg-primary" style="font-size: 0.7rem;">
+                                        <span class="badge bg-primary" style="font-size: 0.7rem; cursor:pointer;" title="Kliknij, aby edytować" @onclick="() => SelectArtistTag(a.Id, tag.TagId)">
                                             @tag.TagName (@tag.Strength)
                                         </span>
                                     }
@@ -91,16 +91,31 @@
                         }
                         
                         <div class="mt-2">
-                            @if (!string.IsNullOrEmpty(selectedTagSort))
-                            {
-                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <select class="form-select form-select-sm w-auto" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnArtistTagSelectChanged(a.Id, e.Value?.ToString())">
+                                    <option value="">— wybierz tag —</option>
+                                    @foreach (var t in availableTags)
+                                    {
+                                        <option value="@t.Id">@t.Name</option>
+                                    }
+                                </select>
+
+                                @if (selectedTagByArtist.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
+                                {
+                                    var chosenTagId = selectedTagId.Value;
+                                    var current = a.Tags?.FirstOrDefault(x => x.TagId == chosenTagId)?.Strength ?? 3.0f;
+
                                     <div class="d-flex align-items-center gap-2">
-                                        <small class="text-secondary">Waga (@availableTags.FirstOrDefault(x=> x.Id.ToString() == selectedTagSort)?.Name):</small>
-                                        @StarRating($"{a.Id}:{selectedTagSort}", a.TagStrength, v => SetArtistTagStrength(a.Id, long.Parse(selectedTagSort), v))
+                                        <small class="text-secondary">Waga:</small>
+                                        @StarRating($"{a.Id}:{chosenTagId}", current, v => SetArtistTagStrength(a.Id, chosenTagId, v))
                                     </div>
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, long.Parse(selectedTagSort))">Usuń przypisanie</button>
-                                </div>
-                            }
+
+                                    @if (a.Tags?.Any(x => x.TagId == chosenTagId) == true)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, chosenTagId)">Usuń przypisanie</button>
+                                    }
+                                }
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -120,6 +135,7 @@
     private List<string> availableGenres = new();
 
     private Dictionary<string, float?> hoverByKey = new();
+    private Dictionary<string, long?> selectedTagByArtist = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -151,6 +167,14 @@
 
         var payload = await res.Content.ReadFromJsonAsync<ArtistsResponse>();
         artists = payload?.items ?? new List<Artist>();
+        // Utrzymaj wybór tagu jeśli nadal istnieje
+        foreach (var a in artists)
+        {
+            if (!selectedTagByArtist.ContainsKey(a.Id))
+            {
+                selectedTagByArtist[a.Id] = null;
+            }
+        }
     }
 
     private async Task LoadAvailableTags()
@@ -304,6 +328,31 @@
             .ToList();
 
         return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
+    }
+
+    private void SelectArtistTag(string artistId, long tagId)
+    {
+        selectedTagByArtist[artistId] = tagId;
+    }
+
+    private string GetSelectedTagValue(string artistId)
+    {
+        return selectedTagByArtist.TryGetValue(artistId, out var v) && v.HasValue ? v.Value.ToString() : string.Empty;
+    }
+
+    private void OnArtistTagSelectChanged(string artistId, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            selectedTagByArtist[artistId] = null;
+            
+            return;
+        }
+
+        if (long.TryParse(value, out var id))
+            selectedTagByArtist[artistId] = id;
+        else
+            selectedTagByArtist[artistId] = null;
     }
 }
 
