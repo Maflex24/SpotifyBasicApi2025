@@ -50,6 +50,8 @@
                     {
                         <div class="artist-image-square">
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
+                            <button class="artist-play-overlay" title="Odtwórz top utwory"
+                                    @onclick="() => PlayArtistTopTracks(a.Id)">▶</button>
                         </div>
                     }
                     <div class="card-body">
@@ -331,6 +333,43 @@
 
         return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
     }
+
+    private async Task PlayArtistTopTracks(string artistId)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        var top = await client.GetFromJsonAsync<TopTracksResponse>($"api/spotify/artists/{artistId}/top-tracks");
+        var uris = top?.items?.Where(t => !string.IsNullOrWhiteSpace(t.Uri)).Select(t => t.Uri).ToList() ?? new List<string>();
+
+        if (uris.Count == 0)
+            return;
+
+        var body = new
+        {
+            uris = uris
+        };
+
+        var res = await client.PutAsJsonAsync("api/player/play", body);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            // spróbuj przenieść odtwarzanie na pierwsze dostępne urządzenie i zagrać ponownie
+            var devices = await client.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+
+            var first = devices?.Devices?.FirstOrDefault();
+
+            if (first != null)
+            {
+                await client.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await client.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
+
+    private sealed class TopTracksResponse { public List<TopTrackItem> items { get; set; } = new(); }
+    private sealed class TopTrackItem { public string Id { get; set; } = string.Empty; public string Uri { get; set; } = string.Empty; }
+    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
+    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
 
     private async Task ApplyFilterByTag(long tagId)
     {

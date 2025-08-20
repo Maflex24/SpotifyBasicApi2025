@@ -38,6 +38,21 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("artists/{artistId}/top-tracks")]
+        public async Task<ActionResult<object>> GetArtistTopTracks([FromRoute] string artistId, [FromQuery] string market = "PL")
+        {
+            try
+            {
+                var tracks = await _spotifyApiService.GetArtistTopTracksAsync(artistId, market);
+
+                return Ok(new { items = tracks });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpGet("artists/followed")]
         public async Task<ActionResult<object>> GetFollowedArtists([FromQuery] int limit = 50)
         {

@@ -27,6 +27,26 @@ namespace SpotifyBasicApi2025.Services
             return await SendAsync<object?>(HttpMethod.Get, "me/player", query, null);
         }
 
+        public async Task<object?> GetDevicesAsync()
+        {
+            return await SendAsync<object?>(HttpMethod.Get, "me/player/devices", null, null);
+        }
+
+        public async Task<bool> TransferAsync(string[] deviceIds, bool? play = null)
+        {
+            var body = new Dictionary<string, object?>
+            {
+                ["device_ids"] = deviceIds
+            };
+
+            if (play.HasValue)
+                body["play"] = play.Value;
+
+            await SendAsync<object?>(HttpMethod.Put, "me/player", null, body);
+
+            return true;
+        }
+
         public async Task<bool> PlayAsync(string? deviceId = null, object? body = null)
         {
             var query = new Dictionary<string, string>();
@@ -163,6 +183,8 @@ namespace SpotifyBasicApi2025.Services
 
                 var errorContent = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"Spotify Player API Error: {response.StatusCode} - {errorContent}");
+
+                throw new InvalidOperationException($"Spotify API error: {(int)response.StatusCode} {response.ReasonPhrase} - {errorContent}");
             }
 
             if (response.Content == null)

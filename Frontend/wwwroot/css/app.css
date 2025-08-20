@@ -133,6 +133,30 @@ code {
     display: block;
 }
 
+.artist-image-square .artist-play-overlay {
+    position: absolute;
+    bottom: 0.6rem;
+    right: 0.6rem;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+    cursor: pointer;
+    transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.artist-image-square .artist-play-overlay:hover {
+    transform: scale(1.06);
+    background: rgba(13,110,253,0.25);
+    border-color: rgba(13,110,253,0.6);
+}
+
 /* Dark select style to match the app theme */
 .select-dark,
 .form-select.select-dark {

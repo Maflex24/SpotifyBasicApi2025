@@ -21,11 +21,26 @@ namespace SpotifyBasicApi2025.Controllers
             return Ok(result);
         }
 
+        [HttpGet("devices")]
+        public async Task<IActionResult> GetDevices()
+        {
+            var result = await playerService.GetDevicesAsync();
+            return Ok(result);
+        }
+
         [HttpPut("play")]
         public async Task<IActionResult> Play([FromQuery] string? deviceId = null, [FromBody] object? body = null)
         {
-            await playerService.PlayAsync(deviceId, body);
-            return NoContent();
+            try
+            {
+                await playerService.PlayAsync(deviceId, body);
+                
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(502, ex.Message);
+            }
         }
 
         [HttpPut("pause")]
@@ -60,6 +75,14 @@ namespace SpotifyBasicApi2025.Controllers
         public async Task<IActionResult> Volume([FromQuery] int volumePercent, [FromQuery] string? deviceId = null)
         {
             await playerService.SetVolumeAsync(volumePercent, deviceId);
+            return NoContent();
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> Transfer([FromQuery] string deviceIdsCsv, [FromQuery] bool? play = null)
+        {
+            var deviceIds = deviceIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            await playerService.TransferAsync(deviceIds, play);
             return NoContent();
         }
     }
