@@ -42,49 +42,24 @@
             <div class="d-flex align-items-start gap-3 w-100 mt-2">
                 <div class="d-flex flex-column gap-1 flex-fill">
                     <div class="d-flex align-items-center gap-2">
-                        <small class="text-secondary">Włącz tagi:</small>
+                        <small class="text-secondary">Tryb łączenia włączonych:</small>
                         <select class="form-select form-select-sm w-auto select-dark" @bind="includeMode">
                             <option value="or">OR</option>
                             <option value="and">AND</option>
                         </select>
-                        <span class="badge bg-outline-light">@includeTagIds.Count wybrane</span>
-                    </div>
-                    <div class="border rounded p-2" style="max-height: 140px; overflow:auto; background: #1a1a1a;">
-                        <div class="row row-cols-2 g-1">
-                            @foreach (var t in availableTags)
-                            {
-                                <div class="col">
-                                    <div class="form-check form-check-sm">
-                                        <input class="form-check-input" type="checkbox" id="inc_@t.Id" checked="@includeTagIds.Contains(t.Id)" @onchange="(e) => ToggleInclude(t.Id)">
-                                        <label class="form-check-label" for="inc_@t.Id">@t.Name</label>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-
-                <div class="d-flex flex-column gap-1 flex-fill">
-                    <div class="d-flex align-items-center gap-2">
-                        <small class="text-secondary">Wyklucz tagi:</small>
+                        <small class="text-secondary ms-3">Tryb łączenia wykluczonych:</small>
                         <select class="form-select form-select-sm w-auto select-dark" @bind="excludeMode">
                             <option value="or">OR</option>
                             <option value="and">AND</option>
                         </select>
-                        <span class="badge bg-outline-light">@excludeTagIds.Count wybrane</span>
                     </div>
-                    <div class="border rounded p-2" style="max-height: 140px; overflow:auto; background: #1a1a1a;">
-                        <div class="row row-cols-2 g-1">
-                            @foreach (var t in availableTags)
-                            {
-                                <div class="col">
-                                    <div class="form-check form-check-sm">
-                                        <input class="form-check-input" type="checkbox" id="exc_@t.Id" checked="@excludeTagIds.Contains(t.Id)" @onchange="(e) => ToggleExclude(t.Id)">
-                                        <label class="form-check-label" for="exc_@t.Id">@t.Name</label>
-                                    </div>
-                                </div>
-                            }
-                        </div>
+                    <div class="tag-chips-container mt-2">
+                        @foreach (var t in availableTags)
+                        {
+                            var state = GetTagState(t.Id);
+                            var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                            <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                        }
                     </div>
                 </div>
             </div>
@@ -497,6 +472,40 @@
             excludeTagIds.Remove(tagId);
         else
             excludeTagIds.Add(tagId);
+    }
+
+    private int GetTagState(long tagId)
+    {
+        if (includeTagIds.Contains(tagId))
+            return 1; // include
+
+        if (excludeTagIds.Contains(tagId))
+            return 2; // exclude
+
+        return 0; // none
+    }
+
+    private void CycleTagState(long tagId)
+    {
+        var state = GetTagState(tagId);
+
+        if (state == 0)
+        {
+            includeTagIds.Add(tagId);
+            
+            return;
+        }
+
+        if (state == 1)
+        {
+            includeTagIds.Remove(tagId);
+            excludeTagIds.Add(tagId);
+            
+            return;
+        }
+
+        // state == 2
+        excludeTagIds.Remove(tagId);
     }
 }
 
