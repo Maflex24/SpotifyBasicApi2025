@@ -37,6 +37,7 @@
                 }
             </select>
 
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
 
             <div class="d-flex align-items-start gap-3 w-100 mt-2">
@@ -405,6 +406,21 @@
                 await client.PutAsJsonAsync("api/player/play", body);
             }
         }
+    }
+
+    private async Task ResetFilters()
+    {
+        sortKey = "name";
+        sortOrder = "asc";
+        selectedGenre = null;
+        selectedTagFilter = null;
+        selectedTagSort = null;
+        includeTagIds.Clear();
+        excludeTagIds.Clear();
+        includeMode = "or";
+        excludeMode = "or";
+
+        await LoadArtists();
     }
 
     private sealed class TopTracksResponse { public List<TopTrackItem> items { get; set; } = new(); }
