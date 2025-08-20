@@ -4,14 +4,14 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">Artyści</h4>
         <div class="d-flex gap-2 align-items-center">
-            <select class="form-select form-select-sm w-auto" @bind="selectedGenre">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedGenre">
                 <option value="">Wszystkie gatunki</option>
                 @foreach (var g in availableGenres)
                 {
                     <option value="@g">@g</option>
                 }
             </select>
-            <select class="form-select form-select-sm w-auto" @bind="selectedTagFilter">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedTagFilter">
                 <option value="">Wszystkie tagi</option>
                 @foreach (var t in availableTags)
                 {
@@ -19,17 +19,17 @@
                 }
             </select>
 
-            <select class="form-select form-select-sm w-auto" @bind="sortKey">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
                 <option value="name">Nazwa</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
             </select>
-            <select class="form-select form-select-sm w-auto" @bind="sortOrder">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
             </select>
 
-            <select class="form-select form-select-sm w-auto" @bind="selectedTagSort">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedTagSort">
                 <option value="">— tag do sortowania —</option>
                 @foreach (var t in availableTags)
                 {
@@ -92,7 +92,7 @@
                         
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <select class="form-select form-select-sm w-auto" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnArtistTagSelectChanged(a.Id, e.Value?.ToString())">
+                                <select class="form-select form-select-sm w-auto select-dark" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnArtistTagSelectChanged(a.Id, e.Value?.ToString())">
                                     <option value="">— wybierz tag —</option>
                                     @foreach (var t in availableTags)
                                     {
@@ -114,7 +114,7 @@
                                     {
                                         <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, chosenTagId)">Usuń przypisanie</button>
                                     }
-                                }
+                                }                                
                             </div>
                         </div>
                     </div>

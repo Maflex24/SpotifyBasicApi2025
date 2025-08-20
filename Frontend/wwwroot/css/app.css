@@ -132,3 +132,24 @@ code {
     object-fit: cover;
     display: block;
 }
+
+/* Dark select style to match the app theme */
+.select-dark,
+.form-select.select-dark {
+    background-color: #1e1e1e;
+    color: #e5e5e5;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+.select-dark:focus,
+.form-select.select-dark:focus {
+    color: #ffffff;
+    background-color: #222;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.1rem rgba(255,255,255,0.1), 0 0 0 0.25rem rgba(13,110,253,0.25);
+}
+
+.select-dark option {
+    background-color: #1e1e1e;
+    color: #e5e5e5;
+}
