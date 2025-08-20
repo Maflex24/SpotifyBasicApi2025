@@ -96,7 +96,7 @@
                                 <div class="d-flex align-items-center gap-3 flex-wrap">
                                     <div class="d-flex align-items-center gap-2">
                                         <small class="text-secondary">Waga (@availableTags.FirstOrDefault(x=> x.Id.ToString() == selectedTagSort)?.Name):</small>
-                                        @StarRating(a.TagStrength, v => SetArtistTagStrength(a.Id, long.Parse(selectedTagSort), v))
+                                        @StarRating($"{a.Id}:{selectedTagSort}", a.TagStrength, v => SetArtistTagStrength(a.Id, long.Parse(selectedTagSort), v))
                                     </div>
                                     <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, long.Parse(selectedTagSort))">Usuń przypisanie</button>
                                 </div>
@@ -118,6 +118,8 @@
     private List<Artist> artists = new();
     private List<TagDto> availableTags = new();
     private List<string> availableGenres = new();
+
+    private Dictionary<string, float?> hoverByKey = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -174,16 +176,22 @@
         availableGenres = list;
     }
 
-    private RenderFragment StarRating(float value, Func<float, Task> onChange) => builder =>
+    private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
     {
         int seq = 0;
+        var display = hoverByKey.TryGetValue(key, out var h) && h.HasValue ? h.Value : value;
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "style", "display:inline-flex; align-items:center;");
+        builder.AddAttribute(seq++, "title", $"{display:0.0}");
         for (int i = 1; i <= 6; i++)
         {
-            var fill = value >= i ? 1.0f : (value >= i - 0.5f ? 0.5f : 0f);
+            var star = i;
+            var fill = display >= star ? 1.0f : (display >= star - 0.5f ? 0.5f : 0f);
 
             // kontener gwiazdki
             builder.OpenElement(seq++, "span");
-            builder.AddAttribute(seq++, "style", "position:relative; display:inline-block; width:1.2rem; height:1.2rem; line-height:1.2rem; font-size:1.2rem; margin-right:4px;");
+            builder.AddAttribute(seq++, "style", "position:relative; display:inline-block; width:2rem; height:2rem; line-height:2rem; font-size:2rem; margin-right:6px;");
+            builder.AddAttribute(seq++, "onmouseleave", EventCallback.Factory.Create(this, () => { if (hoverByKey.ContainsKey(key)) hoverByKey.Remove(key); }));
 
             // pusty kontur
             builder.OpenElement(seq++, "span");
@@ -204,18 +212,21 @@
             builder.OpenElement(seq++, "span");
             builder.AddAttribute(seq++, "role", "button");
             builder.AddAttribute(seq++, "style", "position:absolute; left:0; top:0; width:50%; height:100%; background:transparent;");
-            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(i - 0.5f)));
+            builder.AddAttribute(seq++, "onmouseover", EventCallback.Factory.Create(this, () => { hoverByKey[key] = star - 0.5f; }));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(star - 0.5f)));
             builder.CloseElement();
 
             // hit area prawa połowa
             builder.OpenElement(seq++, "span");
             builder.AddAttribute(seq++, "role", "button");
             builder.AddAttribute(seq++, "style", "position:absolute; right:0; top:0; width:50%; height:100%; background:transparent;");
-            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(i)));
+            builder.AddAttribute(seq++, "onmouseover", EventCallback.Factory.Create(this, () => { hoverByKey[key] = star; }));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(star)));
             builder.CloseElement();
 
             builder.CloseElement();
         }
+        builder.CloseElement();
     };
 
     private async Task SetArtistTagStrength(string artistId, long tagId, float strength)
