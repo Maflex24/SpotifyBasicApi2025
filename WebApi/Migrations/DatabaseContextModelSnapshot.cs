@@ -726,30 +726,6 @@ namespace SpotifyBasicApi2025.Migrations
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAssign", b =>
                 {
-                    b.HasOne("SpotifyBasicApi2025.Entities.SpAlbum", "Album")
-                        .WithMany()
-                        .HasForeignKey("SpotifyItemId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("SpotifyBasicApi2025.Entities.SpArtist", "Artist")
-                        .WithMany()
-                        .HasForeignKey("SpotifyItemId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("SpotifyBasicApi2025.Entities.SpPlaylist", "Playlist")
-                        .WithMany()
-                        .HasForeignKey("SpotifyItemId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("SpotifyBasicApi2025.Entities.SpTrack", "Track")
-                        .WithMany()
-                        .HasForeignKey("SpotifyItemId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
                     b.HasOne("SpotifyBasicApi2025.Entities.LibTag", "Tag")
                         .WithMany()
                         .HasForeignKey("TagId")
@@ -762,15 +738,7 @@ namespace SpotifyBasicApi2025.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
-                    b.Navigation("Album");
-
-                    b.Navigation("Artist");
-
-                    b.Navigation("Playlist");
-
                     b.Navigation("Tag");
-
-                    b.Navigation("Track");
 
                     b.Navigation("User");
                 });

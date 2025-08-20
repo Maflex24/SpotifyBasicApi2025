@@ -24,7 +24,12 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var tagGroups = await tagsService.GetAllTagGroupsAsync();
+                var userId = await userService.GetCurrentUserIdAsync();
+
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Użytkownik nie jest zalogowany");
+
+                var tagGroups = await tagsService.GetAllTagGroupsAsync(userId);
 
                 return Ok(tagGroups);
             }

@@ -1,0 +1,56 @@
+﻿@page "/"
+
+<PageTitle>Home</PageTitle>
+
+<div class="container py-3">
+    <h3>Spotify Library</h3>
+    <p class="text-secondary">Zaloguj się do Spotify, aby zsynchronizować bibliotekę i zarządzać tagami.</p>
+
+    <button class="btn btn-primary" @onclick="Login">Zaloguj przez Spotify</button>
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="mt-3">@Message</div>
+    }
+</div>
+
+@code {
+    private string? Message;
+
+    private async Task Login()
+    {
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+            var res = await client.GetAsync("api/auth/login");
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Message = "Błąd podczas generowania adresu logowania";
+                return;
+            }
+
+            var json = await res.Content.ReadFromJsonAsync<AuthUrlResponse>();
+
+            if (json?.authUrl is null)
+            {
+                Message = "Brak URL";
+                return;
+            }
+
+            Navigation.NavigateTo(json.authUrl, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+        }
+    }
+
+    [Microsoft.AspNetCore.Components.Inject]
+    public required NavigationManager Navigation { get; set; }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+
+    private sealed class AuthUrlResponse { public string? authUrl { get; set; } }
+}

@@ -24,6 +24,23 @@ namespace SpotifyBasicApi2025.Controllers
             return Ok(new { authUrl });
         }
 
+        // Nowy endpoint do wymiany kodu odbieranego przez frontend na tokeny po stronie API
+        [HttpPost("exchange-code")]
+        public async Task<ActionResult<SpotifyTokenResponse>> ExchangeCode([FromBody] string code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+                return BadRequest("Brak kodu autoryzacji");
+
+            var token = await _authService.ExchangeCodeForTokenAsync(code);
+
+            if (token == null)
+            {
+                return BadRequest("Nie udało się wymienić kodu na tokeny");
+            }
+
+            return Ok(token);
+        }
+
         [HttpPost("refresh")]
         public async Task<ActionResult<SpotifyTokenResponse>> RefreshToken([FromBody] string refreshToken)
         {
@@ -35,9 +52,7 @@ namespace SpotifyBasicApi2025.Controllers
             var tokenResponse = await _authService.RefreshTokenAsync(refreshToken);
 
             if (tokenResponse == null)
-            {
                 return BadRequest("Nie udało się odświeżyć tokenu");
-            }
 
             return Ok(tokenResponse);
         }
@@ -48,9 +63,7 @@ namespace SpotifyBasicApi2025.Controllers
             var tokenResponse = await _authService.RefreshCurrentTokenAsync();
 
             if (tokenResponse == null)
-            {
                 return BadRequest("Brak zapisanego refresh token lub nie udało się odświeżyć tokenu");
-            }
 
             return Ok(tokenResponse);
         }
@@ -61,9 +74,7 @@ namespace SpotifyBasicApi2025.Controllers
             var token = _tokenManager.GetCurrentToken();
 
             if (token == null)
-            {
                 return NotFound("Brak zapisanego tokenu");
-            }
 
             return Ok(token);
         }

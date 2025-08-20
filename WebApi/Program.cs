@@ -11,6 +11,23 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// CORS for Frontend (Blazor WASM)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendCors", policy =>
+    {
+        var allowedOrigins = new[]
+        {
+            builder.Configuration["Frontend:Url"] ?? "http://127.0.0.1:8888",
+            "http://127.0.0.1:8888"
+        };
+
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 // Konfiguracja HttpClientFactory dla Spotify API
 builder.Services.AddHttpClient("SpotifyApi", client =>
 {
@@ -27,16 +44,19 @@ builder.Services.AddSingleton<TokenManagerService>();
 // Serwisy Spotify API
 builder.Services.AddScoped<SpotifyRequestService>();
 builder.Services.AddScoped<SpotifyApiService>();
+builder.Services.AddScoped<PlayerService>();
 
 // Serwisy Library
 builder.Services.AddScoped<TagsService>();
 // Serwisy User
 builder.Services.AddScoped<UserService>();
+// Serwis Library
+builder.Services.AddScoped<LibraryService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnectionString")));
 
-// Konfiguracja portu 8888 dla lokalnego rozwoju - nasłuchiwanie na wszystkich adresach IP
-builder.WebHost.UseUrls("http://*:8888");
+// Konfiguracja portu dla API (backend) - oddzielnie od frontu
+builder.WebHost.UseUrls("http://*:8889");
 
 var app = builder.Build();
 
@@ -50,6 +70,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseStaticFiles();
+
+app.UseCors("FrontendCors");
 
 app.UseAuthorization();
 

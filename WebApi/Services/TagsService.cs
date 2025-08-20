@@ -32,9 +32,10 @@ namespace SpotifyBasicApi2025.Services
             return entity.MapToTagGroupModel();
         }
 
-        public async Task<List<TagGroupModel>> GetAllTagGroupsAsync()
+        public async Task<List<TagGroupModel>> GetAllTagGroupsAsync(string userId)
         {
             var entities = await context.LibTagGroups
+                .Where(g => g.UserId == userId)
                 .OrderBy(tg => tg.Name)
                 .ToListAsync();
 

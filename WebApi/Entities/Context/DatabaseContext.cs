@@ -182,30 +182,7 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .HasForeignKey(ti => ti.UserId)
                 .OnDelete(DeleteBehavior.NoAction); // Zmienione z Cascade na NoAction
 
-            // Relacje do elementów Spotify (opcjonalne) - bez kaskadowego usuwania
-            modelBuilder.Entity<LibTagAssign>()
-                .HasOne(ti => ti.Artist)
-                .WithMany()
-                .HasForeignKey(ti => ti.SpotifyItemId)
-                .OnDelete(DeleteBehavior.NoAction);
-
-            modelBuilder.Entity<LibTagAssign>()
-                .HasOne(ti => ti.Album)
-                .WithMany()
-                .HasForeignKey(ti => ti.SpotifyItemId)
-                .OnDelete(DeleteBehavior.NoAction);
-
-            modelBuilder.Entity<LibTagAssign>()
-                .HasOne(ti => ti.Track)
-                .WithMany()
-                .HasForeignKey(ti => ti.SpotifyItemId)
-                .OnDelete(DeleteBehavior.NoAction);
-
-            modelBuilder.Entity<LibTagAssign>()
-                .HasOne(ti => ti.Playlist)
-                .WithMany()
-                .HasForeignKey(ti => ti.SpotifyItemId)
-                .OnDelete(DeleteBehavior.NoAction);
+            // Usuwamy twarde FK do tabel Spotify dla LibTagAssign (połączenie miękkie po ItemType + SpotifyItemId)
 
             // Konfiguracja indeksów dla LibTagAssign
             modelBuilder.Entity<LibTagAssign>()

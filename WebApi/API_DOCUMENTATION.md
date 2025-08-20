@@ -1,3 +1,13 @@
+## Auth
+
+- GET `api/auth/login` → zwraca `authUrl`
+- POST `api/auth/exchange-code` → body: string `code`, wymienia kod na tokeny i zapisuje w `TokenManagerService`
+- GET `api/auth/current-token`
+- POST `api/auth/refresh-current`
+- DELETE `api/auth/clear-token`
+
+Redirect URI ustaw: `http://localhost:5072/callback` (Blazor frontend)
+
 # Spotify Basic API 2025 - Dokumentacja
 
 ## Przegląd

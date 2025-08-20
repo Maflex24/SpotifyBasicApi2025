@@ -1,0 +1,321 @@
+@page "/tags"
+
+<div class="container py-3">
+    <h4>Tagi i grupy</h4>
+
+    <div class="d-flex justify-content-end mb-2">
+        <button class="btn btn-sm btn-primary" @onclick="ShowCreateGroup">Dodaj grupę</button>
+    </div>
+
+    @if (creatingGroup is not null)
+    {
+        <div class="card bg-dark text-light mb-3 p-3">
+            <h6 class="mb-3">Nowa grupa</h6>
+            <div class="mb-2">
+                <label class="form-label">Nazwa</label>
+                <input class="form-control" @bind="creatingGroup.Name" />
+            </div>
+            <div class="row g-2">
+                <div class="col"><input type="checkbox" class="form-check-input" id="nga" @bind="creatingGroup.ForAlbum" /> <label class="form-check-label" for="nga">Album</label></div>
+                <div class="col"><input type="checkbox" class="form-check-input" id="ngr" @bind="creatingGroup.ForArtist" /> <label class="form-check-label" for="ngr">Artysta</label></div>
+                <div class="col"><input type="checkbox" class="form-check-input" id="ngt" @bind="creatingGroup.ForTrack" /> <label class="form-check-label" for="ngt">Utwór</label></div>
+                <div class="col"><input type="checkbox" class="form-check-input" id="ngp" @bind="creatingGroup.ForPlaylist" /> <label class="form-check-label" for="ngp">Playlista</label></div>
+            </div>
+            <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-success btn-sm" @onclick="SaveNewGroup">Zapisz grupę</button>
+                <button class="btn btn-secondary btn-sm" @onclick="CancelCreateGroup">Anuluj</button>
+            </div>
+        </div>
+    }
+
+    @foreach (var g in groups)
+    {
+        <div class="card bg-dark text-light mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                @if (editingGroup is not null && editingGroup.Id == g.Id)
+                {
+                    <div class="w-100">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label">Nazwa</label>
+                                <input class="form-control" @bind="editingGroup.Name" />
+                            </div>
+                            <div class="col-md">
+                                <div class="form-check"><input type="checkbox" class="form-check-input" id="ga_@g.Id" @bind="editingGroup.ForAlbum" /> <label class="form-check-label" for="ga_@g.Id">Album</label></div>
+                            </div>
+                            <div class="col-md">
+                                <div class="form-check"><input type="checkbox" class="form-check-input" id="gr_@g.Id" @bind="editingGroup.ForArtist" /> <label class="form-check-label" for="gr_@g.Id">Artysta</label></div>
+                            </div>
+                            <div class="col-md">
+                                <div class="form-check"><input type="checkbox" class="form-check-input" id="gt_@g.Id" @bind="editingGroup.ForTrack" /> <label class="form-check-label" for="gt_@g.Id">Utwór</label></div>
+                            </div>
+                            <div class="col-md">
+                                <div class="form-check"><input type="checkbox" class="form-check-input" id="gp_@g.Id" @bind="editingGroup.ForPlaylist" /> <label class="form-check-label" for="gp_@g.Id">Playlista</label></div>
+                            </div>
+                            <div class="col-md-auto d-flex gap-2">
+                                <button class="btn btn-success btn-sm" @onclick="SaveGroup">Zapisz</button>
+                                <button class="btn btn-secondary btn-sm" @onclick="CancelGroup">Anuluj</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <span class="fw-semibold">@g.Name</span>
+                    <span class="d-flex gap-2">
+                        <button class="btn btn-outline-light btn-sm" title="Edytuj grupę" @onclick="() => EditGroup(g)">Edytuj</button>
+                        <button class="btn btn-outline-danger btn-sm" title="Usuń grupę" @onclick="() => DeleteGroup(g)">Usuń</button>
+                    </span>
+                }
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-end mb-2">
+                    <button class="btn btn-sm btn-primary" @onclick="() => ShowCreateTag(g)">Dodaj tag</button>
+                </div>
+
+                @if (editingTag is not null && editingTag.TagGroupId == g.Id)
+                {
+                    <div class="card bg-secondary text-light mb-2 p-3">
+                        <div class="mb-2">
+                            <label class="form-label">Nazwa</label>
+                            <input class="form-control" @bind="editingTag.Name" />
+                        </div>
+                        <div class="row g-2">
+                            <div class="col"><input type="checkbox" class="form-check-input" id="ta_@g.Id" @bind="editingTag.ForAlbum" /> <label class="form-check-label" for="ta_@g.Id">Album</label></div>
+                            <div class="col"><input type="checkbox" class="form-check-input" id="tr_@g.Id" @bind="editingTag.ForArtist" /> <label class="form-check-label" for="tr_@g.Id">Artysta</label></div>
+                            <div class="col"><input type="checkbox" class="form-check-input" id="tt_@g.Id" @bind="editingTag.ForTrack" /> <label class="form-check-label" for="tt_@g.Id">Utwór</label></div>
+                            <div class="col"><input type="checkbox" class="form-check-input" id="tp_@g.Id" @bind="editingTag.ForPlaylist" /> <label class="form-check-label" for="tp_@g.Id">Playlista</label></div>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-success btn-sm" @onclick="SaveTag">Zapisz</button>
+                            <button class="btn btn-secondary btn-sm" @onclick="CancelTag">Anuluj</button>
+                        </div>
+                    </div>
+                }
+
+                <ul class="list-group">
+                    @if (groupIdToTags.TryGetValue(g.Id, out var tagsOfGroup) && tagsOfGroup.Count > 0)
+                    {
+                        @foreach (var t in tagsOfGroup)
+                        {
+                            <li class="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center">
+                                <span>@t.Name</span>
+                                <span class="d-flex gap-2">
+                                    <button class="btn btn-outline-light btn-sm" title="Edytuj tag" @onclick="() => EditTag(t)">Edytuj</button>
+                                    <button class="btn btn-outline-danger btn-sm" title="Usuń tag" @onclick="() => DeleteTag(t)">Usuń</button>
+                                </span>
+                            </li>
+                        }
+                    }
+                    else
+                    {
+                        <li class="list-group-item bg-transparent text-secondary">Brak tagów w tej grupie</li>
+                    }
+                </ul>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<TagGroup> groups = new();
+    private Dictionary<long, List<Tag>> groupIdToTags = new();
+
+    private TagGroup? creatingGroup;
+    private TagGroup? editingGroup;
+    private Tag? editingTag;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGroups();
+        await LoadAllTags();
+    }
+
+    private async Task LoadGroups()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync("api/tags-group");
+
+        if (res.IsSuccessStatusCode)
+            groups = (await res.Content.ReadFromJsonAsync<List<TagGroup>>()) ?? new();
+    }
+
+    private async Task LoadAllTags()
+    {
+        groupIdToTags.Clear();
+
+        if (groups.Count == 0)
+            return;
+
+        var cats = string.Join(',', groups.Select(x => x.Id));
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync($"api/tags/list?categoriesIds={cats}");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var list = await res.Content.ReadFromJsonAsync<List<Tag>>() ?? new List<Tag>();
+
+        foreach (var t in list)
+        {
+            if (!groupIdToTags.TryGetValue(t.TagGroupId, out var bucket))
+            {
+                bucket = new List<Tag>();
+                groupIdToTags[t.TagGroupId] = bucket;
+            }
+
+            bucket.Add(t);
+        }
+    }
+
+    private void ShowCreateGroup()
+    {
+        creatingGroup = new TagGroup();
+    }
+
+    private async Task SaveNewGroup()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        if (creatingGroup is null)
+            return;
+
+        var res = await client.PostAsJsonAsync("api/tags-group", creatingGroup);
+
+        if (res.IsSuccessStatusCode)
+        {
+            creatingGroup = null;
+            await LoadGroups();
+            await LoadAllTags();
+        }
+    }
+
+    private void CancelCreateGroup()
+    {
+        creatingGroup = null;
+    }
+
+    private void EditGroup(TagGroup group)
+    {
+        editingGroup = new TagGroup
+        {
+            Id = group.Id,
+            Name = group.Name,
+            ForAlbum = group.ForAlbum,
+            ForArtist = group.ForArtist,
+            ForTrack = group.ForTrack,
+            ForPlaylist = group.ForPlaylist
+        };
+    }
+
+    private async Task SaveGroup()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        if (editingGroup is null)
+            return;
+
+        var res = await client.PutAsJsonAsync($"api/tags-group/{editingGroup.Id}", editingGroup);
+
+        if (res.IsSuccessStatusCode)
+        {
+            editingGroup = null;
+            await LoadGroups();
+            await LoadAllTags();
+        }
+    }
+
+    private void CancelGroup()
+    {
+        editingGroup = null;
+    }
+
+    private async Task DeleteGroup(TagGroup group)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.DeleteAsync($"api/tags-group/{group.Id}");
+
+        if (res.IsSuccessStatusCode)
+        {
+            await LoadGroups();
+            await LoadAllTags();
+        }
+    }
+
+    private void ShowCreateTag(TagGroup group)
+    {
+        editingTag = new Tag
+        {
+            TagGroupId = group.Id,
+            ForAlbum = group.ForAlbum,
+            ForArtist = group.ForArtist,
+            ForTrack = group.ForTrack,
+            ForPlaylist = group.ForPlaylist
+        };
+    }
+
+    private void EditTag(Tag tag)
+    {
+        editingTag = new Tag
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            TagGroupId = tag.TagGroupId,
+            ForAlbum = tag.ForAlbum,
+            ForArtist = tag.ForArtist,
+            ForTrack = tag.ForTrack,
+            ForPlaylist = tag.ForPlaylist
+        };
+    }
+
+    private void CancelTag()
+    {
+        editingTag = null;
+    }
+
+    private async Task SaveTag()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        if (editingTag is null)
+            return;
+
+        if (editingTag.Id == 0)
+        {
+            var resC = await client.PostAsJsonAsync("api/tags", editingTag);
+
+            if (resC.IsSuccessStatusCode)
+            {
+                editingTag = null;
+                await LoadAllTags();
+            }
+        }
+        else
+        {
+            var resU = await client.PutAsJsonAsync($"api/tags/{editingTag.Id}", editingTag);
+
+            if (resU.IsSuccessStatusCode)
+            {
+                editingTag = null;
+                await LoadAllTags();
+            }
+        }
+    }
+
+    private async Task DeleteTag(Tag tag)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.DeleteAsync($"api/tags/{tag.Id}");
+
+        if (res.IsSuccessStatusCode)
+            await LoadAllTags();
+    }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+
+    private sealed class TagGroup { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
+    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
+}
+
+

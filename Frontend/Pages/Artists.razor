@@ -1,0 +1,515 @@
+@page "/artists"
+
+<div class="container py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
+        <h4 class="mb-0">Artyści</h4>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedGenre">
+                <option value="">Wszystkie gatunki</option>
+                @foreach (var g in availableGenres)
+                {
+                    <option value="@g">@g</option>
+                }
+            </select>
+
+
+            <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
+                <option value="name">Nazwa</option>
+                <option value="popularity">Popularność</option>
+                <option value="weight">Waga tagu</option>
+            </select>
+            <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
+                <option value="asc">Rosnąco</option>
+                <option value="desc">Malejąco</option>
+            </select>
+
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
+            <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
+
+            <div class="d-flex align-items-start gap-3 w-100 mt-2">
+                <div class="d-flex flex-column gap-1 flex-fill">
+                    <div class="tag-chips-container mt-2">
+                        @foreach (var t in availableTags)
+                        {
+                            var state = GetTagState(t.Id);
+                            var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                            <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                        }
+
+                        <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                        <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        @foreach (var a in artists)
+        {
+            <div class="col">
+                <div class="card bg-dark text-light h-100">
+                    @if (a.Images?.Any() == true)
+                    {
+                        <div class="artist-image-square">
+                            <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
+                            <button class="artist-play-overlay" title="Odtwórz top utwory"
+                                    @onclick="() => PlayArtistTopTracks(a.Id)">▶</button>
+                        </div>
+                    }
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-1">@a.Name</h6>
+                            <span class="badge bg-secondary">@a.Popularity</span>
+                        </div>
+                        
+                        @if (a.Genres?.Any() == true)
+                        {
+                            <div class="mb-2">
+                                <small class="text-muted">Gatunki:</small>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    @foreach (var genre in a.Genres)
+                                    {
+                                        <span class="badge bg-outline-light text-light" style="font-size: 0.7rem;">@genre</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (a.Tags?.Any() == true)
+                        {
+                            <div class="mb-2">
+                                <small class="text-muted">Tagi:</small>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    @foreach (var tag in a.Tags.Take(3))
+                                    {
+                                        <span class="badge bg-primary" style="font-size: 0.7rem; cursor:pointer;" title="Kliknij, aby edytować" @onclick="() => SelectArtistTag(a.Id, tag.TagId)">
+                                            @tag.TagName (@tag.Strength)
+                                        </span>
+                                    }
+                                    @if (a.Tags.Count > 3)
+                                    {
+                                        <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@(a.Tags.Count - 3)</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        
+                        <div class="mt-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <select class="form-select form-select-sm w-auto select-dark" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnArtistTagSelectChanged(a.Id, e.Value?.ToString())">
+                                    <option value="">— wybierz tag —</option>
+                                    @foreach (var t in availableTags)
+                                    {
+                                        <option value="@t.Id">@t.Name</option>
+                                    }
+                                </select>
+
+                                @if (selectedTagByArtist.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
+                                {
+                                    var chosenTagId = selectedTagId.Value;
+                                    var current = a.Tags?.FirstOrDefault(x => x.TagId == chosenTagId)?.Strength ?? 3.0f;
+
+                                    <div class="d-flex align-items-center gap-2">
+                                        <small class="text-secondary">Waga:</small>
+                                        @StarRating($"{a.Id}:{chosenTagId}", current, v => SetArtistTagStrength(a.Id, chosenTagId, v))
+                                    </div>
+
+                                    <button class="btn btn-sm btn-outline-light" @onclick="() => ApplyFilterByTag(chosenTagId)">Filtruj</button>
+
+                                    @if (a.Tags?.Any(x => x.TagId == chosenTagId) == true)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, chosenTagId)">Usuń przypisanie</button>
+                                    }
+                                }                                
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string sortKey = "name";
+    private string sortOrder = "asc";
+    private string? selectedGenre;
+    private string? selectedTagFilter;
+    private string? selectedTagSort;
+    private List<Artist> artists = new();
+    private List<TagDto> availableTags = new();
+    private List<string> availableGenres = new();
+    private HashSet<long> includeTagIds = new();
+    private HashSet<long> excludeTagIds = new();
+    private string includeMode = "or";
+    private string excludeMode = "or";
+
+    private Dictionary<string, float?> hoverByKey = new();
+    private Dictionary<string, long?> selectedTagByArtist = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGenres();
+        await LoadAvailableTags();
+        await LoadArtists();
+    }
+
+    private async Task LoadArtists()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var query = new List<string>();
+        query.Add($"sort={sortKey}");
+        query.Add($"order={sortOrder}");
+
+        if (!string.IsNullOrEmpty(selectedTagFilter))
+            query.Add($"tags={selectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(selectedGenre))
+            query.Add($"genre={Uri.EscapeDataString(selectedGenre)}");
+
+        if (!string.IsNullOrEmpty(selectedTagSort))
+            query.Add($"sortTagId={selectedTagSort}");
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
+
+        var res = await client.GetAsync($"api/library/artists?{string.Join('&', query)}");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var payload = await res.Content.ReadFromJsonAsync<ArtistsResponse>();
+        artists = payload?.items ?? new List<Artist>();
+        // Utrzymaj wybór tagu jeśli nadal istnieje
+        foreach (var a in artists)
+        {
+            if (!selectedTagByArtist.ContainsKey(a.Id))
+            {
+                selectedTagByArtist[a.Id] = null;
+            }
+        }
+    }
+
+    private async Task LoadAvailableTags()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        // Pobierz wszystkie tagi użytkownika i filtruj tylko ForArtist
+        var res = await client.GetAsync("api/tags");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
+        availableTags = allTags.Where(t => t.ForArtist).ToList();
+    }
+
+    private async Task LoadGenres()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.GetAsync("api/library/artists/genres");
+        if (!res.IsSuccessStatusCode)
+            return;
+        var list = await res.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>();
+        availableGenres = list;
+    }
+
+    private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
+    {
+        int seq = 0;
+        var display = hoverByKey.TryGetValue(key, out var h) && h.HasValue ? h.Value : value;
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "style", "display:inline-flex; align-items:center;");
+        builder.AddAttribute(seq++, "title", $"{display:0.0}");
+        for (int i = 1; i <= 6; i++)
+        {
+            var star = i;
+            var fill = display >= star ? 1.0f : (display >= star - 0.5f ? 0.5f : 0f);
+
+            // kontener gwiazdki
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "style", "position:relative; display:inline-block; width:2rem; height:2rem; line-height:2rem; font-size:2rem; margin-right:6px;");
+            builder.AddAttribute(seq++, "onmouseleave", EventCallback.Factory.Create(this, () => { if (hoverByKey.ContainsKey(key)) hoverByKey.Remove(key); }));
+
+            // pusty kontur
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "text-secondary");
+            builder.AddAttribute(seq++, "style", "position:absolute; inset:0; pointer-events:none;");
+            builder.AddContent(seq++, "☆");
+            builder.CloseElement();
+
+            // wypełnienie (połówka/całość) przycięte szerokością
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "text-warning");
+            var width = fill >= 1.0f ? "100%" : (fill >= 0.5f ? "50%" : "0%");
+            builder.AddAttribute(seq++, "style", $"position:absolute; inset:0; width:{width}; overflow:hidden; white-space:nowrap; pointer-events:none;");
+            builder.AddContent(seq++, "★");
+            builder.CloseElement();
+
+            // hit area lewa połowa
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "role", "button");
+            builder.AddAttribute(seq++, "style", "position:absolute; left:0; top:0; width:50%; height:100%; background:transparent;");
+            builder.AddAttribute(seq++, "onmouseover", EventCallback.Factory.Create(this, () => { hoverByKey[key] = star - 0.5f; }));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(star - 0.5f)));
+            builder.CloseElement();
+
+            // hit area prawa połowa
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "role", "button");
+            builder.AddAttribute(seq++, "style", "position:absolute; right:0; top:0; width:50%; height:100%; background:transparent;");
+            builder.AddAttribute(seq++, "onmouseover", EventCallback.Factory.Create(this, () => { hoverByKey[key] = star; }));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(star)));
+            builder.CloseElement();
+
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+
+    private async Task SetArtistTagStrength(string artistId, long tagId, float strength)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var model = new AssignDto { TagId = tagId, ItemType = "artist", SpotifyItemId = artistId, Strength = strength };
+
+        // Spróbuj update; jeśli 404, zrób create
+        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+            if (!resCreate.IsSuccessStatusCode)
+                return;
+        }
+
+        await LoadArtists();
+    }
+
+    private async Task RemoveArtistTag(string artistId, long tagId)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var model = new AssignDto { TagId = tagId, ItemType = "artist", SpotifyItemId = artistId, Strength = 0 };
+        var req = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        {
+            Content = JsonContent.Create(model)
+        });
+
+        if (!req.IsSuccessStatusCode)
+            return;
+
+        await LoadArtists();
+    }
+
+    private string ApiBase => "http://127.0.0.1:8889/";
+
+    private sealed class ArtistsResponse { public int total { get; set; } public List<Artist> items { get; set; } = new(); }
+    private sealed class Artist 
+    { 
+        public string Id { get; set; } = string.Empty; 
+        public string Name { get; set; } = string.Empty; 
+        public int Popularity { get; set; } 
+        public float TagStrength { get; set; }
+        public List<string> Genres { get; set; } = new();
+        public List<SpotifyImage> Images { get; set; } = new();
+        public List<ArtistTag> Tags { get; set; } = new();
+    }
+    
+    private sealed class SpotifyImage
+    {
+        public string Url { get; set; } = string.Empty;
+        public int? Height { get; set; }
+        public int? Width { get; set; }
+    }
+    private sealed class ArtistTag
+    {
+        public long TagId { get; set; }
+        public string TagName { get; set; } = string.Empty;
+        public string TagGroupName { get; set; } = string.Empty;
+        public float Strength { get; set; }
+    }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForArtist { get; set; } }
+    private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
+
+    private string? GetBestImageUrl(List<SpotifyImage> images)
+    {
+        if (images == null || images.Count == 0)
+            return null;
+
+        var ordered = images
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .OrderByDescending(i => i.Width ?? 0)
+            .ThenByDescending(i => i.Height ?? 0)
+            .ToList();
+
+        return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
+    }
+
+    private async Task PlayArtistTopTracks(string artistId)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        var top = await client.GetFromJsonAsync<TopTracksResponse>($"api/spotify/artists/{artistId}/top-tracks");
+        var uris = top?.items?.Where(t => !string.IsNullOrWhiteSpace(t.Uri)).Select(t => t.Uri).ToList() ?? new List<string>();
+
+        if (uris.Count == 0)
+            return;
+
+        var body = new
+        {
+            uris = uris
+        };
+
+        var res = await client.PutAsJsonAsync("api/player/play", body);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            // spróbuj przenieść odtwarzanie na pierwsze dostępne urządzenie i zagrać ponownie
+            var devices = await client.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+
+            var first = devices?.Devices?.FirstOrDefault();
+
+            if (first != null)
+            {
+                await client.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await client.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
+
+    private async Task ResetFilters()
+    {
+        sortKey = "name";
+        sortOrder = "asc";
+        selectedGenre = null;
+        selectedTagFilter = null;
+        selectedTagSort = null;
+        includeTagIds.Clear();
+        excludeTagIds.Clear();
+        includeMode = "or";
+        excludeMode = "or";
+
+        await LoadArtists();
+    }
+
+    private sealed class TopTracksResponse { public List<TopTrackItem> items { get; set; } = new(); }
+    private sealed class TopTrackItem { public string Id { get; set; } = string.Empty; public string Uri { get; set; } = string.Empty; }
+    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
+    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
+
+    private async Task ApplyFilterByTag(long tagId)
+    {
+        var tag = tagId.ToString();
+
+        if (selectedTagFilter == tag)
+        {
+            selectedTagFilter = null;
+
+            await LoadArtists();
+
+            return;
+        }
+
+        selectedTagFilter = tag;
+        selectedTagSort = tag;
+        sortKey = "weight";
+        sortOrder = "desc";
+
+        await LoadArtists();
+    }
+
+    private void SelectArtistTag(string artistId, long tagId)
+    {
+        selectedTagByArtist[artistId] = tagId;
+    }
+
+    private string GetSelectedTagValue(string artistId)
+    {
+        return selectedTagByArtist.TryGetValue(artistId, out var v) && v.HasValue ? v.Value.ToString() : string.Empty;
+    }
+
+    private void OnArtistTagSelectChanged(string artistId, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            selectedTagByArtist[artistId] = null;
+            
+            return;
+        }
+
+        if (long.TryParse(value, out var id))
+            selectedTagByArtist[artistId] = id;
+        else
+            selectedTagByArtist[artistId] = null;
+    }
+
+    private void ToggleInclude(long tagId)
+    {
+        if (includeTagIds.Contains(tagId))
+            includeTagIds.Remove(tagId);
+        else
+            includeTagIds.Add(tagId);
+    }
+
+    private void ToggleExclude(long tagId)
+    {
+        if (excludeTagIds.Contains(tagId))
+            excludeTagIds.Remove(tagId);
+        else
+            excludeTagIds.Add(tagId);
+    }
+
+    private int GetTagState(long tagId)
+    {
+        if (includeTagIds.Contains(tagId))
+            return 1; // include
+
+        if (excludeTagIds.Contains(tagId))
+            return 2; // exclude
+
+        return 0; // none
+    }
+
+    private void CycleTagState(long tagId)
+    {
+        var state = GetTagState(tagId);
+
+        if (state == 0)
+        {
+            includeTagIds.Add(tagId);
+            
+            return;
+        }
+
+        if (state == 1)
+        {
+            includeTagIds.Remove(tagId);
+            excludeTagIds.Add(tagId);
+            
+            return;
+        }
+
+        // state == 2
+        excludeTagIds.Remove(tagId);
+    }
+
+    private void ToggleIncludeMode()
+    {
+        includeMode = includeMode == "and" ? "or" : "and";
+    }
+
+    private void ToggleExcludeMode()
+    {
+        excludeMode = excludeMode == "and" ? "or" : "and";
+    }
+}
+
+
