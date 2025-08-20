@@ -110,6 +110,8 @@
                                         @StarRating($"{a.Id}:{chosenTagId}", current, v => SetArtistTagStrength(a.Id, chosenTagId, v))
                                     </div>
 
+                                    <button class="btn btn-sm btn-outline-light" @onclick="() => ApplyFilterByTag(chosenTagId)">Filtruj</button>
+
                                     @if (a.Tags?.Any(x => x.TagId == chosenTagId) == true)
                                     {
                                         <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, chosenTagId)">Usuń przypisanie</button>
@@ -328,6 +330,27 @@
             .ToList();
 
         return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
+    }
+
+    private async Task ApplyFilterByTag(long tagId)
+    {
+        var tag = tagId.ToString();
+
+        if (selectedTagFilter == tag)
+        {
+            selectedTagFilter = null;
+
+            await LoadArtists();
+
+            return;
+        }
+
+        selectedTagFilter = tag;
+        selectedTagSort = tag;
+        sortKey = "weight";
+        sortOrder = "desc";
+
+        await LoadArtists();
     }
 
     private void SelectArtistTag(string artistId, long tagId)
