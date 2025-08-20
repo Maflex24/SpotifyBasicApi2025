@@ -153,3 +153,13 @@ code {
     background-color: #1e1e1e;
     color: #e5e5e5;
 }
+
+/* Sticky toolbar for page filters */
+.sticky-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    background-color: #121212;
+    padding: 0.5rem 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
