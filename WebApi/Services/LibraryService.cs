@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
@@ -226,6 +227,7 @@ namespace SpotifyBasicApi2025.Services
             string? order = null,
             string? tags = null,
             long? sortTagId = null,
+            string? artistId = null,
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
@@ -238,8 +240,16 @@ namespace SpotifyBasicApi2025.Services
 
             var query = context.LibAlbumUserAssigns
                 .Where(a => a.UserId == userId)
+                .Include(a => a.Album)
+                    .ThenInclude(al => al.AlbumArtistAssigns)
                 .Select(a => a.Album)
                 .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(artistId))
+            {
+                var aid = artistId.Trim();
+                query = query.Where(album => context.SpAlbumArtistAssigns.Any(x => x.AlbumId == album.Id && x.ArtistId == aid));
+            }
 
             if (!string.IsNullOrWhiteSpace(tags))
             {
@@ -306,12 +316,23 @@ namespace SpotifyBasicApi2025.Services
             {
                 query = sortKey switch
                 {
+                    "year" => sortOrderDesc ? query.OrderByDescending(x => x.ReleaseDate) : query.OrderBy(x => x.ReleaseDate),
                     "popularity" => sortOrderDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
                     _ => sortOrderDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
                 };
             }
 
-            var albums = await query.ToListAsync();
+            var albums = new List<SpAlbum>();
+
+            try
+            {
+                albums = await query.ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                var message = ex.Message;
+                throw ex;
+            }
 
             var albumIds = albums.Select(a => a.Id).ToList();
             var albumTags = await context.LibTagAssigns
@@ -339,9 +360,12 @@ namespace SpotifyBasicApi2025.Services
                         a.Name,
                         a.Uri,
                         a.AlbumType,
+                        a.ReleaseDate,
+                        a.ReleaseYear,
                         a.TotalTracks,
                         a.Popularity,
                         a.Images,
+                        a.Artists,
                         TagStrength = a.Tags.FirstOrDefault(t => t.TagId == sortTagId.Value)?.Strength ?? 0f,
                         Tags = a.Tags
                     })
@@ -367,6 +391,24 @@ namespace SpotifyBasicApi2025.Services
                 .ToListAsync();
 
             return tagsList;
+        }
+
+        public async Task<List<object>> GetAlbumsArtistsForUserAsync()
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var artistInfos = await context.LibAlbumUserAssigns
+                .Where(a => a.UserId == userId)
+                .SelectMany(a => a.Album.AlbumArtistAssigns)
+                .Select(x => new { Id = x.ArtistId, Name = x.ArtistName })
+                .Distinct()
+                .OrderBy(x => x.Name)
+                .ToListAsync();
+
+            return artistInfos.Cast<object>().ToList();
         }
     }
 }

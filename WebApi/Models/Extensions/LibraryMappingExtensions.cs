@@ -264,6 +264,26 @@ namespace SpotifyBasicApi2025.Models.Extensions
 				}
 			}
 
+			// Wyznacz rok wydania
+			int? releaseYear = null;
+			if (!string.IsNullOrWhiteSpace(entity.ReleaseDate))
+			{
+				if (DateTime.TryParse(entity.ReleaseDate, out var dt))
+					releaseYear = dt.Year;
+				else if (entity.ReleaseDate!.Length >= 4 && int.TryParse(entity.ReleaseDate.Substring(0, 4), out var y))
+					releaseYear = y;
+			}
+
+			// Mapuj wykonawców z relacji SpAlbumArtistAssign
+			var artists = new List<SimpleArtist>();
+			if (entity.AlbumArtistAssigns != null && entity.AlbumArtistAssigns.Any())
+			{
+				foreach (var aa in entity.AlbumArtistAssigns)
+				{
+					artists.Add(new SimpleArtist { Id = aa.ArtistId, Name = aa.ArtistName });
+				}
+			}
+
 			return new AlbumModel
 			{
 				Id = entity.Id,
@@ -272,10 +292,13 @@ namespace SpotifyBasicApi2025.Models.Extensions
 				AlbumType = entity.AlbumType,
 				TotalTracks = entity.TotalTracks,
 				Popularity = entity.Popularity,
+				ReleaseDate = entity.ReleaseDate,
+				ReleaseYear = releaseYear,
 				Images = images,
 				CreatedAt = entity.CreatedAt,
 				UpdatedAt = entity.UpdatedAt,
-				Tags = tags ?? new List<AlbumTagModel>()
+				Tags = tags ?? new List<AlbumTagModel>(),
+				Artists = artists
 			};
 		}
 
