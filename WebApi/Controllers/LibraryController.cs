@@ -15,11 +15,20 @@ namespace SpotifyBasicApi2025.Controllers
         }
 
         [HttpGet("artists")] 
-        public async Task<IActionResult> GetUserArtists([FromQuery] string? sort = null, [FromQuery] string? order = null, [FromQuery] string? tags = null, [FromQuery] long? sortTagId = null, [FromQuery] string? genre = null)
+        public async Task<IActionResult> GetUserArtists(
+            [FromQuery] string? sort = null,
+            [FromQuery] string? order = null,
+            [FromQuery] string? tags = null,
+            [FromQuery] long? sortTagId = null,
+            [FromQuery] string? genre = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null)
         {
             try
             {
-                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre);
+                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, excludeTags, excludeMode);
 
                 return Ok(result);
             }

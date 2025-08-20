@@ -16,7 +16,16 @@ namespace SpotifyBasicApi2025.Services
             this.userService = userService;
         }
 
-        public async Task<object> GetUserArtistsAsync(string? sort = null, string? order = null, string? tags = null, long? sortTagId = null, string? genre = null)
+        public async Task<object> GetUserArtistsAsync(
+            string? sort = null,
+            string? order = null,
+            string? tags = null,
+            long? sortTagId = null,
+            string? genre = null,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -28,7 +37,7 @@ namespace SpotifyBasicApi2025.Services
                 .Select(a => a.Artist)
                 .AsQueryable();
 
-            // Filtrowanie po tagach (ANY)
+            // Wsteczna kompatybilność: Filtrowanie po tagach (ANY)
             if (!string.IsNullOrWhiteSpace(tags))
             {
                 var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -39,6 +48,53 @@ namespace SpotifyBasicApi2025.Services
                 {
                     query = query.Where(artist => context.LibTagAssigns.Any(ass =>
                         ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            // Nowe filtrowanie: include/exclude z AND/OR
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+                    if (andMode)
+                    {
+                        // artysta musi mieć wszystkie wskazane tagi
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        // OR – artysta musi mieć dowolny z tagów
+                        query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+                    if (andMode)
+                    {
+                        // wyklucz artystów, którzy mają wszystkie wskazane tagi (czyli AND w warunku wykluczenia)
+                        query = query.Where(artist => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && ass.TagId == tid)));
+                    }
+                    else
+                    {
+                        // OR – wyklucz jeśli ma choć jeden z tagów
+                        query = query.Where(artist => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
+                    }
                 }
             }
 

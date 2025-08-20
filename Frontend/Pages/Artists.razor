@@ -3,7 +3,7 @@
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
         <h4 class="mb-0">Artyści</h4>
-        <div class="d-flex gap-2 align-items-center">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
             <select class="form-select form-select-sm w-auto select-dark" @bind="selectedGenre">
                 <option value="">Wszystkie gatunki</option>
                 @foreach (var g in availableGenres)
@@ -38,6 +38,56 @@
             </select>
 
             <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
+
+            <div class="d-flex align-items-start gap-3 w-100 mt-2">
+                <div class="d-flex flex-column gap-1 flex-fill">
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-secondary">Włącz tagi:</small>
+                        <select class="form-select form-select-sm w-auto select-dark" @bind="includeMode">
+                            <option value="or">OR</option>
+                            <option value="and">AND</option>
+                        </select>
+                        <span class="badge bg-outline-light">@includeTagIds.Count wybrane</span>
+                    </div>
+                    <div class="border rounded p-2" style="max-height: 140px; overflow:auto; background: #1a1a1a;">
+                        <div class="row row-cols-2 g-1">
+                            @foreach (var t in availableTags)
+                            {
+                                <div class="col">
+                                    <div class="form-check form-check-sm">
+                                        <input class="form-check-input" type="checkbox" id="inc_@t.Id" checked="@includeTagIds.Contains(t.Id)" @onchange="(e) => ToggleInclude(t.Id)">
+                                        <label class="form-check-label" for="inc_@t.Id">@t.Name</label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-column gap-1 flex-fill">
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-secondary">Wyklucz tagi:</small>
+                        <select class="form-select form-select-sm w-auto select-dark" @bind="excludeMode">
+                            <option value="or">OR</option>
+                            <option value="and">AND</option>
+                        </select>
+                        <span class="badge bg-outline-light">@excludeTagIds.Count wybrane</span>
+                    </div>
+                    <div class="border rounded p-2" style="max-height: 140px; overflow:auto; background: #1a1a1a;">
+                        <div class="row row-cols-2 g-1">
+                            @foreach (var t in availableTags)
+                            {
+                                <div class="col">
+                                    <div class="form-check form-check-sm">
+                                        <input class="form-check-input" type="checkbox" id="exc_@t.Id" checked="@excludeTagIds.Contains(t.Id)" @onchange="(e) => ToggleExclude(t.Id)">
+                                        <label class="form-check-label" for="exc_@t.Id">@t.Name</label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -137,6 +187,10 @@
     private List<Artist> artists = new();
     private List<TagDto> availableTags = new();
     private List<string> availableGenres = new();
+    private HashSet<long> includeTagIds = new();
+    private HashSet<long> excludeTagIds = new();
+    private string includeMode = "or";
+    private string excludeMode = "or";
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByArtist = new();
@@ -163,6 +217,18 @@
 
         if (!string.IsNullOrEmpty(selectedTagSort))
             query.Add($"sortTagId={selectedTagSort}");
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
 
         var res = await client.GetAsync($"api/library/artists?{string.Join('&', query)}");
 
@@ -415,6 +481,22 @@
             selectedTagByArtist[artistId] = id;
         else
             selectedTagByArtist[artistId] = null;
+    }
+
+    private void ToggleInclude(long tagId)
+    {
+        if (includeTagIds.Contains(tagId))
+            includeTagIds.Remove(tagId);
+        else
+            includeTagIds.Add(tagId);
+    }
+
+    private void ToggleExclude(long tagId)
+    {
+        if (excludeTagIds.Contains(tagId))
+            excludeTagIds.Remove(tagId);
+        else
+            excludeTagIds.Add(tagId);
     }
 }
 
