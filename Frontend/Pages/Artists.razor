@@ -28,18 +28,6 @@
 
             <div class="d-flex align-items-start gap-3 w-100 mt-2">
                 <div class="d-flex flex-column gap-1 flex-fill">
-                    <div class="d-flex align-items-center gap-2">
-                        <small class="text-secondary">Tryb łączenia włączonych:</small>
-                        <select class="form-select form-select-sm w-auto select-dark" @bind="includeMode">
-                            <option value="or">OR</option>
-                            <option value="and">AND</option>
-                        </select>
-                        <small class="text-secondary ms-3">Tryb łączenia wykluczonych:</small>
-                        <select class="form-select form-select-sm w-auto select-dark" @bind="excludeMode">
-                            <option value="or">OR</option>
-                            <option value="and">AND</option>
-                        </select>
-                    </div>
                     <div class="tag-chips-container mt-2">
                         @foreach (var t in availableTags)
                         {
@@ -47,6 +35,9 @@
                             var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                             <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
                         }
+
+                        <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                        <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
                     </div>
                 </div>
             </div>
@@ -508,6 +499,16 @@
 
         // state == 2
         excludeTagIds.Remove(tagId);
+    }
+
+    private void ToggleIncludeMode()
+    {
+        includeMode = includeMode == "and" ? "or" : "and";
+    }
+
+    private void ToggleExcludeMode()
+    {
+        excludeMode = excludeMode == "and" ? "or" : "and";
     }
 }
 
