@@ -314,5 +314,106 @@ namespace SpotifyBasicApi2025.Models.Extensions
 		}
 
 		#endregion Albums
+
+		#region Tracks
+
+		public static TrackModel MapToTrackModel(this SpTrack entity, List<TrackTagModel>? tags = null)
+		{
+			var images = new List<SpotifyImage>();
+			if (!string.IsNullOrEmpty(entity.Images))
+			{
+				try
+				{
+					var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+					var imageArray = JsonSerializer.Deserialize<List<SpotifyImage>>(entity.Images, options);
+					if (imageArray != null)
+						images.AddRange(imageArray);
+				}
+				catch (JsonException)
+				{
+					var imageStrings = entity.Images.Split(',', StringSplitOptions.RemoveEmptyEntries)
+						.Select(i => i.Trim())
+						.Where(i => !string.IsNullOrEmpty(i))
+						.ToList();
+					for (int i = 0; i < imageStrings.Count; i += 3)
+					{
+						if (i + 2 < imageStrings.Count)
+						{
+							var urlStr = imageStrings[i];
+							var heightStr = imageStrings[i + 1];
+							var widthStr = imageStrings[i + 2];
+							var url = urlStr;
+							if (urlStr.Contains("\"url\":"))
+							{
+								var urlStart = urlStr.IndexOf("\"url\":\"") + 7;
+								var urlEnd = urlStr.IndexOf("\"", urlStart);
+								if (urlEnd > urlStart)
+									url = urlStr.Substring(urlStart, urlEnd - urlStart);
+							}
+							int? height = null;
+							if (heightStr.Contains("\"height\":"))
+							{
+								var heightStart = heightStr.IndexOf("\"height\":") + 9;
+								if (int.TryParse(heightStr.Substring(heightStart), out var h))
+									height = h;
+							}
+							int? width = null;
+							if (widthStr.Contains("\"width\":"))
+							{
+								var widthStart = widthStr.IndexOf("\"width\":") + 8;
+								var widthEnd = widthStr.IndexOf("}", widthStart);
+								var widthStrClean = widthEnd > widthStart ? widthStr.Substring(widthStart, widthEnd - widthStart) : widthStr.Substring(widthStart);
+								if (int.TryParse(widthStrClean, out var w))
+									width = w;
+							}
+							if (!string.IsNullOrEmpty(url))
+								images.Add(new SpotifyImage { Url = url, Height = height, Width = width });
+						}
+					}
+				}
+			}
+
+			var artists = new List<SimpleArtist>();
+			if (entity.TrackArtists != null && entity.TrackArtists.Any())
+			{
+				foreach (var ta in entity.TrackArtists)
+					artists.Add(new SimpleArtist { Id = ta.ArtistId, Name = ta.Artist.Name });
+			}
+
+			int? releaseYear = null;
+			if (entity.Album != null && !string.IsNullOrWhiteSpace(entity.Album.ReleaseDate))
+			{
+				if (DateTime.TryParse(entity.Album.ReleaseDate, out var dt)) releaseYear = dt.Year;
+				else if (entity.Album.ReleaseDate!.Length >= 4 && int.TryParse(entity.Album.ReleaseDate.Substring(0, 4), out var y)) releaseYear = y;
+			}
+
+			return new TrackModel
+			{
+				Id = entity.Id,
+				Name = entity.Name,
+				Uri = entity.Uri,
+				DurationMs = entity.DurationMs,
+				Popularity = entity.Popularity,
+				AlbumId = entity.AlbumId,
+				AlbumName = entity.Album?.Name,
+				ReleaseYear = releaseYear,
+				Images = images,
+				Artists = artists,
+				Tags = tags ?? new List<TrackTagModel>()
+			};
+		}
+
+		public static TrackTagModel MapToTrackTagModel(this LibTagAssign tagAssign, LibTag tag, LibTagGroup tagGroup)
+		{
+			return new TrackTagModel
+			{
+				TagId = tagAssign.TagId,
+				TagName = tag.Name,
+				TagGroupName = tagGroup.Name,
+				Strength = tagAssign.Strength
+			};
+		}
+
+		#endregion Tracks
     }
 }

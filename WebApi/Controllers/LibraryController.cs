@@ -74,6 +74,35 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("tracks")]
+        public async Task<IActionResult> GetUserTracks(
+            [FromQuery] string? sort = null,
+            [FromQuery] string? order = null,
+            [FromQuery] string? tags = null,
+            [FromQuery] long? sortTagId = null,
+            [FromQuery] string? artistId = null,
+            [FromQuery] string? albumId = null,
+            [FromQuery] int? year = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null)
+        {
+            try
+            {
+                var result = await libraryService.GetUserTracksAsync(sort, order, tags, sortTagId, artistId, albumId, year, includeTags, includeMode, excludeTags, excludeMode);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpGet("albums")] 
         public async Task<IActionResult> GetUserAlbums(
             [FromQuery] string? sort = null,
