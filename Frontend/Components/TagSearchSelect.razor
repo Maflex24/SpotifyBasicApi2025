@@ -1,0 +1,97 @@
+@using Frontend.Components
+
+<div class="tag-search-select" @onkeydown="HandleKeyDown">
+	<input class="form-control form-control-sm input-dark" placeholder="@Placeholder" @bind="search" @bind:event="oninput" @onfocus="OnFocus" />
+	<div class="tag-search-dropdown" style="display:@(isOpen ? "block" : "none")">
+		@if (ShowClear)
+		{
+			var clearActive = activeIndex == 0 ? " active" : string.Empty;
+			<button type="button" class="dropdown-item@clearActive" @onclick="Clear">@ClearLabel</button>
+		}
+		@foreach (var (item, idx) in Filtered.Select((x,i)=>(x,i)))
+		{
+			var baseIndex = ShowClear ? 1 : 0;
+			var active = (idx + baseIndex) == activeIndex ? " active" : string.Empty;
+			<button type="button" class="dropdown-item@active" @onclick="() => Select(item)">@item.Name</button>
+		}
+	</div>
+</div>
+
+@code {
+	[Parameter] public List<TagItem> Items { get; set; } = new();
+	[Parameter] public EventCallback<long?> OnSelected { get; set; }
+	[Parameter] public EventCallback OnClearRequested { get; set; }
+	[Parameter] public string Placeholder { get; set; } = "Szukaj tagu...";
+	[Parameter] public bool ShowClear { get; set; } = true;
+	[Parameter] public string ClearLabel { get; set; } = "— usuń przypisanie —";
+
+	private string search = string.Empty;
+	private bool isOpen = false;
+	private int activeIndex = 0;
+
+	private List<TagItem> Filtered => string.IsNullOrWhiteSpace(search)
+		? Items
+		: Items.Where(i => i.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+	private void OnFocus(FocusEventArgs _)
+	{
+		isOpen = true;
+		activeIndex = 0;
+	}
+
+	private async Task HandleKeyDown(KeyboardEventArgs e)
+	{
+		if (!isOpen)
+			return;
+
+		if (e.Key == "ArrowDown")
+		{
+			var maxIndex = (ShowClear ? Filtered.Count : Math.Max(Filtered.Count - 1, 0));
+			activeIndex = Math.Min(activeIndex + 1, Math.Max((ShowClear ? Filtered.Count : Filtered.Count - 1), 0));
+			return;
+		}
+
+		if (e.Key == "ArrowUp")
+		{
+			activeIndex = Math.Max(activeIndex - 1, 0);
+			return;
+		}
+
+		if (e.Key == "Enter")
+		{
+			if (ShowClear && activeIndex == 0)
+			{
+				await Clear();
+			}
+			else
+			{
+				var baseIndex = ShowClear ? 1 : 0;
+				var chosen = Filtered.ElementAtOrDefault(activeIndex - baseIndex);
+				if (chosen != null)
+					await Select(chosen);
+			}
+			return;
+		}
+
+		if (e.Key == "Escape")
+		{
+			isOpen = false;
+			return;
+		}
+	}
+
+	private async Task Select(TagItem item)
+	{
+		search = item.Name;
+		isOpen = false;
+		await OnSelected.InvokeAsync(item.Id);
+	}
+
+	private async Task Clear()
+	{
+		isOpen = false;
+		await OnClearRequested.InvokeAsync();
+	}
+}
+
+

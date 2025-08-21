@@ -104,13 +104,7 @@
                         </td>
                         <td>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <select class="form-select form-select-sm w-auto select-dark" value="@GetSelectedTagValue(t.Id)" @onchange="(e) => OnTrackTagSelectChanged(t.Id, e.Value?.ToString())">
-                                    <option value="">— wybierz tag —</option>
-                                    @foreach (var tg in availableTags)
-                                    {
-                                        <option value="@tg.Id">@tg.Name</option>
-                                    }
-                                </select>
+                                <TagSearchSelect Items="trackTagItems" OnSelected="(id) => OnTrackTagSelectChanged(t.Id, id?.ToString())" OnClearRequested="() => RemoveSelectedTrackTagIfAny(t.Id)" />
 
                                 @if (selectedTagByTrack.TryGetValue(t.Id, out var selectedTagId) && selectedTagId.HasValue)
                                 {
@@ -247,6 +241,7 @@
             return;
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForTrack).ToList();
+        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
     }
 
     private async Task LoadArtistsOptions()
@@ -558,6 +553,15 @@
             selectedTagByTrack[trackId] = null;
     }
 
+    private async Task RemoveSelectedTrackTagIfAny(string trackId)
+    {
+        if (selectedTagByTrack.TryGetValue(trackId, out var v) && v.HasValue)
+        {
+            await RemoveTrackTag(trackId, v.Value);
+            selectedTagByTrack[trackId] = null;
+        }
+    }
+
     private string? currentPlayingTrackId;
 
     private async Task PlayTrack(string? uri)
@@ -731,6 +735,7 @@
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
     private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForTrack { get; set; } }
+    private List<TagItem> trackTagItems = new();
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class ArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class AlbumOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }

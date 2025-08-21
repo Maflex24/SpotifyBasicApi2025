@@ -100,13 +100,7 @@
 
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <select class="form-select form-select-sm w-auto select-dark" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnAlbumTagSelectChanged(a.Id, e.Value?.ToString())">
-                                    <option value="">— wybierz tag —</option>
-                                    @foreach (var t in availableTags)
-                                    {
-                                        <option value="@t.Id">@t.Name</option>
-                                    }
-                                </select>
+                                <TagSearchSelect Items="albumTagItems" OnSelected="(id) => OnAlbumTagSelectChanged(a.Id, id?.ToString())" OnClearRequested="() => RemoveSelectedAlbumTagIfAny(a.Id)" />
 
                                 @if (selectedTagByAlbum.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
                                 {
@@ -229,6 +223,7 @@
 
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForAlbum).ToList();
+        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -418,6 +413,7 @@
     }
 
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } }
+    private List<TagItem> albumTagItems = new();
 
     private sealed class AlbumArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
 
@@ -524,6 +520,15 @@
             selectedTagByAlbum[albumId] = id;
         else
             selectedTagByAlbum[albumId] = null;
+    }
+
+    private async Task RemoveSelectedAlbumTagIfAny(string albumId)
+    {
+        if (selectedTagByAlbum.TryGetValue(albumId, out var v) && v.HasValue)
+        {
+            await RemoveAlbumTag(albumId, v.Value);
+            selectedTagByAlbum[albumId] = null;
+        }
     }
 
     private int GetTagState(long tagId)

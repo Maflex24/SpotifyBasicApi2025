@@ -103,13 +103,7 @@
                         
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <select class="form-select form-select-sm w-auto select-dark" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnArtistTagSelectChanged(a.Id, e.Value?.ToString())">
-                                    <option value="">— wybierz tag —</option>
-                                    @foreach (var t in availableTags)
-                                    {
-                                        <option value="@t.Id">@t.Name</option>
-                                    }
-                                </select>
+                                <TagSearchSelect Items="artistTagItems" OnSelected="(id) => OnArtistTagSelectChanged(a.Id, id?.ToString())" OnClearRequested="() => RemoveSelectedArtistTagIfAny(a.Id)" />
 
                                 @if (selectedTagByArtist.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
                                 {
@@ -223,6 +217,7 @@
 
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForArtist).ToList();
+        artistTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
     }
 
     private async Task LoadGenres()
@@ -408,6 +403,7 @@
         public float Strength { get; set; }
     }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForArtist { get; set; } }
+    private List<TagItem> artistTagItems = new();
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
@@ -584,6 +580,15 @@
             selectedTagByArtist[artistId] = id;
         else
             selectedTagByArtist[artistId] = null;
+    }
+
+    private async Task RemoveSelectedArtistTagIfAny(string artistId)
+    {
+        if (selectedTagByArtist.TryGetValue(artistId, out var v) && v.HasValue)
+        {
+            await RemoveArtistTag(artistId, v.Value);
+            selectedTagByArtist[artistId] = null;
+        }
     }
 
     private void ToggleInclude(long tagId)
