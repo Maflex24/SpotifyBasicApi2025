@@ -222,3 +222,47 @@ code {
     padding: 0.5rem 0;
     box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
+
+/* Sticky table header for tracks */
+.table-responsive thead th {
+    position: sticky;
+    top: 0;
+    background-color: #0b0b0f;
+    z-index: 2;
+}
+
+/* Track cover hover overlay */
+.cover-container {
+    position: relative;
+    width: 56px;
+    height: 56px;
+}
+
+.cover-img-56 {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 4px;
+    display: block;
+}
+
+.cover-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.35);
+    color: #fff;
+    opacity: 0;
+    transition: opacity 150ms ease, background 150ms ease, border-color 150ms ease;
+    cursor: pointer;
+}
+
+.cover-container:hover .cover-overlay {
+    opacity: 1;
+    background: rgba(13,110,253,0.30);
+    border-color: rgba(13,110,253,0.55);
+}

@@ -76,7 +76,10 @@
                 {
                     <tr>
                         <td>
-                            <img src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" style="width:56px;height:56px;object-fit:cover;border-radius:4px;" />
+                            <div class="cover-container">
+                                <img class="cover-img-56" src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" />
+                                <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
+                            </div>
                         </td>
                         <td>@t.Name</td>
                         <td>
