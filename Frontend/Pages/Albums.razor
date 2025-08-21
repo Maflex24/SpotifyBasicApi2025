@@ -582,8 +582,13 @@
 
         filteredAlbums = albums.Where(a =>
         {
-            var hay = (a.Name ?? string.Empty) + " " + string.Join(' ', a.Artists?.Select(s => s.Name) ?? new List<string>());
-            hay = hay.ToLowerInvariant();
+            var parts = new List<string>();
+            parts.Add(a.Name ?? string.Empty);
+            parts.Add(string.Join(' ', a.Artists?.Select(s => s.Name) ?? new List<string>()));
+            if (a.Tags != null && a.Tags.Count > 0)
+                parts.Add(string.Join(' ', a.Tags.Select(t => t.TagName)));
+
+            var hay = string.Join(' ', parts).ToLowerInvariant();
 
             foreach (var term in terms)
             {

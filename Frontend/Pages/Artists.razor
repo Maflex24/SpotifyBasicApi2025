@@ -524,12 +524,16 @@
 
         filteredArtists = artists.Where(a =>
         {
-            var hay = (a.Name ?? string.Empty);
+            var parts = new List<string>();
+            parts.Add(a.Name ?? string.Empty);
 
             if (a.Genres != null && a.Genres.Count > 0)
-                hay += " " + string.Join(' ', a.Genres);
+                parts.Add(string.Join(' ', a.Genres));
 
-            hay = hay.ToLowerInvariant();
+            if (a.Tags != null && a.Tags.Count > 0)
+                parts.Add(string.Join(' ', a.Tags.Select(t => t.TagName)));
+
+            var hay = string.Join(' ', parts).ToLowerInvariant();
 
             foreach (var term in terms)
             {

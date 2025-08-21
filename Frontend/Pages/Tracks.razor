@@ -302,8 +302,14 @@
 
         filteredTracks = tracks.Where(tr =>
         {
-            var hay = ((tr.Name ?? string.Empty) + " " + (tr.AlbumName ?? string.Empty) + " " + string.Join(' ', tr.Artists?.Select(a => a.Name) ?? new List<string>()))
-                .ToLowerInvariant();
+            var parts = new List<string>();
+            parts.Add(tr.Name ?? string.Empty);
+            parts.Add(tr.AlbumName ?? string.Empty);
+            parts.Add(string.Join(' ', tr.Artists?.Select(a => a.Name) ?? new List<string>()));
+            if (tr.Tags != null && tr.Tags.Count > 0)
+                parts.Add(string.Join(' ', tr.Tags.Select(t => t.TagName)));
+
+            var hay = string.Join(' ', parts).ToLowerInvariant();
 
             foreach (var term in terms)
             {
