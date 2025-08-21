@@ -421,6 +421,7 @@ namespace SpotifyBasicApi2025.Models.Extensions
 				Uri = entity.Uri,
 				DurationMs = entity.DurationMs,
 				Popularity = entity.Popularity,
+				TrackNumber = entity.TrackNumber,
 				AlbumId = entity.AlbumId,
 				AlbumName = entity.Album?.Name,
 				ReleaseYear = releaseYear,

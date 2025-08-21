@@ -12,6 +12,8 @@ namespace SpotifyBasicApi2025.Models
 
 		public int Popularity { get; set; }
 
+		public int TrackNumber { get; set; }
+
 		public string? AlbumId { get; set; }
 
 		public string? AlbumName { get; set; }
