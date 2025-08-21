@@ -1,5 +1,6 @@
 @page "/artists"
 @inject LocalStorageService Store
+@inject IJSRuntime JS
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -54,10 +55,12 @@
                 <div class="card bg-dark text-light h-100">
                     @if (a.Images?.Any() == true)
                     {
-                        <div class="artist-image-square">
+                        <div class="artist-image-square" style="position:relative;">
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
                             <button class="artist-play-overlay" title="Odtwórz top utwory"
                                     @onclick="() => PlayArtistTopTracks(a.Id)">▶</button>
+                            <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
+                                    @onclick="() => ConfirmRemoveArtist(a.Id)">✖</button>
                         </div>
                     }
                     <div class="card-body">
@@ -451,6 +454,19 @@
                 await client.PutAsJsonAsync("api/player/play", body);
             }
         }
+    }
+
+    private async Task ConfirmRemoveArtist(string artistId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć artystę z biblioteki?"))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.DeleteAsync($"api/library/artists/{Uri.EscapeDataString(artistId)}");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        await LoadArtists();
     }
 
     private async Task ResetFilters()

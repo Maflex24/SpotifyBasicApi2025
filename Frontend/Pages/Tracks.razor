@@ -1,5 +1,6 @@
 @page "/tracks"
 @inject LocalStorageService Store
+@inject IJSRuntime JS
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -128,8 +129,9 @@
                                 }
                             </div>
                         </td>
-                        <td>
+                        <td class="d-flex gap-2">
                             <button class="btn btn-sm btn-outline-light" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
+                            <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" @onclick="() => ConfirmRemoveTrack(t.Id)">✖</button>
                         </td>
                     </tr>
                 }
@@ -460,6 +462,19 @@
                 await client.PutAsJsonAsync("api/player/play", body);
             }
         }
+    }
+
+    private async Task ConfirmRemoveTrack(string trackId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć utwór z biblioteki?"))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.DeleteAsync($"api/library/tracks/{Uri.EscapeDataString(trackId)}");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        await LoadTracks();
     }
 
     private int GetTagState(long tagId)

@@ -10,11 +10,13 @@ namespace SpotifyBasicApi2025.Services
     {
         private readonly DatabaseContext context;
         private readonly UserService userService;
+        private readonly SpotifyRequestService spotifyRequestService;
 
-        public LibraryService(DatabaseContext context, UserService userService)
+        public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService)
         {
             this.context = context;
             this.userService = userService;
+            this.spotifyRequestService = spotifyRequestService;
         }
 
         public async Task<object> GetUserArtistsAsync(
@@ -220,6 +222,63 @@ namespace SpotifyBasicApi2025.Services
             genres = genres.Order().ToList();
 
             return genres;
+        }
+
+        public async Task<bool> RemoveArtistFromLibraryAsync(string artistId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var assign = await context.LibArtistUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.ArtistId == artistId);
+            if (assign != null)
+            {
+                context.LibArtistUserAssigns.Remove(assign);
+                await context.SaveChangesAsync();
+            }
+
+            // Odobserwuj artystę w Spotify, aby nie wrócił przy sync
+            var endpoint = $"me/following?type=artist&ids={Uri.EscapeDataString(artistId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
+        }
+
+        public async Task<bool> RemoveAlbumFromLibraryAsync(string albumId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var assign = await context.LibAlbumUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.AlbumId == albumId);
+            if (assign != null)
+            {
+                context.LibAlbumUserAssigns.Remove(assign);
+                await context.SaveChangesAsync();
+            }
+
+            // Usuń zapisany album w Spotify
+            var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
+        }
+
+        public async Task<bool> RemoveTrackFromLibraryAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var assign = await context.LibTrackUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.TrackId == trackId);
+            if (assign != null)
+            {
+                context.LibTrackUserAssigns.Remove(assign);
+                await context.SaveChangesAsync();
+            }
+
+            // Usuń zapisany utwór w Spotify
+            var endpoint = $"me/tracks?ids={Uri.EscapeDataString(trackId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
         }
 
         public async Task<object> GetUserTracksAsync(

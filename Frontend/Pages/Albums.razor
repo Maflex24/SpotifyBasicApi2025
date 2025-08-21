@@ -1,5 +1,6 @@
 @page "/albums"
 @inject LocalStorageService Store
+@inject IJSRuntime JS
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -54,10 +55,12 @@
                 <div class="card bg-dark text-light h-100">
                     @if (a.Images?.Any() == true)
                     {
-                        <div class="artist-image-square">
+                        <div class="artist-image-square" style="position:relative;">
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
                             <button class="artist-play-overlay" title="Odtwórz album"
                                     @onclick="() => PlayAlbum(a.Uri)">▶</button>
+                            <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
+                                    @onclick="() => ConfirmRemoveAlbum(a.Id)">✖</button>
                         </div>
                     }
                     <div class="card-body">
@@ -331,6 +334,19 @@
                 await client.PutAsJsonAsync("api/player/play", body);
             }
         }
+    }
+
+    private async Task ConfirmRemoveAlbum(string albumId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć album z biblioteki?"))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.DeleteAsync($"api/library/albums/{Uri.EscapeDataString(albumId)}");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        await LoadAlbums();
     }
 
     private async Task ResetFilters()

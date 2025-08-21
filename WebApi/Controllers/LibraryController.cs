@@ -8,10 +8,12 @@ namespace SpotifyBasicApi2025.Controllers
     public class LibraryController : ControllerBase
     {
         private readonly LibraryService libraryService;
+        private readonly SpotifyApiService spotifyApiService;
 
-        public LibraryController(LibraryService libraryService)
+        public LibraryController(LibraryService libraryService, SpotifyApiService spotifyApiService)
         {
             this.libraryService = libraryService;
+            this.spotifyApiService = spotifyApiService;
         }
 
         [HttpGet("artists")] 
@@ -31,6 +33,60 @@ namespace SpotifyBasicApi2025.Controllers
                 var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, excludeTags, excludeMode);
 
                 return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpDelete("artists/{id}")]
+        public async Task<IActionResult> RemoveArtist(string id)
+        {
+            try
+            {
+                var result = await libraryService.RemoveArtistFromLibraryAsync(id);
+                return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpDelete("albums/{id}")]
+        public async Task<IActionResult> RemoveAlbum(string id)
+        {
+            try
+            {
+                var result = await libraryService.RemoveAlbumFromLibraryAsync(id);
+                return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpDelete("tracks/{id}")]
+        public async Task<IActionResult> RemoveTrack(string id)
+        {
+            try
+            {
+                var result = await libraryService.RemoveTrackFromLibraryAsync(id);
+                return Ok(new { removed = result });
             }
             catch (InvalidOperationException ex)
             {
