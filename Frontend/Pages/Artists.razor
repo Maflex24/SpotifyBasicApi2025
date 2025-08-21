@@ -24,6 +24,8 @@
                 <option value="desc">Malejąco</option>
             </select>
 
+            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj artysty (AND)" @bind="LocalSearch" @bind:event="oninput" />
+
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
 
@@ -46,7 +48,7 @@
     </div>
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-        @foreach (var a in artists)
+        @foreach (var a in filteredArtists)
         {
             <div class="col">
                 <div class="card bg-dark text-light h-100">
@@ -139,6 +141,7 @@
     private string? selectedTagFilter;
     private string? selectedTagSort;
     private List<Artist> artists = new();
+    private List<Artist> filteredArtists = new();
     private List<TagDto> availableTags = new();
     private List<string> availableGenres = new();
     private HashSet<long> includeTagIds = new();
@@ -200,6 +203,8 @@
                 selectedTagByArtist[a.Id] = null;
             }
         }
+
+        ApplyLocalFilter();
 
         await SaveToStore();
     }
@@ -340,6 +345,7 @@
             selectedGenre,
             selectedTagFilter,
             selectedTagSort,
+            localSearch,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
@@ -361,11 +367,14 @@
         selectedGenre = state.selectedGenre;
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
+        localSearch = state.localSearch;
         includeMode = state.includeMode ?? includeMode;
         excludeMode = state.excludeMode ?? excludeMode;
 
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+
+        ApplyLocalFilter();
     }
 
     private sealed class ArtistsState
@@ -375,6 +384,7 @@
         public string? selectedGenre { get; set; }
         public string? selectedTagFilter { get; set; }
         public string? selectedTagSort { get; set; }
+        public string? localSearch { get; set; }
         public string? includeMode { get; set; }
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
@@ -450,6 +460,7 @@
         selectedGenre = null;
         selectedTagFilter = null;
         selectedTagSort = null;
+        LocalSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
         includeMode = "or";
@@ -482,6 +493,52 @@
         sortOrder = "desc";
 
         await LoadArtists();
+    }
+
+    private string? localSearch;
+    private string? LocalSearch
+    {
+        get => localSearch;
+        set
+        {
+            if (localSearch == value)
+                return;
+
+            localSearch = value;
+            ApplyLocalFilter();
+        }
+    }
+
+    private void ApplyLocalFilter()
+    {
+        if (string.IsNullOrWhiteSpace(localSearch))
+        {
+            filteredArtists = artists.ToList();
+
+            return;
+        }
+
+        var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .ToList();
+
+        filteredArtists = artists.Where(a =>
+        {
+            var hay = (a.Name ?? string.Empty);
+
+            if (a.Genres != null && a.Genres.Count > 0)
+                hay += " " + string.Join(' ', a.Genres);
+
+            hay = hay.ToLowerInvariant();
+
+            foreach (var term in terms)
+            {
+                if (!hay.Contains(term))
+                    return false;
+            }
+
+            return true;
+        }).ToList();
     }
 
     private void SelectArtistTag(string artistId, long tagId)

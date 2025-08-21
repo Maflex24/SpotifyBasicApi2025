@@ -24,7 +24,7 @@
                 }
             </select>
 
-            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedAlbumId">
+            <select class="form-select form-select-sm select-dark" style="width: 160px;" @bind="selectedAlbumId">
                 <option value="">Wszystkie albumy</option>
                 @foreach (var al in availableAlbums)
                 {
@@ -32,7 +32,8 @@
                 }
             </select>
 
-            <input class="form-control form-control-sm w-auto input-dark" type="number" placeholder="Rok" @bind="selectedYear" />
+
+            <input class="form-control form-control-sm input-dark" style="width: 200px;" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" />
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadTracks">Zastosuj</button>
@@ -70,7 +71,7 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach (var t in tracks)
+                @foreach (var t in filteredTracks)
                 {
                     <tr>
                         <td>
@@ -89,7 +90,7 @@
                         <td>@t.AlbumName</td>
                         <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
                         <td>
-                            @foreach (var tag in t.Tags.Take(3))
+                            @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
                             {
                                 <span class="badge bg-primary me-1" style="font-size: 0.7rem;">@tag.TagName (@tag.Strength)</span>
                             }
@@ -146,6 +147,7 @@
     private string? selectedAlbumId;
     private int? selectedYear;
     private List<Track> tracks = new();
+    private List<Track> filteredTracks = new();
     private List<TagDto> availableTags = new();
     private List<ArtistOption> availableArtists = new();
     private List<AlbumOption> availableAlbums = new();
@@ -156,6 +158,19 @@
 
     private Dictionary<string, long?> selectedTagByTrack = new();
     private Dictionary<string, float?> hoverByKey = new();
+    private string? localSearch;
+    private string? LocalSearch
+    {
+        get => localSearch;
+        set
+        {
+            if (localSearch == value)
+                return;
+
+            localSearch = value;
+            ApplyLocalFilter();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -213,6 +228,8 @@
                 selectedTagByTrack[tr.Id] = null;
         }
 
+        ApplyLocalFilter();
+
         await SaveToStore();
     }
 
@@ -254,12 +271,48 @@
         selectedArtistId = null;
         selectedAlbumId = null;
         selectedYear = null;
+        LocalSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
         includeMode = "or";
         excludeMode = "or";
 
         await LoadTracks();
+    }
+
+    private void OnLocalSearchChanged(string? value)
+    {
+        localSearch = value;
+
+        ApplyLocalFilter();
+    }
+
+    private void ApplyLocalFilter()
+    {
+        if (string.IsNullOrWhiteSpace(localSearch))
+        {
+            filteredTracks = tracks.ToList();
+
+            return;
+        }
+
+        var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .ToList();
+
+        filteredTracks = tracks.Where(tr =>
+        {
+            var hay = ((tr.Name ?? string.Empty) + " " + (tr.AlbumName ?? string.Empty) + " " + string.Join(' ', tr.Artists?.Select(a => a.Name) ?? new List<string>()))
+                .ToLowerInvariant();
+
+            foreach (var term in terms)
+            {
+                if (!hay.Contains(term))
+                    return false;
+            }
+
+            return true;
+        }).ToList();
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -441,6 +494,7 @@
             selectedArtistId,
             selectedAlbumId,
             selectedYear,
+            localSearch,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
@@ -460,10 +514,13 @@
         selectedArtistId = state.selectedArtistId;
         selectedAlbumId = state.selectedAlbumId;
         selectedYear = state.selectedYear;
+        localSearch = state.localSearch;
         includeMode = state.includeMode ?? includeMode;
         excludeMode = state.excludeMode ?? excludeMode;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+
+        ApplyLocalFilter();
     }
 
     private sealed class TracksResponse { public int total { get; set; } public List<Track> items { get; set; } = new(); }
@@ -479,7 +536,7 @@
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } }
+    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } }
 }
 
 

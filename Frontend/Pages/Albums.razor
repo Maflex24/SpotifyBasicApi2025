@@ -16,6 +16,8 @@
                 <option value="desc">Malejąco</option>
             </select>
 
+            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
+
             <select class="form-select form-select-sm w-auto select-dark" @bind="selectedArtistId">
                 <option value="">Wszyscy wykonawcy</option>
                 @foreach (var ar in availableAlbumArtists)
@@ -46,7 +48,7 @@
     </div>
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-        @foreach (var a in albums)
+        @foreach (var a in filteredAlbums)
         {
             <div class="col">
                 <div class="card bg-dark text-light h-100">
@@ -136,6 +138,7 @@
     private string? selectedTagSort;
     private string? selectedArtistId;
     private List<Album> albums = new();
+    private List<Album> filteredAlbums = new();
     private List<TagDto> availableTags = new();
     private List<AlbumArtistOption> availableAlbumArtists = new();
     private HashSet<long> includeTagIds = new();
@@ -195,6 +198,8 @@
             if (!selectedTagByAlbum.ContainsKey(a.Id))
                 selectedTagByAlbum[a.Id] = null;
         }
+
+        ApplyLocalFilter();
 
         await SaveToStore();
     }
@@ -334,6 +339,7 @@
         sortOrder = "asc";
         selectedTagFilter = null;
         selectedTagSort = null;
+        LocalSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
         includeMode = "or";
@@ -419,6 +425,7 @@
             selectedTagFilter,
             selectedTagSort,
             selectedArtistId,
+            localSearch,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
@@ -440,11 +447,14 @@
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
         selectedArtistId = state.selectedArtistId;
+        localSearch = state.localSearch;
         includeMode = state.includeMode ?? includeMode;
         excludeMode = state.excludeMode ?? excludeMode;
 
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+
+        ApplyLocalFilter();
     }
 
     private sealed class AlbumsState
@@ -454,6 +464,7 @@
         public string? selectedTagFilter { get; set; }
         public string? selectedTagSort { get; set; }
         public string? selectedArtistId { get; set; }
+        public string? localSearch { get; set; }
         public string? includeMode { get; set; }
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
@@ -540,6 +551,48 @@
     private void ToggleExcludeMode()
     {
         excludeMode = excludeMode == "and" ? "or" : "and";
+    }
+
+    private string? localSearch;
+    private string? LocalSearch
+    {
+        get => localSearch;
+        set
+        {
+            if (localSearch == value)
+                return;
+
+            localSearch = value;
+            ApplyLocalFilter();
+        }
+    }
+
+    private void ApplyLocalFilter()
+    {
+        if (string.IsNullOrWhiteSpace(localSearch))
+        {
+            filteredAlbums = albums.ToList();
+
+            return;
+        }
+
+        var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .ToList();
+
+        filteredAlbums = albums.Where(a =>
+        {
+            var hay = (a.Name ?? string.Empty) + " " + string.Join(' ', a.Artists?.Select(s => s.Name) ?? new List<string>());
+            hay = hay.ToLowerInvariant();
+
+            foreach (var term in terms)
+            {
+                if (!hay.Contains(term))
+                    return false;
+            }
+
+            return true;
+        }).ToList();
     }
 }
 
