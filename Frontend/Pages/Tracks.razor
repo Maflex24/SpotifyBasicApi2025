@@ -360,18 +360,68 @@
 
             return;
 
-        Func<Track, object?> keySelector = clientSortColumn switch
-        {
-            "artists" => t => string.Join(' ', t.Artists?.Select(a => a.Name) ?? new List<string>()).ToLowerInvariant(),
-            "album" => t => (t.AlbumName ?? string.Empty).ToLowerInvariant(),
-            "year" => t => t.ReleaseYear ?? -1,
-            _ => t => (t.Name ?? string.Empty).ToLowerInvariant(),
-        };
+        string ArtistsKey(Track t) => string.Join(' ', t.Artists?.Select(a => a.Name) ?? new List<string>()).ToLowerInvariant();
+        string AlbumKey(Track t) => (t.AlbumName ?? string.Empty).ToLowerInvariant();
+        string NameKey(Track t) => (t.Name ?? string.Empty).ToLowerInvariant();
+        int YearKey(Track t) => t.ReleaseYear ?? -1;
 
-        if (clientSortAsc)
-            filteredTracks = filteredTracks.OrderBy(keySelector).ToList();
-        else
-            filteredTracks = filteredTracks.OrderByDescending(keySelector).ToList();
+        IOrderedEnumerable<Track> ordered;
+
+        if (clientSortColumn == "year")
+        {
+            ordered = clientSortAsc
+                ? filteredTracks.OrderBy(YearKey)
+                : filteredTracks.OrderByDescending(YearKey);
+
+            filteredTracks = ordered
+                .ThenBy(ArtistsKey)
+                .ThenBy(AlbumKey)
+                .ThenBy(NameKey)
+                .ToList();
+            
+            return;
+        }
+
+        if (clientSortColumn == "artists")
+        {
+            ordered = clientSortAsc
+                ? filteredTracks.OrderBy(ArtistsKey)
+                : filteredTracks.OrderByDescending(ArtistsKey);
+
+            filteredTracks = ordered
+                .ThenBy(AlbumKey)
+                .ThenBy(NameKey)
+                .ThenBy(YearKey)
+                .ToList();
+            
+            return;
+        }
+
+        if (clientSortColumn == "album")
+        {
+            ordered = clientSortAsc
+                ? filteredTracks.OrderBy(AlbumKey)
+                : filteredTracks.OrderByDescending(AlbumKey);
+
+            filteredTracks = ordered
+                .ThenBy(ArtistsKey)
+                .ThenBy(NameKey)
+                .ThenBy(YearKey)
+                .ToList();
+            
+            return;
+        }
+
+        // default: name
+        ordered = clientSortAsc
+            ? filteredTracks.OrderBy(NameKey)
+            : filteredTracks.OrderByDescending(NameKey);
+
+        filteredTracks = ordered
+            .ThenBy(ArtistsKey)
+            .ThenBy(AlbumKey)
+            .ThenBy(YearKey)
+            .ToList();
     }
 
     private string GetSortArrow(string column)
