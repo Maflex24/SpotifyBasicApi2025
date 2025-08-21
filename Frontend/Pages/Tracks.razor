@@ -1,6 +1,7 @@
 @page "/tracks"
 @inject LocalStorageService Store
 @inject IJSRuntime JS
+@implements IDisposable
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -74,7 +75,8 @@
             <tbody>
                 @foreach (var t in filteredTracks)
                 {
-                    <tr>
+                    var rowClass = (string.Equals(currentPlayingTrackId, t.Id, StringComparison.OrdinalIgnoreCase)) ? "playing-track" : string.Empty;
+                    <tr class="@rowClass">
                         <td>
                             <div class="cover-container">
                                 <img class="cover-img-56" src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" />
@@ -502,6 +504,8 @@
             selectedTagByTrack[trackId] = null;
     }
 
+    private string? currentPlayingTrackId;
+
     private async Task PlayTrack(string? uri)
     {
         if (string.IsNullOrWhiteSpace(uri)) return;
@@ -518,6 +522,71 @@
                 await client.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
                 await client.PutAsJsonAsync("api/player/play", body);
             }
+        }
+
+        // Ustal bieżące ID utworu z URI (spotify:track:XYZ)
+        var lastColon = uri.LastIndexOf(':');
+        if (lastColon > -1 && lastColon < uri.Length - 1)
+            currentPlayingTrackId = uri.Substring(lastColon + 1);
+        else
+            currentPlayingTrackId = null;
+    }
+
+    private CancellationTokenSource? pollCts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        pollCts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            var token = pollCts.Token;
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await FetchPlaybackState();
+                }
+                catch { }
+
+                try
+                {
+                    await Task.Delay(3000, token);
+                }
+                catch (TaskCanceledException) { break; }
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        try { pollCts?.Cancel(); } catch { }
+        pollCts?.Dispose();
+    }
+
+    private sealed class PlaybackState { public PlaybackItem? Item { get; set; } }
+    private sealed class PlaybackItem { public string Id { get; set; } = string.Empty; public string? Uri { get; set; } }
+
+    private async Task FetchPlaybackState()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var state = await client.GetFromJsonAsync<PlaybackState>("api/player/state");
+
+        var newId = state?.Item?.Id;
+        if (string.IsNullOrWhiteSpace(newId) && !string.IsNullOrWhiteSpace(state?.Item?.Uri))
+        {
+            var uri = state!.Item!.Uri!;
+            var lastColon = uri.LastIndexOf(':');
+            if (lastColon > -1 && lastColon < uri.Length - 1)
+                newId = uri.Substring(lastColon + 1);
+        }
+
+        if (!string.Equals(currentPlayingTrackId, newId, StringComparison.OrdinalIgnoreCase))
+        {
+            currentPlayingTrackId = newId;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
