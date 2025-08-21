@@ -20,6 +20,8 @@ namespace SpotifyBasicApi2025.Models
 
 		public List<SpotifyImage> Images { get; set; } = new List<SpotifyImage>();
 
+		public string? AlbumImage64 { get; set; }
+
 		public List<TrackTagModel> Tags { get; set; } = new List<TrackTagModel>();
 
 		public List<SimpleArtist> Artists { get; set; } = new List<SimpleArtist>();

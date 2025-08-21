@@ -320,7 +320,23 @@ namespace SpotifyBasicApi2025.Models.Extensions
 		public static TrackModel MapToTrackModel(this SpTrack entity, List<TrackTagModel>? tags = null)
 		{
 			var images = new List<SpotifyImage>();
-			if (!string.IsNullOrEmpty(entity.Images))
+
+			// Preferuj obrazki z albumu
+			if (entity.Album != null && !string.IsNullOrEmpty(entity.Album.Images))
+			{
+				try
+				{
+					var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+					var albumImageArray = JsonSerializer.Deserialize<List<SpotifyImage>>(entity.Album.Images, options);
+					if (albumImageArray != null)
+						images.AddRange(albumImageArray);
+				}
+				catch (JsonException)
+				{
+					// fallback - nie parsujemy alternatywnego formatu dla albumu, bo album.Images powinno być JSONem
+				}
+			}
+			else if (!string.IsNullOrEmpty(entity.Images))
 			{
 				try
 				{
@@ -387,6 +403,17 @@ namespace SpotifyBasicApi2025.Models.Extensions
 				else if (entity.Album.ReleaseDate!.Length >= 4 && int.TryParse(entity.Album.ReleaseDate.Substring(0, 4), out var y)) releaseYear = y;
 			}
 
+			string? albumImage64 = null;
+			if (images.Count > 0)
+			{
+				// wybierz najmniejszy (64x64) jeśli dostępny; inaczej po Width rosnąco
+				var exact64 = images.FirstOrDefault(i => (i.Width == 64 || i.Height == 64) && !string.IsNullOrWhiteSpace(i.Url));
+				if (exact64 != null)
+					albumImage64 = exact64.Url;
+				else
+					albumImage64 = images.OrderBy(i => (i.Width ?? int.MaxValue)).ThenBy(i => (i.Height ?? int.MaxValue)).FirstOrDefault()?.Url;
+			}
+
 			return new TrackModel
 			{
 				Id = entity.Id,
@@ -398,6 +425,7 @@ namespace SpotifyBasicApi2025.Models.Extensions
 				AlbumName = entity.Album?.Name,
 				ReleaseYear = releaseYear,
 				Images = images,
+				AlbumImage64 = albumImage64,
 				Artists = artists,
 				Tags = tags ?? new List<TrackTagModel>()
 			};

@@ -76,10 +76,7 @@
                 {
                     <tr>
                         <td>
-                            @if (t.Images?.Any() == true)
-                            {
-                                <img src="@GetBestImageUrl(t.Images)" alt="okładka" style="width:56px;height:56px;object-fit:cover;border-radius:4px;" />
-                            }
+                            <img src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" style="width:56px;height:56px;object-fit:cover;border-radius:4px;" />
                         </td>
                         <td>@t.Name</td>
                         <td>
@@ -547,7 +544,7 @@
     private sealed class TracksResponse { public int total { get; set; } public List<Track> items { get; set; } = new(); }
     private sealed class AlbumsResponse { public int total { get; set; } public List<AlbumShort> items { get; set; } = new(); }
     private sealed class AlbumShort { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
+    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
     private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForTrack { get; set; } }
