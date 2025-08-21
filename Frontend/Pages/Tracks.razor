@@ -61,14 +61,14 @@
         <table class="table table-dark table-striped align-middle">
             <thead>
                 <tr>
-                    <th style="width:72px;"></th>
-                    <th>Nazwa</th>
-                    <th>Wykonawcy</th>
-                    <th>Album</th>
-                    <th>Rok</th>
-                    <th>Tagi</th>
-                    <th>Tagowanie</th>
-                    <th style="width:56px;"></th>
+                    <th style="width:72px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagi</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
+                    <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -168,6 +168,7 @@
 
             localSearch = value;
             ApplyLocalFilter();
+            ApplyClientSort();
         }
     }
 
@@ -228,6 +229,7 @@
         }
 
         ApplyLocalFilter();
+        ApplyClientSort();
 
         await SaveToStore();
     }
@@ -318,6 +320,61 @@
 
             return true;
         }).ToList();
+
+        ApplyClientSort();
+    }
+
+    private string clientSortColumn = "name";
+    private bool clientSortAsc = true;
+
+    private void OnSortByName() => OnClientSort("name");
+    private void OnSortByArtists() => OnClientSort("artists");
+    private void OnSortByAlbum() => OnClientSort("album");
+    private void OnSortByYear() => OnClientSort("year");
+
+    private void OnClientSort(string column)
+    {
+        if (clientSortColumn == column)
+        {
+            clientSortAsc = !clientSortAsc;
+
+            ApplyClientSort();
+
+            return;
+        }
+
+        clientSortColumn = column;
+        clientSortAsc = true;
+
+        ApplyClientSort();
+    }
+
+    private void ApplyClientSort()
+    {
+        if (filteredTracks == null || filteredTracks.Count == 0)
+
+            return;
+
+        Func<Track, object?> keySelector = clientSortColumn switch
+        {
+            "artists" => t => string.Join(' ', t.Artists?.Select(a => a.Name) ?? new List<string>()).ToLowerInvariant(),
+            "album" => t => (t.AlbumName ?? string.Empty).ToLowerInvariant(),
+            "year" => t => t.ReleaseYear ?? -1,
+            _ => t => (t.Name ?? string.Empty).ToLowerInvariant(),
+        };
+
+        if (clientSortAsc)
+            filteredTracks = filteredTracks.OrderBy(keySelector).ToList();
+        else
+            filteredTracks = filteredTracks.OrderByDescending(keySelector).ToList();
+    }
+
+    private string GetSortArrow(string column)
+    {
+        if (clientSortColumn != column)
+            return string.Empty;
+
+        return clientSortAsc ? " ↑" : " ↓";
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
