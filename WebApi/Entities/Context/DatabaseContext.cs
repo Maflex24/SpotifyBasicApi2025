@@ -27,6 +27,7 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         public DbSet<LibTagGroup> LibTagGroups { get; set; }
         public DbSet<LibTagAssign> LibTagAssigns { get; set; }
+        public DbSet<LibPlaylistFolder> LibPlaylistFolders { get; set; }
 
         // Library connections
         public DbSet<LibArtistUserAssign> LibArtistUserAssigns { get; set; }
@@ -138,6 +139,18 @@ namespace SpotifyBasicApi2025.Entities.Context
 
             modelBuilder.Entity<SpPlaylist>()
                 .HasIndex(p => p.Name);
+            // Playlist folders
+            modelBuilder.Entity<LibPlaylistFolder>()
+                .HasOne(f => f.ParentFolder)
+                .WithMany(f => f.Children)
+                .HasForeignKey(f => f.ParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<SpPlaylist>()
+                .HasOne(p => p.PlaylistFolder)
+                .WithMany(f => f.Playlists)
+                .HasForeignKey(p => p.FolderId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<SpUser>()
                 .HasIndex(u => u.DisplayName);

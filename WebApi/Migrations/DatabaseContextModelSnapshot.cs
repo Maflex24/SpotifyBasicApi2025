@@ -92,6 +92,29 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("LibArtistUserAssigns");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibPlaylistFolder", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"), 1L, 1);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<long?>("ParentId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId");
+
+                    b.ToTable("LibPlaylistFolders");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
                 {
                     b.Property<long>("Id")
@@ -402,6 +425,9 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<long?>("FolderId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Href")
                         .HasColumnType("nvarchar(max)");
 
@@ -434,6 +460,8 @@ namespace SpotifyBasicApi2025.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FolderId");
 
                     b.HasIndex("Name");
 
@@ -713,6 +741,16 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibPlaylistFolder", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.LibPlaylistFolder", "ParentFolder")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ParentFolder");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
                 {
                     b.HasOne("SpotifyBasicApi2025.Entities.LibTagGroup", "TagGroup")
@@ -799,12 +837,19 @@ namespace SpotifyBasicApi2025.Migrations
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpPlaylist", b =>
                 {
+                    b.HasOne("SpotifyBasicApi2025.Entities.LibPlaylistFolder", "PlaylistFolder")
+                        .WithMany("Playlists")
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SpotifyBasicApi2025.Entities.SpUser", "Owner")
                         .WithMany("Playlists")
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Owner");
+
+                    b.Navigation("PlaylistFolder");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.SpPlaylistTrack", b =>
@@ -891,6 +936,13 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("Artist");
 
                     b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibPlaylistFolder", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Playlists");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagGroup", b =>
