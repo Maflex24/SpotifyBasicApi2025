@@ -146,6 +146,12 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .HasForeignKey(f => f.ParentId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<LibPlaylistFolder>()
+                .HasOne(f => f.User)
+                .WithMany()
+                .HasForeignKey(f => f.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             modelBuilder.Entity<SpPlaylist>()
                 .HasOne(p => p.PlaylistFolder)
                 .WithMany(f => f.Playlists)

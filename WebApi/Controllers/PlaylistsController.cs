@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SpotifyBasicApi2025.Entities.Context;
+using SpotifyBasicApi2025.Services;
 
 namespace SpotifyBasicApi2025.Controllers
 {
@@ -9,16 +10,22 @@ namespace SpotifyBasicApi2025.Controllers
     public class PlaylistsController : ControllerBase
     {
         private readonly DatabaseContext dbContext;
+        private readonly UserService userService;
 
-        public PlaylistsController(DatabaseContext dbContext)
+        public PlaylistsController(DatabaseContext dbContext, UserService userService)
         {
             this.dbContext = dbContext;
+            this.userService = userService;
         }
 
         [HttpPut("{playlistId}/folder")]
         public async Task<IActionResult> AssignFolder(string playlistId, [FromBody] AssignFolderModel model)
         {
-            var playlist = await dbContext.SpPlaylists.FirstOrDefaultAsync(p => p.Id == playlistId);
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                return StatusCode(403);
+
+            var playlist = await dbContext.SpPlaylists.FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
 
             if (playlist == null)
                 return NotFound("Playlist not found");

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
+using SpotifyBasicApi2025.Services;
 
 namespace SpotifyBasicApi2025.Controllers
 {
@@ -10,17 +11,24 @@ namespace SpotifyBasicApi2025.Controllers
     public class PlaylistFoldersController : ControllerBase
     {
         private readonly DatabaseContext dbContext;
+        private readonly UserService userService;
 
-        public PlaylistFoldersController(DatabaseContext dbContext)
+        public PlaylistFoldersController(DatabaseContext dbContext, UserService userService)
         {
             this.dbContext = dbContext;
+            this.userService = userService;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                return StatusCode(403);
+
             var folders = await dbContext.LibPlaylistFolders
                 .AsNoTracking()
+                .Where(f => f.UserId == userId)
                 .Select(f => new { f.Id, f.Name, f.ParentId })
                 .ToListAsync();
 
@@ -33,10 +41,15 @@ namespace SpotifyBasicApi2025.Controllers
             if (string.IsNullOrWhiteSpace(model.Name))
                 return BadRequest("Name is required");
 
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                return StatusCode(403);
+
             var entity = new LibPlaylistFolder
             {
                 Name = model.Name.Trim(),
-                ParentId = model.ParentId
+                ParentId = model.ParentId,
+                UserId = userId
             };
 
             if (entity.ParentId.HasValue)
@@ -56,7 +69,11 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(long id, [FromBody] FolderUpdateModel model)
         {
-            var entity = await dbContext.LibPlaylistFolders.FirstOrDefaultAsync(f => f.Id == id);
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                return StatusCode(403);
+
+            var entity = await dbContext.LibPlaylistFolders.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
 
             if (entity == null)
                 return NotFound();

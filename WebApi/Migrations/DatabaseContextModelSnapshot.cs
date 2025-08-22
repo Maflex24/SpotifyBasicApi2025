@@ -108,9 +108,16 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Property<long?>("ParentId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ParentId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("LibPlaylistFolders");
                 });
@@ -748,7 +755,15 @@ namespace SpotifyBasicApi2025.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("ParentFolder");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
