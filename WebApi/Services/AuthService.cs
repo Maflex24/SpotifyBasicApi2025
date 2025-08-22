@@ -28,6 +28,8 @@ namespace SpotifyBasicApi2025.Services
                 "user-read-email",
                 "user-follow-read",
                 "user-library-read",
+                "user-follow-modify",
+                "user-library-modify",
                 "playlist-read-private",
                 "playlist-read-collaborative",
                 // Player scopes

@@ -62,5 +62,48 @@ namespace SpotifyBasicApi2025.Services
 
             return null;
         }
+
+        public async Task<bool> SendAsync(System.Net.Http.HttpMethod method, string endpoint, object? body = null)
+        {
+            var accessToken = tokenManager.GetAccessToken();
+
+            if (string.IsNullOrEmpty(accessToken))
+                throw new InvalidOperationException("Brak tokenu dostępu. Najpierw musisz się zalogować.");
+
+            using var httpClient = httpClientFactory.CreateClient("SpotifyApi");
+
+            var request = new HttpRequestMessage(method, endpoint);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+            if (body != null)
+            {
+                request.Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json");
+            }
+
+            var response = await httpClient.SendAsync(request);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var refreshedToken = await authService.RefreshCurrentTokenAsync();
+
+                if (refreshedToken != null)
+                {
+                    request = new HttpRequestMessage(method, endpoint);
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", refreshedToken.AccessToken);
+                    if (body != null)
+                        request.Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json");
+                    response = await httpClient.SendAsync(request);
+                }
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Spotify API Error: {response.StatusCode} - {errorContent}");
+                return false;
+            }
+
+            return true;
+        }
     }
 }

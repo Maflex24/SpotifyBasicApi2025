@@ -8,10 +8,12 @@ namespace SpotifyBasicApi2025.Controllers
     public class LibraryController : ControllerBase
     {
         private readonly LibraryService libraryService;
+        private readonly SpotifyApiService spotifyApiService;
 
-        public LibraryController(LibraryService libraryService)
+        public LibraryController(LibraryService libraryService, SpotifyApiService spotifyApiService)
         {
             this.libraryService = libraryService;
+            this.spotifyApiService = spotifyApiService;
         }
 
         [HttpGet("artists")] 
@@ -31,6 +33,96 @@ namespace SpotifyBasicApi2025.Controllers
                 var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, excludeTags, excludeMode);
 
                 return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpDelete("artists/{id}")]
+        public async Task<IActionResult> RemoveArtist(string id)
+        {
+            try
+            {
+                var result = await libraryService.RemoveArtistFromLibraryAsync(id);
+                return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpDelete("albums/{id}")]
+        public async Task<IActionResult> RemoveAlbum(string id)
+        {
+            try
+            {
+                var result = await libraryService.RemoveAlbumFromLibraryAsync(id);
+                return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpDelete("tracks/{id}")]
+        public async Task<IActionResult> RemoveTrack(string id)
+        {
+            try
+            {
+                var result = await libraryService.RemoveTrackFromLibraryAsync(id);
+                return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPost("tracks/{id}")]
+        public async Task<IActionResult> AddTrack(string id)
+        {
+            try
+            {
+                var result = await libraryService.AddTrackToLibraryAsync(id);
+                return Ok(new { added = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("tracks/{id}/exists")]
+        public async Task<IActionResult> TrackExists(string id)
+        {
+            try
+            {
+                var result = await libraryService.IsTrackInLibraryAsync(id);
+                return Ok(new { exists = result });
             }
             catch (InvalidOperationException ex)
             {
@@ -67,6 +159,41 @@ namespace SpotifyBasicApi2025.Controllers
             {
                 var result = await libraryService.GetArtistsLibraryGenres();
                 return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("tracks")]
+        public async Task<IActionResult> GetUserTracks(
+            [FromQuery] string? sort = null,
+            [FromQuery] string? order = null,
+            [FromQuery] string? tags = null,
+            [FromQuery] long? sortTagId = null,
+            [FromQuery] string? artistId = null,
+            [FromQuery] string? albumId = null,
+            [FromQuery] int? year = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 100,
+            [FromQuery] string? search = null)
+        {
+            try
+            {
+                var result = await libraryService.GetUserTracksAsync(
+                    sort, order, tags, sortTagId, artistId, albumId, year,
+                    includeTags, includeMode, excludeTags, excludeMode,
+                    page, pageSize, search);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
             }
             catch (Exception ex)
             {

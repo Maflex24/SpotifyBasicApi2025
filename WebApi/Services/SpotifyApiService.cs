@@ -410,6 +410,16 @@ namespace SpotifyBasicApi2025.Services
             }
         }
 
+        public async Task<SpotifyTrackObject?> GetTrackAsync(string id)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"tracks/{id}");
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyTrackObject>(response.ToString()!);
+        }
+
         // Zapisywanie zapisanych albumów użytkownika
         public async Task<int> SaveUserSavedAlbumsAsync(List<SpotifySavedAlbumItem> savedAlbums, string userId)
         {

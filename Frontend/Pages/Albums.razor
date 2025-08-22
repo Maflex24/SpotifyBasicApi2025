@@ -1,7 +1,8 @@
 @page "/albums"
 @inject LocalStorageService Store
+@inject IJSRuntime JS
 
-<div class="container py-3">
+<div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
         <h4 class="mb-0">Albumy</h4>
         <div class="d-flex gap-2 align-items-center flex-wrap">
@@ -16,6 +17,8 @@
                 <option value="desc">Malejąco</option>
             </select>
 
+            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
+
             <select class="form-select form-select-sm w-auto select-dark" @bind="selectedArtistId">
                 <option value="">Wszyscy wykonawcy</option>
                 @foreach (var ar in availableAlbumArtists)
@@ -26,36 +29,42 @@
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadAlbums">Zastosuj</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
 
-            <div class="d-flex align-items-start gap-3 w-100 mt-2">
-                <div class="d-flex flex-column gap-1 flex-fill">
-                    <div class="tag-chips-container mt-2">
-                        @foreach (var t in availableTags)
-                        {
-                            var state = GetTagState(t.Id);
-                            var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                            <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
-                        }
+            @if (showTagFilters)
+            {
+                <div class="d-flex align-items-start gap-3 w-100 mt-2">
+                    <div class="d-flex flex-column gap-1 flex-fill">
+                        <div class="tag-chips-container mt-2">
+                            @foreach (var t in availableTags)
+                            {
+                                var state = GetTagState(t.Id);
+                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                            }
 
-                        <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
-                        <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                            <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                            <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-        @foreach (var a in albums)
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
+        @foreach (var a in filteredAlbums)
         {
             <div class="col">
                 <div class="card bg-dark text-light h-100">
                     @if (a.Images?.Any() == true)
                     {
-                        <div class="artist-image-square">
+                        <div class="artist-image-square" style="position:relative;">
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
                             <button class="artist-play-overlay" title="Odtwórz album"
                                     @onclick="() => PlayAlbum(a.Uri)">▶</button>
+                            <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
+                                    @onclick="() => ConfirmRemoveAlbum(a.Id)">✖</button>
                         </div>
                     }
                     <div class="card-body">
@@ -95,31 +104,7 @@
 
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <select class="form-select form-select-sm w-auto select-dark" value="@GetSelectedTagValue(a.Id)" @onchange="(e) => OnAlbumTagSelectChanged(a.Id, e.Value?.ToString())">
-                                    <option value="">— wybierz tag —</option>
-                                    @foreach (var t in availableTags)
-                                    {
-                                        <option value="@t.Id">@t.Name</option>
-                                    }
-                                </select>
-
-                                @if (selectedTagByAlbum.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
-                                {
-                                    var chosenTagId = selectedTagId.Value;
-                                    var current = a.Tags?.FirstOrDefault(x => x.TagId == chosenTagId)?.Strength ?? 3.0f;
-
-                                    <div class="d-flex align-items-center gap-2">
-                                        <small class="text-secondary">Waga:</small>
-                                        @StarRating($"{a.Id}:{chosenTagId}", current, v => SetAlbumTagStrength(a.Id, chosenTagId, v))
-                                    </div>
-
-                                    <button class="btn btn-sm btn-outline-light" @onclick="() => ApplyFilterByTag(chosenTagId)">Filtruj</button>
-
-                                    @if (a.Tags?.Any(x => x.TagId == chosenTagId) == true)
-                                    {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveAlbumTag(a.Id, chosenTagId)">Usuń przypisanie</button>
-                                    }
-                                }                                
+                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAlbumTagging(a.Id)">Taguj</button>
                             </div>
                         </div>
                     </div>
@@ -136,15 +121,19 @@
     private string? selectedTagSort;
     private string? selectedArtistId;
     private List<Album> albums = new();
+    private List<Album> filteredAlbums = new();
     private List<TagDto> availableTags = new();
     private List<AlbumArtistOption> availableAlbumArtists = new();
     private HashSet<long> includeTagIds = new();
     private HashSet<long> excludeTagIds = new();
     private string includeMode = "or";
     private string excludeMode = "or";
+    private bool showTagFilters = true;
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByAlbum = new();
+    private bool showAlbumTagging = false;
+    private string? taggingAlbumId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -196,6 +185,8 @@
                 selectedTagByAlbum[a.Id] = null;
         }
 
+        ApplyLocalFilter();
+
         await SaveToStore();
     }
 
@@ -221,6 +212,7 @@
 
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForAlbum).ToList();
+        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -306,6 +298,26 @@
         await SaveToStore();
     }
 
+    private void OpenAlbumTagging(string albumId)
+    {
+        taggingAlbumId = albumId;
+        showAlbumTagging = true;
+    }
+
+    private void CloseAlbumTagging()
+    {
+        showAlbumTagging = false;
+        taggingAlbumId = null;
+    }
+
+    private async Task AddAlbumTagFromPanel(long? tagId)
+    {
+        if (taggingAlbumId == null || tagId is null)
+            return;
+
+        await SetAlbumTagStrength(taggingAlbumId, tagId.Value, 3.0f);
+    }
+
     private async Task PlayAlbum(string? uri)
     {
         if (string.IsNullOrWhiteSpace(uri))
@@ -328,12 +340,26 @@
         }
     }
 
+    private async Task ConfirmRemoveAlbum(string albumId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć album z biblioteki?"))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var res = await client.DeleteAsync($"api/library/albums/{Uri.EscapeDataString(albumId)}");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        await LoadAlbums();
+    }
+
     private async Task ResetFilters()
     {
         sortKey = "name";
         sortOrder = "asc";
         selectedTagFilter = null;
         selectedTagSort = null;
+        LocalSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
         includeMode = "or";
@@ -396,6 +422,7 @@
     }
 
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } }
+    private List<TagItem> albumTagItems = new();
 
     private sealed class AlbumArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
 
@@ -419,10 +446,12 @@
             selectedTagFilter,
             selectedTagSort,
             selectedArtistId,
+            localSearch,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
-            excludeMode
+            excludeMode,
+            showTagFilters
         };
 
         await Store.SetItemAsync(StoreKey, state);
@@ -440,11 +469,16 @@
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
         selectedArtistId = state.selectedArtistId;
+        localSearch = state.localSearch;
         includeMode = state.includeMode ?? includeMode;
         excludeMode = state.excludeMode ?? excludeMode;
 
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+
+        showTagFilters = state.showTagFilters ?? showTagFilters;
+
+        ApplyLocalFilter();
     }
 
     private sealed class AlbumsState
@@ -454,10 +488,12 @@
         public string? selectedTagFilter { get; set; }
         public string? selectedTagSort { get; set; }
         public string? selectedArtistId { get; set; }
+        public string? localSearch { get; set; }
         public string? includeMode { get; set; }
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
+        public bool? showTagFilters { get; set; }
     }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
@@ -497,6 +533,15 @@
             selectedTagByAlbum[albumId] = id;
         else
             selectedTagByAlbum[albumId] = null;
+    }
+
+    private async Task RemoveSelectedAlbumTagIfAny(string albumId)
+    {
+        if (selectedTagByAlbum.TryGetValue(albumId, out var v) && v.HasValue)
+        {
+            await RemoveAlbumTag(albumId, v.Value);
+            selectedTagByAlbum[albumId] = null;
+        }
     }
 
     private int GetTagState(long tagId)
@@ -541,6 +586,84 @@
     {
         excludeMode = excludeMode == "and" ? "or" : "and";
     }
+    private async Task ToggleTagFilters()
+    {
+        showTagFilters = !showTagFilters;
+        await SaveToStore();
+    }
+
+    private string? localSearch;
+    private string? LocalSearch
+    {
+        get => localSearch;
+        set
+        {
+            if (localSearch == value)
+                return;
+
+            localSearch = value;
+            ApplyLocalFilter();
+        }
+    }
+
+    private void ApplyLocalFilter()
+    {
+        if (string.IsNullOrWhiteSpace(localSearch))
+        {
+            filteredAlbums = albums.ToList();
+
+            return;
+        }
+
+        var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .ToList();
+
+        filteredAlbums = albums.Where(a =>
+        {
+            var parts = new List<string>();
+            parts.Add(a.Name ?? string.Empty);
+            parts.Add(string.Join(' ', a.Artists?.Select(s => s.Name) ?? new List<string>()));
+            if (a.Tags != null && a.Tags.Count > 0)
+                parts.Add(string.Join(' ', a.Tags.Select(t => t.TagName)));
+
+            var hay = string.Join(' ', parts).ToLowerInvariant();
+
+            foreach (var term in terms)
+            {
+                if (!hay.Contains(term))
+                    return false;
+            }
+
+            return true;
+        }).ToList();
+    }
+}
+
+@if (showAlbumTagging && taggingAlbumId != null)
+{
+    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <strong>Tagowanie albumu</strong>
+            <button class="btn btn-sm btn-outline-light" @onclick="CloseAlbumTagging">✕</button>
+        </div>
+        <TagSearchSelect Items="albumTagItems" Placeholder="Taguj album..." OnSelected="AddAlbumTagFromPanel" ShowClear="false" />
+        @if (albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Count > 0)
+        {
+            var a = albums.First(x => x.Id == taggingAlbumId);
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                @foreach (var assign in a.Tags)
+                {
+                    <div class="badge bg-secondary">
+                        @assign.TagName (@assign.Strength.ToString("0.0"))
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetAlbumTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetAlbumTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveAlbumTag(a.Id, assign.TagId))">✖</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
 }
 
 

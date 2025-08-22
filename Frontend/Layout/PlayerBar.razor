@@ -23,6 +23,7 @@
             if (!res.IsSuccessStatusCode)
                 return;
             state = await res.Content.ReadFromJsonAsync<PlaybackState>();
+            await RefreshLibraryFlags();
             StateHasChanged();
         }
         catch { }
@@ -40,6 +41,150 @@
 
     private async Task Next() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/next", null); await RefreshState(); }
     private async Task Prev() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/previous", null); await RefreshState(); }
+
+    private bool isCurrentInLibrary = false;
+    private bool showTagging = false;
+    private List<TagItem> userTrackTags = new();
+    private List<(long TagId, float Strength)> currentTrackAssigns = new();
+    private string? lastAssignsTrackId;
+
+    private string? GetCurrentTrackId()
+    {
+        return state?.item?.id;
+    }
+
+    private async Task RefreshLibraryFlags()
+    {
+        var trackId = GetCurrentTrackId();
+
+        if (string.IsNullOrWhiteSpace(trackId))
+        {
+            isCurrentInLibrary = false;
+            currentTrackAssigns = new();
+            lastAssignsTrackId = null;
+            return;
+        }
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var exists = await client.GetFromJsonAsync<ExistsResponse>($"api/library/tracks/{trackId}/exists");
+
+        if (exists != null)
+            isCurrentInLibrary = exists.exists;
+
+        if (isCurrentInLibrary)
+        {
+            var curId = trackId;
+
+            if (lastAssignsTrackId != curId)
+            {
+                await LoadTagsForTrack();
+                lastAssignsTrackId = curId;
+            }
+        }
+        else
+        {
+            currentTrackAssigns = new();
+            lastAssignsTrackId = null;
+        }
+    }
+
+    private async Task ToggleLibrary()
+    {
+        var trackId = GetCurrentTrackId();
+
+        if (string.IsNullOrWhiteSpace(trackId))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        if (!isCurrentInLibrary)
+        {
+            var res = await client.PostAsync($"api/library/tracks/{trackId}", null);
+
+            if (res.IsSuccessStatusCode)
+                isCurrentInLibrary = true;
+        }
+        else
+        {
+            var res = await client.DeleteAsync($"api/library/tracks/{trackId}");
+
+            if (res.IsSuccessStatusCode)
+            {
+                isCurrentInLibrary = false;
+                showTagging = false;
+            }
+        }
+    }
+
+    private async Task ToggleTagging()
+    {
+        if (!isCurrentInLibrary)
+            return;
+
+        showTagging = !showTagging;
+
+        if (showTagging)
+            await LoadTagsForTrack();
+    }
+
+    private async Task LoadTagsForTrack()
+    {
+        var trackId = GetCurrentTrackId();
+
+        if (string.IsNullOrWhiteSpace(trackId))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        var tags = await client.GetFromJsonAsync<List<TagItem>>("api/tags");
+        userTrackTags = tags?.Where(t => true).ToList() ?? new List<TagItem>();
+
+        var assigns = await client.GetFromJsonAsync<List<AssignDto>>($"api/tags/assign/track/{trackId}");
+        currentTrackAssigns = assigns?.Select(a => (a.TagId, a.Strength)).ToList() ?? new List<(long, float)>();
+    }
+
+    private async Task OnTagSelected(long? tagId)
+    {
+        var trackId = GetCurrentTrackId();
+
+        if (string.IsNullOrWhiteSpace(trackId) || tagId is null)
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        var body = new TagAssignModel { TagId = tagId.Value, SpotifyItemId = trackId, ItemType = "track", Strength = 3.0f };
+        var res = await client.PostAsJsonAsync("api/tags/assign", body);
+
+        if (res.IsSuccessStatusCode)
+            await LoadTagsForTrack();
+    }
+
+    private async Task AdjustAssignStrength(long tagId, float delta)
+    {
+        var current = currentTrackAssigns.FirstOrDefault(a => a.TagId == tagId).Strength;
+        var next = Math.Clamp(current + delta, 0.0f, 6.0f);
+
+        if (Math.Abs(next - current) < 0.001f)
+            return;
+
+        await SetAssignStrength(tagId, next);
+    }
+
+    private async Task SetAssignStrength(long tagId, float strength)
+    {
+        var trackId = GetCurrentTrackId();
+
+        if (string.IsNullOrWhiteSpace(trackId))
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+
+        var body = new TagAssignModel { TagId = tagId, SpotifyItemId = trackId, ItemType = "track", Strength = strength };
+        var res = await client.PutAsJsonAsync("api/tags/assign", body);
+
+        if (res.IsSuccessStatusCode)
+            await LoadTagsForTrack();
+    }
 
     private string? GetItemImageUrl()
     {
@@ -82,12 +227,31 @@
             <div class="text-truncate" style="min-width:0;">
                 <div class="small text-light text-truncate">@state?.item?.name</div>
                 <div class="small text-secondary text-truncate">@GetArtists()</div>
+                @if (isCurrentInLibrary && currentTrackAssigns.Count > 0)
+                {
+                    <div class="d-flex flex-wrap gap-1 mt-1">
+                        @foreach (var assign in currentTrackAssigns.Take(3))
+                        {
+                            var name = userTrackTags.FirstOrDefault(t => t.Id == assign.TagId)?.Name ?? ("#" + assign.TagId);
+                            <span class="badge bg-primary" style="font-size: 0.65rem;">@name (@assign.Strength.ToString("0.0"))</span>
+                        }
+                        @if (currentTrackAssigns.Count > 3)
+                        {
+                            <span class="badge bg-outline-primary text-primary" style="font-size: 0.65rem;">+@(currentTrackAssigns.Count - 3)</span>
+                        }
+                    </div>
+                }
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
             <button class="btn btn-sm btn-outline-light" title="Poprzedni" @onclick="Prev">⏮</button>
             <button class="btn btn-sm btn-outline-light" title="Odtwórz/Wstrzymaj" @onclick="TogglePlay">@(state?.is_playing == true ? "⏸" : "▶")</button>
             <button class="btn btn-sm btn-outline-light" title="Następny" @onclick="Next">⏭</button>
+            <button class="btn btn-sm btn-outline-light" title="Biblioteka" @onclick="ToggleLibrary">@(isCurrentInLibrary ? "− Usuń z biblioteki" : "+ Dodaj do biblioteki")</button>
+            @if (isCurrentInLibrary)
+            {
+                <button class="btn btn-sm btn-outline-light" title="Taguj utwór" @onclick="ToggleTagging">🏷 Taguj</button>
+            }
         </div>
         <div class="flex-grow-1" style="max-width: 40%; min-width: 150px;">
             <div class="d-flex align-items-center gap-2">
@@ -97,9 +261,36 @@
                 </div>
                 <small class="text-secondary">@FormatTime(state?.item?.duration_ms ?? 0)</small>
             </div>
+            
         </div>
     </div>
 </div>
+
+@if (showTagging && isCurrentInLibrary)
+{
+    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <strong>Tagowanie utworu</strong>
+            <button class="btn btn-sm btn-outline-light" @onclick="ToggleTagging">✕</button>
+        </div>
+        
+        <TagSearchSelect Items="userTrackTags" Placeholder="Taguj utwór..." OnSelected="OnTagSelected" ShowClear="false" />
+        @if (currentTrackAssigns.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                @foreach (var assign in currentTrackAssigns)
+                {
+                    var name = userTrackTags.FirstOrDefault(t => t.Id == assign.TagId)?.Name ?? ("#" + assign.TagId);
+                    <div class="badge bg-secondary">
+                        @name (@assign.Strength.ToString("0.0"))
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => AdjustAssignStrength(assign.TagId, -0.5f))">−</button>
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => AdjustAssignStrength(assign.TagId, 0.5f))">+</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
 
 @code {
     private sealed class PlaybackState
@@ -125,6 +316,7 @@
         public int duration_ms { get; set; }
         public Artist[]? artists { get; set; }
         public Album? album { get; set; }
+        public string? id { get; set; }
     }
 
     private sealed class Artist { public string name { get; set; } = string.Empty; }
@@ -137,6 +329,14 @@
         public int? width { get; set; }
         public int? height { get; set; }
     }
+
+    private sealed class ExistsResponse { public bool exists { get; set; } }
+
+    private sealed class AssignDto { public long TagId { get; set; } public float Strength { get; set; } }
+
+    private sealed class TagAssignModel { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
 }
+
+
 
 

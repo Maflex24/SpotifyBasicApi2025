@@ -10,11 +10,15 @@ namespace SpotifyBasicApi2025.Services
     {
         private readonly DatabaseContext context;
         private readonly UserService userService;
+        private readonly SpotifyRequestService spotifyRequestService;
+        private readonly SpotifyApiService spotifyApiService;
 
-        public LibraryService(DatabaseContext context, UserService userService)
+        public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService, SpotifyApiService spotifyApiService)
         {
             this.context = context;
             this.userService = userService;
+            this.spotifyRequestService = spotifyRequestService;
+            this.spotifyApiService = spotifyApiService;
         }
 
         public async Task<object> GetUserArtistsAsync(
@@ -222,6 +226,314 @@ namespace SpotifyBasicApi2025.Services
             return genres;
         }
 
+        public async Task<bool> RemoveArtistFromLibraryAsync(string artistId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var assign = await context.LibArtistUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.ArtistId == artistId);
+            if (assign != null)
+            {
+                context.LibArtistUserAssigns.Remove(assign);
+                await context.SaveChangesAsync();
+            }
+
+            // Odobserwuj artystę w Spotify, aby nie wrócił przy sync
+            var endpoint = $"me/following?type=artist&ids={Uri.EscapeDataString(artistId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
+        }
+
+        public async Task<bool> RemoveAlbumFromLibraryAsync(string albumId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var assign = await context.LibAlbumUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.AlbumId == albumId);
+            if (assign != null)
+            {
+                context.LibAlbumUserAssigns.Remove(assign);
+                await context.SaveChangesAsync();
+            }
+
+            // Usuń zapisany album w Spotify
+            var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
+        }
+
+        public async Task<bool> RemoveTrackFromLibraryAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var assign = await context.LibTrackUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.TrackId == trackId);
+            if (assign != null)
+            {
+                context.LibTrackUserAssigns.Remove(assign);
+                await context.SaveChangesAsync();
+            }
+
+            // Usuń zapisany utwór w Spotify
+            var endpoint = $"me/tracks?ids={Uri.EscapeDataString(trackId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
+        }
+
+        public async Task<bool> IsTrackInLibraryAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var existsAssign = await context.LibTrackUserAssigns.AnyAsync(a => a.UserId == userId && a.TrackId == trackId);
+
+            if (existsAssign)
+                return true;
+
+            var existsSaved = await context.SpSavedTracks.AnyAsync(st => st.UserId == userId && st.TrackId == trackId);
+
+            return existsSaved;
+        }
+
+        public async Task<bool> AddTrackToLibraryAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var already = await context.LibTrackUserAssigns.AnyAsync(a => a.UserId == userId && a.TrackId == trackId);
+
+            if (!already)
+            {
+                // Upewnij się, że utwór istnieje w tabeli SpTracks
+                var track = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == trackId);
+                if (track == null)
+                {
+                    var spTrack = await spotifyApiService.GetTrackAsync(trackId);
+                    if (spTrack == null)
+                        throw new InvalidOperationException("Nie udało się pobrać informacji o utworze ze Spotify");
+
+                    track = await spotifyApiService.SaveTrackFromSpotifyAsync(spTrack);
+                }
+
+                context.LibTrackUserAssigns.Add(new LibTrackUserAssign
+                {
+                    UserId = userId,
+                    TrackId = trackId,
+                    TrackName = track!.Name,
+                    DateCreatedUtc = DateTime.UtcNow
+                });
+
+                // Zapisz także jako zapisany utwór, aby sync był spójny
+                if (!await context.SpSavedTracks.AnyAsync(s => s.UserId == userId && s.TrackId == trackId))
+                {
+                    context.SpSavedTracks.Add(new SpSavedTrack
+                    {
+                        UserId = userId,
+                        TrackId = trackId,
+                        AddedAt = DateTime.UtcNow,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
+                await context.SaveChangesAsync();
+            }
+
+            // Dodaj do biblioteki w Spotify
+            var endpoint = $"me/tracks?ids={Uri.EscapeDataString(trackId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
+            return ok;
+        }
+
+        public async Task<object> GetUserTracksAsync(
+            string? sort = null,
+            string? order = null,
+            string? tags = null,
+            long? sortTagId = null,
+            string? artistId = null,
+            string? albumId = null,
+            int? year = null,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null,
+            int page = 1,
+            int pageSize = 100,
+            string? search = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.LibTrackUserAssigns
+                .Where(a => a.UserId == userId)
+                .Include(a => a.Track)
+                    .ThenInclude(t => t.Album)
+                .Include(a => a.Track)
+                    .ThenInclude(t => t.TrackArtists)
+                        .ThenInclude(ta => ta.Artist)
+                .Select(a => a.Track)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(artistId))
+            {
+                var aid = artistId.Trim();
+                query = query.Where(track => context.SpTrackArtists.Any(x => x.TrackId == track.Id && x.ArtistId == aid));
+            }
+
+            if (!string.IsNullOrWhiteSpace(albumId))
+                query = query.Where(track => track.AlbumId == albumId);
+
+            if (year.HasValue)
+            {
+                var y = year.Value;
+                query = query.Where(t => t.Album != null && t.Album.ReleaseDate != null && t.Album.ReleaseDate.StartsWith(y.ToString()));
+            }
+
+            if (!string.IsNullOrWhiteSpace(tags))
+            {
+                var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                    query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                    {
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                        query = query.Where(track => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == tid)));
+                    else
+                        query = query.Where(track => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            // Wyszukiwanie (AND po słowach kluczowych): nazwa utworu, nazwa albumu, artyści, nazwy tagów
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(t => t.ToLower())
+                    .ToList();
+
+                foreach (var term in terms)
+                {
+                    var tlocal = term;
+
+                    query = query.Where(t =>
+                        (t.Name != null && EF.Functions.Like(t.Name.ToLower(), "%" + tlocal + "%"))
+                        || (t.Album != null && t.Album.Name != null && EF.Functions.Like(t.Album.Name.ToLower(), "%" + tlocal + "%"))
+                        || context.SpTrackArtists.Any(ta => ta.TrackId == t.Id && ta.Artist.Name != null && EF.Functions.Like(ta.Artist.Name.ToLower(), "%" + tlocal + "%"))
+                        || context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && context.LibTags.Any(tag => tag.Id == ass.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + tlocal + "%")))
+                    );
+                }
+            }
+
+            var sortKey = (sort ?? "name").ToLowerInvariant();
+            var sortDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
+
+            if (sortKey == "weight" && sortTagId.HasValue)
+            {
+                query = sortDesc
+                    ? query.OrderByDescending(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault())
+                    : query.OrderBy(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault());
+            }
+            else
+            {
+                query = sortKey switch
+                {
+                    "year" => sortDesc ? query.OrderByDescending(x => x.Album!.ReleaseDate) : query.OrderBy(x => x.Album!.ReleaseDate),
+                    "popularity" => sortDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
+                    _ => sortDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
+                };
+            }
+
+            // Liczba całkowita przed paginacją
+            var total = await query.CountAsync();
+
+            // Paginacja
+            if (page <= 0)
+                page = 1;
+
+            if (pageSize <= 0)
+                pageSize = 100;
+
+            var pageItemsQuery = query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize);
+
+            var tracks = await pageItemsQuery.ToListAsync();
+
+            var trackIds = tracks.Select(t => t.Id).ToList();
+            var trackTags = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "track" && trackIds.Contains(ass.SpotifyItemId))
+                .Include(ass => ass.Tag)
+                .ThenInclude(t => t.TagGroup)
+                .ToListAsync();
+
+            var tagsByTrack = trackTags
+                .GroupBy(ass => ass.SpotifyItemId)
+                .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToTrackTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
+
+            var dtos = tracks.Select(t =>
+            {
+                var tagsList = tagsByTrack.GetValueOrDefault(t.Id, new List<TrackTagModel>());
+                return t.MapToTrackModel(tagsList);
+            }).ToList();
+
+            if (sortTagId.HasValue)
+            {
+                var list = dtos.Select(a => new
+                {
+                    a.Id,
+                    a.Name,
+                    a.Uri,
+                    a.DurationMs,
+                    a.Popularity,
+                    a.AlbumId,
+                    a.AlbumName,
+                    a.ReleaseYear,
+                    a.Images,
+                    a.Artists,
+                    TagStrength = a.Tags.FirstOrDefault(t => t.TagId == sortTagId.Value)?.Strength ?? 0f,
+                    Tags = a.Tags
+                }).ToList();
+
+                return new { total, page, pageSize, items = list };
+            }
+
+            return new { total, page, pageSize, items = dtos };
+        }
         public async Task<object> GetUserAlbumsAsync(
             string? sort = null,
             string? order = null,
