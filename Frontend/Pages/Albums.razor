@@ -29,22 +29,26 @@
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadAlbums">Zastosuj</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
 
-            <div class="d-flex align-items-start gap-3 w-100 mt-2">
-                <div class="d-flex flex-column gap-1 flex-fill">
-                    <div class="tag-chips-container mt-2">
-                        @foreach (var t in availableTags)
-                        {
-                            var state = GetTagState(t.Id);
-                            var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                            <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
-                        }
+            @if (showTagFilters)
+            {
+                <div class="d-flex align-items-start gap-3 w-100 mt-2">
+                    <div class="d-flex flex-column gap-1 flex-fill">
+                        <div class="tag-chips-container mt-2">
+                            @foreach (var t in availableTags)
+                            {
+                                var state = GetTagState(t.Id);
+                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                            }
 
-                        <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
-                        <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                            <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                            <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
         </div>
     </div>
 
@@ -124,6 +128,7 @@
     private HashSet<long> excludeTagIds = new();
     private string includeMode = "or";
     private string excludeMode = "or";
+    private bool showTagFilters = true;
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByAlbum = new();
@@ -445,7 +450,8 @@
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
-            excludeMode
+            excludeMode,
+            showTagFilters
         };
 
         await Store.SetItemAsync(StoreKey, state);
@@ -470,6 +476,8 @@
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
 
+        showTagFilters = state.showTagFilters ?? showTagFilters;
+
         ApplyLocalFilter();
     }
 
@@ -485,6 +493,7 @@
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
+        public bool? showTagFilters { get; set; }
     }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
@@ -576,6 +585,11 @@
     private void ToggleExcludeMode()
     {
         excludeMode = excludeMode == "and" ? "or" : "and";
+    }
+    private async Task ToggleTagFilters()
+    {
+        showTagFilters = !showTagFilters;
+        await SaveToStore();
     }
 
     private string? localSearch;

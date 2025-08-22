@@ -40,22 +40,26 @@
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="() => LoadTracks(true)">Zastosuj</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
 
-            <div class="d-flex align-items-start gap-3 w-100 mt-2">
-                <div class="d-flex flex-column gap-1 flex-fill">
-                    <div class="tag-chips-container mt-2">
-                        @foreach (var t in availableTags)
-                        {
-                            var state = GetTagState(t.Id);
-                            var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                            <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
-                        }
+            @if (showTagFilters)
+            {
+                <div class="d-flex align-items-start gap-3 w-100 mt-2">
+                    <div class="d-flex flex-column gap-1 flex-fill">
+                        <div class="tag-chips-container mt-2">
+                            @foreach (var t in availableTags)
+                            {
+                                var state = GetTagState(t.Id);
+                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                            }
 
-                        <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
-                        <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                            <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                            <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
         </div>
     </div>
 
@@ -155,6 +159,7 @@
     private int? selectedYear;
     private List<Track> tracks = new();
     private List<Track> filteredTracks = new();
+    private bool showTagFilters = true;
     private bool showTrackTagging = false;
     private string? taggingTrackId;
     private int page = 1;
@@ -761,6 +766,7 @@
 
     private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
     private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
+    private async Task ToggleTagFilters() { showTagFilters = !showTagFilters; await SaveToStore(); }
 
     private string ApiBase => "http://127.0.0.1:8889/";
 
@@ -786,7 +792,8 @@
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
-            excludeMode
+            excludeMode,
+            showTagFilters
         };
         await Store.SetItemAsync("filters:tracks", state);
     }
@@ -808,6 +815,8 @@
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
 
+        showTagFilters = state.showTagFilters ?? showTagFilters;
+
         ApplyLocalFilter();
     }
 
@@ -825,7 +834,7 @@
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } }
+    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public bool? showTagFilters { get; set; } }
 }
 
 
