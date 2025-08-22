@@ -1,8 +1,8 @@
 @using Frontend.Components
 
-<div class="tag-search-select" @onkeydown="HandleKeyDown">
+<div class="tag-search-select" style="position:relative;" @onkeydown="HandleKeyDown">
 	<input class="form-control form-control-sm input-dark" placeholder="@Placeholder" @bind="search" @bind:event="oninput" @onfocus="OnFocus" />
-	<div class="tag-search-dropdown" style="display:@(isOpen ? "block" : "none")">
+	<div class="tag-search-dropdown" style="display:@(isOpen ? "block" : "none"); position:absolute; left:0; right:0; bottom:calc(100% + 4px); z-index:2100; max-height:240px; overflow:auto; background-color:#0f1117; border:1px solid #1f2937; border-radius:4px;">
 		@if (ShowClear)
 		{
 			var clearActive = activeIndex == 0 ? " active" : string.Empty;

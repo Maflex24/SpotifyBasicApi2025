@@ -98,6 +98,42 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpPost("tracks/{id}")]
+        public async Task<IActionResult> AddTrack(string id)
+        {
+            try
+            {
+                var result = await libraryService.AddTrackToLibraryAsync(id);
+                return Ok(new { added = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("tracks/{id}/exists")]
+        public async Task<IActionResult> TrackExists(string id)
+        {
+            try
+            {
+                var result = await libraryService.IsTrackInLibraryAsync(id);
+                return Ok(new { exists = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpGet("artists/tags")]
         public async Task<IActionResult> GetUserArtistTags()
         {

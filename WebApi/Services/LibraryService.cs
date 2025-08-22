@@ -11,12 +11,14 @@ namespace SpotifyBasicApi2025.Services
         private readonly DatabaseContext context;
         private readonly UserService userService;
         private readonly SpotifyRequestService spotifyRequestService;
+        private readonly SpotifyApiService spotifyApiService;
 
-        public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService)
+        public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService, SpotifyApiService spotifyApiService)
         {
             this.context = context;
             this.userService = userService;
             this.spotifyRequestService = spotifyRequestService;
+            this.spotifyApiService = spotifyApiService;
         }
 
         public async Task<object> GetUserArtistsAsync(
@@ -278,6 +280,74 @@ namespace SpotifyBasicApi2025.Services
             // Usuń zapisany utwór w Spotify
             var endpoint = $"me/tracks?ids={Uri.EscapeDataString(trackId)}";
             var ok = await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+            return ok;
+        }
+
+        public async Task<bool> IsTrackInLibraryAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var existsAssign = await context.LibTrackUserAssigns.AnyAsync(a => a.UserId == userId && a.TrackId == trackId);
+
+            if (existsAssign)
+                return true;
+
+            var existsSaved = await context.SpSavedTracks.AnyAsync(st => st.UserId == userId && st.TrackId == trackId);
+
+            return existsSaved;
+        }
+
+        public async Task<bool> AddTrackToLibraryAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var already = await context.LibTrackUserAssigns.AnyAsync(a => a.UserId == userId && a.TrackId == trackId);
+
+            if (!already)
+            {
+                // Upewnij się, że utwór istnieje w tabeli SpTracks
+                var track = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == trackId);
+                if (track == null)
+                {
+                    var spTrack = await spotifyApiService.GetTrackAsync(trackId);
+                    if (spTrack == null)
+                        throw new InvalidOperationException("Nie udało się pobrać informacji o utworze ze Spotify");
+
+                    track = await spotifyApiService.SaveTrackFromSpotifyAsync(spTrack);
+                }
+
+                context.LibTrackUserAssigns.Add(new LibTrackUserAssign
+                {
+                    UserId = userId,
+                    TrackId = trackId,
+                    TrackName = track!.Name,
+                    DateCreatedUtc = DateTime.UtcNow
+                });
+
+                // Zapisz także jako zapisany utwór, aby sync był spójny
+                if (!await context.SpSavedTracks.AnyAsync(s => s.UserId == userId && s.TrackId == trackId))
+                {
+                    context.SpSavedTracks.Add(new SpSavedTrack
+                    {
+                        UserId = userId,
+                        TrackId = trackId,
+                        AddedAt = DateTime.UtcNow,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
+                await context.SaveChangesAsync();
+            }
+
+            // Dodaj do biblioteki w Spotify
+            var endpoint = $"me/tracks?ids={Uri.EscapeDataString(trackId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
             return ok;
         }
 
