@@ -2,7 +2,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 
-<div class="container py-3">
+<div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
         <h4 class="mb-0">Albumy</h4>
         <div class="d-flex gap-2 align-items-center flex-wrap">
@@ -48,7 +48,7 @@
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
         @foreach (var a in filteredAlbums)
         {
             <div class="col">
