@@ -2,6 +2,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @implements IDisposable
+@using Microsoft.JSInterop
 
 <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -38,7 +39,7 @@
             <input class="form-control form-control-sm input-dark" style="width: 200px;" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" />
 
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
-            <button class="btn btn-sm btn-outline-light" @onclick="LoadTracks">Zastosuj</button>
+            <button class="btn btn-sm btn-outline-light" @onclick="() => LoadTracks(true)">Zastosuj</button>
 
             <div class="d-flex align-items-start gap-3 w-100 mt-2">
                 <div class="d-flex flex-column gap-1 flex-fill">
@@ -58,7 +59,7 @@
         </div>
     </div>
 
-    <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;">
+    <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;" @ref="containerRef">
         <table class="table table-dark table-striped align-middle">
             <thead>
                 <tr>
@@ -97,9 +98,9 @@
                             {
                                 <span class="badge bg-primary me-1" style="font-size: 0.7rem;">@tag.TagName (@tag.Strength)</span>
                             }
-                            @if (t.Tags.Count > 3)
+                            @if ((t.Tags?.Count ?? 0) > 3)
                             {
-                                <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@(t.Tags.Count - 3)</span>
+                                <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@((t.Tags?.Count ?? 0) - 3)</span>
                             }
                         </td>
                         <td>
@@ -133,6 +134,7 @@
                 }
             </tbody>
         </table>
+        <div style="height: 1px;" @ref="sentinelRef"></div>
     </div>
 </div>
 
@@ -146,6 +148,14 @@
     private int? selectedYear;
     private List<Track> tracks = new();
     private List<Track> filteredTracks = new();
+    private int page = 1;
+    private int pageSize = 100;
+    private int total = 0;
+    private bool isLoading = false;
+    private bool hasMore => tracks.Count < total;
+    private ElementReference containerRef;
+    private ElementReference sentinelRef;
+    private DotNetObjectReference<Tracks>? dotNetRef;
     private List<TagDto> availableTags = new();
     private List<ArtistOption> availableArtists = new();
     private List<AlbumOption> availableAlbums = new();
@@ -166,8 +176,7 @@
                 return;
 
             localSearch = value;
-            ApplyLocalFilter();
-            ApplyClientSort();
+            _ = LoadTracks();
         }
     }
 
@@ -180,8 +189,26 @@
         await LoadTracks();
     }
 
-    private async Task LoadTracks()
+    private async Task LoadTracks(bool reset = true)
     {
+        if (isLoading)
+            return;
+
+        isLoading = true;
+        try
+        {
+            if (reset)
+            {
+                page = 1;
+                total = 0;
+                tracks = new List<Track>();
+                filteredTracks = new List<Track>();
+            }
+            else
+            {
+                page++;
+            }
+
         using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var query = new List<string>();
         query.Add($"sort={sortKey}");
@@ -214,12 +241,26 @@
             query.Add($"excludeMode={excludeMode}");
         }
 
+        if (!string.IsNullOrWhiteSpace(localSearch))
+            query.Add($"search={Uri.EscapeDataString(localSearch)}");
+
+        query.Add($"page={page}");
+        query.Add($"pageSize={pageSize}");
+
         var res = await client.GetAsync($"api/library/tracks?{string.Join('&', query)}");
         if (!res.IsSuccessStatusCode)
             return;
 
         var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
-        tracks = payload?.items ?? new List<Track>();
+        total = payload?.total ?? 0;
+        var received = payload?.items ?? new List<Track>();
+
+        if (reset)
+            tracks = received.ToList();
+        else
+            tracks.AddRange(received);
+
+        filteredTracks = tracks.ToList();
 
         foreach (var tr in tracks)
         {
@@ -227,10 +268,22 @@
                 selectedTagByTrack[tr.Id] = null;
         }
 
-        ApplyLocalFilter();
-        ApplyClientSort();
+        // sortowanie serwerowe według sort/order, dodatkowe sortowanie klienta na klik kolumny pozostaje
 
         await SaveToStore();
+        await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnBottomReached()
+    {
+        if (!isLoading && hasMore)
+            await LoadTracks(reset: false);
     }
 
     private async Task LoadAvailableTags()
@@ -285,7 +338,7 @@
     {
         localSearch = value;
 
-        ApplyLocalFilter();
+        // lokalne filtrowanie wyłączone – wyszukiwanie po stronie backendu
     }
 
     private void ApplyLocalFilter()
@@ -616,12 +669,21 @@
                 catch (TaskCanceledException) { break; }
             }
         });
+
+        try
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("infiniteScroll.observe", containerRef, sentinelRef, dotNetRef);
+        }
+        catch { }
     }
 
     public void Dispose()
     {
         try { pollCts?.Cancel(); } catch { }
         pollCts?.Dispose();
+        try { _ = JS.InvokeVoidAsync("infiniteScroll.disconnect"); } catch { }
+        try { dotNetRef?.Dispose(); } catch { }
     }
 
     private sealed class PlaybackState { public PlaybackItem? Item { get; set; } }
@@ -728,7 +790,7 @@
         ApplyLocalFilter();
     }
 
-    private sealed class TracksResponse { public int total { get; set; } public List<Track> items { get; set; } = new(); }
+    private sealed class TracksResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<Track> items { get; set; } = new(); }
     private sealed class AlbumsResponse { public int total { get; set; } public List<AlbumShort> items { get; set; } = new(); }
     private sealed class AlbumShort { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }

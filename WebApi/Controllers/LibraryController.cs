@@ -178,11 +178,17 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
             [FromQuery] string? excludeTags = null,
-            [FromQuery] string? excludeMode = null)
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 100,
+            [FromQuery] string? search = null)
         {
             try
             {
-                var result = await libraryService.GetUserTracksAsync(sort, order, tags, sortTagId, artistId, albumId, year, includeTags, includeMode, excludeTags, excludeMode);
+                var result = await libraryService.GetUserTracksAsync(
+                    sort, order, tags, sortTagId, artistId, albumId, year,
+                    includeTags, includeMode, excludeTags, excludeMode,
+                    page, pageSize, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)

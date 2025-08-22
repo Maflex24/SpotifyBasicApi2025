@@ -362,7 +362,10 @@ namespace SpotifyBasicApi2025.Services
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
-            string? excludeMode = null)
+            string? excludeMode = null,
+            int page = 1,
+            int pageSize = 100,
+            string? search = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -435,6 +438,27 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
+            // Wyszukiwanie (AND po słowach kluczowych): nazwa utworu, nazwa albumu, artyści, nazwy tagów
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(t => t.ToLower())
+                    .ToList();
+
+                foreach (var term in terms)
+                {
+                    var tlocal = term;
+
+                    query = query.Where(t =>
+                        (t.Name != null && EF.Functions.Like(t.Name.ToLower(), "%" + tlocal + "%"))
+                        || (t.Album != null && t.Album.Name != null && EF.Functions.Like(t.Album.Name.ToLower(), "%" + tlocal + "%"))
+                        || context.SpTrackArtists.Any(ta => ta.TrackId == t.Id && ta.Artist.Name != null && EF.Functions.Like(ta.Artist.Name.ToLower(), "%" + tlocal + "%"))
+                        || context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && context.LibTags.Any(tag => tag.Id == ass.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + tlocal + "%")))
+                    );
+                }
+            }
+
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
@@ -454,7 +478,21 @@ namespace SpotifyBasicApi2025.Services
                 };
             }
 
-            var tracks = await query.ToListAsync();
+            // Liczba całkowita przed paginacją
+            var total = await query.CountAsync();
+
+            // Paginacja
+            if (page <= 0)
+                page = 1;
+
+            if (pageSize <= 0)
+                pageSize = 100;
+
+            var pageItemsQuery = query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize);
+
+            var tracks = await pageItemsQuery.ToListAsync();
 
             var trackIds = tracks.Select(t => t.Id).ToList();
             var trackTags = await context.LibTagAssigns
@@ -491,10 +529,10 @@ namespace SpotifyBasicApi2025.Services
                     Tags = a.Tags
                 }).ToList();
 
-                return new { total = list.Count, items = list };
+                return new { total, page, pageSize, items = list };
             }
 
-            return new { total = dtos.Count, items = dtos };
+            return new { total, page, pageSize, items = dtos };
         }
         public async Task<object> GetUserAlbumsAsync(
             string? sort = null,
