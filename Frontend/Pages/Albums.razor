@@ -100,25 +100,7 @@
 
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <TagSearchSelect Items="albumTagItems" OnSelected="(id) => OnAlbumTagSelectChanged(a.Id, id?.ToString())" OnClearRequested="() => RemoveSelectedAlbumTagIfAny(a.Id)" />
-
-                                @if (selectedTagByAlbum.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
-                                {
-                                    var chosenTagId = selectedTagId.Value;
-                                    var current = a.Tags?.FirstOrDefault(x => x.TagId == chosenTagId)?.Strength ?? 3.0f;
-
-                                    <div class="d-flex align-items-center gap-2">
-                                        <small class="text-secondary">Waga:</small>
-                                        @StarRating($"{a.Id}:{chosenTagId}", current, v => SetAlbumTagStrength(a.Id, chosenTagId, v))
-                                    </div>
-
-                                    <button class="btn btn-sm btn-outline-light" @onclick="() => ApplyFilterByTag(chosenTagId)">Filtruj</button>
-
-                                    @if (a.Tags?.Any(x => x.TagId == chosenTagId) == true)
-                                    {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveAlbumTag(a.Id, chosenTagId)">Usuń przypisanie</button>
-                                    }
-                                }                                
+                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAlbumTagging(a.Id)">Taguj</button>
                             </div>
                         </div>
                     </div>
@@ -145,6 +127,8 @@
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByAlbum = new();
+    private bool showAlbumTagging = false;
+    private string? taggingAlbumId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -307,6 +291,26 @@
 
         await LoadAlbums();
         await SaveToStore();
+    }
+
+    private void OpenAlbumTagging(string albumId)
+    {
+        taggingAlbumId = albumId;
+        showAlbumTagging = true;
+    }
+
+    private void CloseAlbumTagging()
+    {
+        showAlbumTagging = false;
+        taggingAlbumId = null;
+    }
+
+    private async Task AddAlbumTagFromPanel(long? tagId)
+    {
+        if (taggingAlbumId == null || tagId is null)
+            return;
+
+        await SetAlbumTagStrength(taggingAlbumId, tagId.Value, 3.0f);
     }
 
     private async Task PlayAlbum(string? uri)
@@ -620,6 +624,32 @@
             return true;
         }).ToList();
     }
+}
+
+@if (showAlbumTagging && taggingAlbumId != null)
+{
+    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <strong>Tagowanie albumu</strong>
+            <button class="btn btn-sm btn-outline-light" @onclick="CloseAlbumTagging">✕</button>
+        </div>
+        <TagSearchSelect Items="albumTagItems" Placeholder="Taguj album..." OnSelected="AddAlbumTagFromPanel" ShowClear="false" />
+        @if (albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Count > 0)
+        {
+            var a = albums.First(x => x.Id == taggingAlbumId);
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                @foreach (var assign in a.Tags)
+                {
+                    <div class="badge bg-secondary">
+                        @assign.TagName (@assign.Strength.ToString("0.0"))
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetAlbumTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetAlbumTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveAlbumTag(a.Id, assign.TagId))">✖</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
 }
 
 

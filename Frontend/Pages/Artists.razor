@@ -103,25 +103,7 @@
                         
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <TagSearchSelect Items="artistTagItems" OnSelected="(id) => OnArtistTagSelectChanged(a.Id, id?.ToString())" OnClearRequested="() => RemoveSelectedArtistTagIfAny(a.Id)" />
-
-                                @if (selectedTagByArtist.TryGetValue(a.Id, out var selectedTagId) && selectedTagId.HasValue)
-                                {
-                                    var chosenTagId = selectedTagId.Value;
-                                    var current = a.Tags?.FirstOrDefault(x => x.TagId == chosenTagId)?.Strength ?? 3.0f;
-
-                                    <div class="d-flex align-items-center gap-2">
-                                        <small class="text-secondary">Waga:</small>
-                                        @StarRating($"{a.Id}:{chosenTagId}", current, v => SetArtistTagStrength(a.Id, chosenTagId, v))
-                                    </div>
-
-                                    <button class="btn btn-sm btn-outline-light" @onclick="() => ApplyFilterByTag(chosenTagId)">Filtruj</button>
-
-                                    @if (a.Tags?.Any(x => x.TagId == chosenTagId) == true)
-                                    {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveArtistTag(a.Id, chosenTagId)">Usuń przypisanie</button>
-                                    }
-                                }                                
+                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenArtistTagging(a.Id)">Taguj</button>
                             </div>
                         </div>
                     </div>
@@ -130,6 +112,32 @@
         }
     </div>
 </div>
+
+@if (showArtistTagging && taggingArtistId != null)
+{
+    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <strong>Tagowanie artysty</strong>
+            <button class="btn btn-sm btn-outline-light" @onclick="CloseArtistTagging">✕</button>
+        </div>
+        <TagSearchSelect Items="artistTagItems" Placeholder="Taguj artystę..." OnSelected="AddArtistTagFromPanel" ShowClear="false" />
+        @if (artists.FirstOrDefault(x => x.Id == taggingArtistId)?.Tags?.Count > 0)
+        {
+            var a = artists.First(x => x.Id == taggingArtistId);
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                @foreach (var assign in a.Tags)
+                {
+                    <div class="badge bg-secondary">
+                        @assign.TagName (@assign.Strength.ToString("0.0"))
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetArtistTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
+                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetArtistTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveArtistTag(a.Id, assign.TagId))">✖</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
 
 @code {
     private string sortKey = "name";
@@ -148,6 +156,8 @@
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByArtist = new();
+    private bool showArtistTagging = false;
+    private string? taggingArtistId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -316,6 +326,26 @@
 
         await LoadArtists();
         await SaveToStore();
+    }
+
+    private void OpenArtistTagging(string artistId)
+    {
+        taggingArtistId = artistId;
+        showArtistTagging = true;
+    }
+
+    private void CloseArtistTagging()
+    {
+        showArtistTagging = false;
+        taggingArtistId = null;
+    }
+
+    private async Task AddArtistTagFromPanel(long? tagId)
+    {
+        if (taggingArtistId == null || tagId is null)
+            return;
+
+        await SetArtistTagStrength(taggingArtistId, tagId.Value, 3.0f);
     }
 
     private string ApiBase => "http://127.0.0.1:8889/";
