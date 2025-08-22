@@ -46,6 +46,7 @@
     private bool showTagging = false;
     private List<TagItem> userTrackTags = new();
     private List<(long TagId, float Strength)> currentTrackAssigns = new();
+    private string? lastAssignsTrackId;
 
     private string? GetCurrentTrackId()
     {
@@ -59,6 +60,8 @@
         if (string.IsNullOrWhiteSpace(trackId))
         {
             isCurrentInLibrary = false;
+            currentTrackAssigns = new();
+            lastAssignsTrackId = null;
             return;
         }
 
@@ -67,6 +70,22 @@
 
         if (exists != null)
             isCurrentInLibrary = exists.exists;
+
+        if (isCurrentInLibrary)
+        {
+            var curId = trackId;
+
+            if (lastAssignsTrackId != curId)
+            {
+                await LoadTagsForTrack();
+                lastAssignsTrackId = curId;
+            }
+        }
+        else
+        {
+            currentTrackAssigns = new();
+            lastAssignsTrackId = null;
+        }
     }
 
     private async Task ToggleLibrary()
@@ -208,6 +227,20 @@
             <div class="text-truncate" style="min-width:0;">
                 <div class="small text-light text-truncate">@state?.item?.name</div>
                 <div class="small text-secondary text-truncate">@GetArtists()</div>
+                @if (isCurrentInLibrary && currentTrackAssigns.Count > 0)
+                {
+                    <div class="d-flex flex-wrap gap-1 mt-1">
+                        @foreach (var assign in currentTrackAssigns.Take(3))
+                        {
+                            var name = userTrackTags.FirstOrDefault(t => t.Id == assign.TagId)?.Name ?? ("#" + assign.TagId);
+                            <span class="badge bg-primary" style="font-size: 0.65rem;">@name (@assign.Strength.ToString("0.0"))</span>
+                        }
+                        @if (currentTrackAssigns.Count > 3)
+                        {
+                            <span class="badge bg-outline-primary text-primary" style="font-size: 0.65rem;">+@(currentTrackAssigns.Count - 3)</span>
+                        }
+                    </div>
+                }
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
