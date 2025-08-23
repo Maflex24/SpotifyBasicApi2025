@@ -64,7 +64,16 @@
                                 <a class="badge bg-outline-light text-light me-1 text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
                             }
                         </td>
-                        <td>@t.AlbumName</td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(t.AlbumId))
+                            {
+                                <a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>
+                            }
+                            else
+                            {
+                                @t.AlbumName
+                            }
+                        </td>
                         <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
                         <td>
                             @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
