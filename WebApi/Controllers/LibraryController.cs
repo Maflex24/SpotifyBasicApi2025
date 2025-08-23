@@ -282,6 +282,25 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("tracks/{id}")]
+        public async Task<IActionResult> GetSingleTrack(string id)
+        {
+            try
+            {
+                var result = await libraryService.GetSingleTrackAsync(id);
+                if (result == null) return NotFound();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpGet("albums")] 
         public async Task<IActionResult> GetUserAlbums(
             [FromQuery] string? sort = null,

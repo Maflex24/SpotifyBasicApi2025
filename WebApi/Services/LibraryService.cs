@@ -844,6 +844,31 @@ namespace SpotifyBasicApi2025.Services
             return new { total, page, pageSize, items };
         }
 
+        public async Task<object?> GetSingleTrackAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var t = await context.SpTracks
+                .Include(x => x.Album)
+                .Include(x => x.TrackArtists)!.ThenInclude(ta => ta.Artist)
+                .FirstOrDefaultAsync(x => x.Id == trackId);
+
+            if (t == null)
+                return null;
+
+            var tagAssigns = await context.LibTagAssigns
+                .Where(a => a.UserId == userId && a.ItemType == "track" && a.SpotifyItemId == trackId)
+                .Include(a => a.Tag).ThenInclude(g => g.TagGroup)
+                .ToListAsync();
+
+            var tags = tagAssigns.Select(a => a.MapToTrackTagModel(a.Tag, a.Tag.TagGroup)).ToList();
+
+            return t.MapToTrackModel(tags);
+        }
+
         public async Task AssignPlaylistToFolderAsync(string playlistId, long? folderId)
         {
             var userId = await userService.GetCurrentUserIdAsync();

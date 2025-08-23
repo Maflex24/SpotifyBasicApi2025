@@ -1,0 +1,115 @@
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <strong>@Title</strong>
+        <button class="btn btn-sm btn-outline-light" @onclick="OnClose">✕</button>
+    </div>
+
+    <TagSearchSelect Items="Items" Placeholder="@Placeholder" OnSelected="AddSelected" ShowClear="false" />
+
+    @if (localTags.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            @foreach (var assign in localTags)
+            {
+                <div class="badge bg-secondary">
+                    @assign.TagName (@assign.Strength.ToString("0.0"))
+                    <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
+                    <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                    <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => Remove(assign.TagId))">✖</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string ItemType { get; set; } = string.Empty; // track | album | artist | playlist
+    [Parameter] public string SpotifyItemId { get; set; } = string.Empty;
+    [Parameter] public List<TagItem> Items { get; set; } = new();
+    [Parameter] public List<Frontend.Components.TagBadge> Tags { get; set; } = new();
+    [Parameter] public string Placeholder { get; set; } = "Taguj...";
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<Frontend.Components.TagBadge> localTags = new();
+
+    protected override void OnParametersSet()
+    {
+        localTags = Tags?.Select(t => new Frontend.Components.TagBadge { TagId = t.TagId, TagName = t.TagName, Strength = t.Strength }).ToList() ?? new List<Frontend.Components.TagBadge>();
+    }
+
+    private async Task AddSelected(long? tagId)
+    {
+        if (!tagId.HasValue || string.IsNullOrWhiteSpace(ItemType) || string.IsNullOrWhiteSpace(SpotifyItemId))
+
+            return;
+
+        var model = new AssignDto { TagId = tagId.Value, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = 3.0f };
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var resCreate = await Http.PostAsJsonAsync("api/tags/assign", model);
+            if (!resCreate.IsSuccessStatusCode)
+
+                return;
+        }
+
+        // Optimistyczna aktualizacja UI
+        var existing = localTags.FirstOrDefault(t => t.TagId == tagId.Value);
+        if (existing != null)
+            existing.Strength = 3.0f;
+        else
+        {
+            var found = Items.FirstOrDefault(i => i.Id == tagId.Value);
+            localTags.Add(new Frontend.Components.TagBadge { TagId = tagId.Value, TagName = found?.Name ?? $"#{tagId.Value}", Strength = 3.0f });
+        }
+
+        StateHasChanged();
+
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+    }
+
+    private async Task Change(long tagId, float strength)
+    {
+        var model = new AssignDto { TagId = tagId, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = strength };
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
+        if (!res.IsSuccessStatusCode)
+
+            return;
+
+        var existing = localTags.FirstOrDefault(t => t.TagId == tagId);
+        if (existing != null)
+            existing.Strength = strength;
+
+        StateHasChanged();
+
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+    }
+
+    private async Task Remove(long tagId)
+    {
+        var model = new AssignDto { TagId = tagId, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = 0 };
+        var req = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        {
+            Content = JsonContent.Create(model)
+        });
+
+        if (!req.IsSuccessStatusCode)
+
+            return;
+
+        localTags = localTags.Where(t => t.TagId != tagId).ToList();
+        StateHasChanged();
+
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+    }
+
+    private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
+}
+
+

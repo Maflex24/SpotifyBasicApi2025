@@ -1,4 +1,5 @@
 @page "/albums"
+@using Frontend.Components
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 
@@ -642,28 +643,14 @@
 
 @if (showAlbumTagging && taggingAlbumId != null)
 {
-    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-            <strong>Tagowanie albumu</strong>
-            <button class="btn btn-sm btn-outline-light" @onclick="CloseAlbumTagging">✕</button>
-        </div>
-        <TagSearchSelect Items="albumTagItems" Placeholder="Taguj album..." OnSelected="AddAlbumTagFromPanel" ShowClear="false" />
-        @if (albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Count > 0)
-        {
-            var a = albums.First(x => x.Id == taggingAlbumId);
-            <div class="d-flex flex-wrap gap-2 mt-2">
-                @foreach (var assign in a.Tags)
-                {
-                    <div class="badge bg-secondary">
-                        @assign.TagName (@assign.Strength.ToString("0.0"))
-                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetAlbumTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
-                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetAlbumTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
-                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveAlbumTag(a.Id, assign.TagId))">✖</button>
-                    </div>
-                }
-            </div>
-        }
-    </div>
+    <TaggingPanel Title="Tagowanie albumu"
+                             ItemType="album"
+                             SpotifyItemId="@taggingAlbumId"
+                             Items="albumTagItems"
+                             Tags="@(albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                             Placeholder="Taguj album..."
+                             OnChanged="LoadAlbums"
+                             OnClose="CloseAlbumTagging" />
 }
 
 
