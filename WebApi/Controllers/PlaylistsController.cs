@@ -11,11 +11,13 @@ namespace SpotifyBasicApi2025.Controllers
     {
         private readonly DatabaseContext dbContext;
         private readonly UserService userService;
+        private readonly SpotifyApiService spotifyApiService;
 
-        public PlaylistsController(DatabaseContext dbContext, UserService userService)
+        public PlaylistsController(DatabaseContext dbContext, UserService userService, SpotifyApiService spotifyApiService)
         {
             this.dbContext = dbContext;
             this.userService = userService;
+            this.spotifyApiService = spotifyApiService;
         }
 
         [HttpPut("{playlistId}/folder")]
@@ -46,6 +48,28 @@ namespace SpotifyBasicApi2025.Controllers
         public sealed class AssignFolderModel
         {
             public long? FolderId { get; set; }
+        }
+
+        [HttpDelete("{playlistId}")]
+        public async Task<IActionResult> DeletePlaylist(string playlistId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                return StatusCode(403);
+
+            var playlist = await dbContext.SpPlaylists.FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
+
+            if (playlist == null)
+                return NotFound("Playlist not found");
+
+            var okSpotify = await spotifyApiService.DeleteOrUnfollowPlaylistAsync(playlistId);
+            if (!okSpotify)
+                return StatusCode(502, "Spotify unfollow failed");
+
+            dbContext.SpPlaylists.Remove(playlist);
+            await dbContext.SaveChangesAsync();
+
+            return NoContent();
         }
     }
 }

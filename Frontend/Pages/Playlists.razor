@@ -34,6 +34,7 @@
                         <div class="mt-auto d-flex gap-2">
                             <a class="btn btn-sm btn-outline-light" href="/playlists/@p.Id">Otwórz</a>
                             <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAssignFolder(p.Id)">Folder</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(p.Id, p.Name)">Usuń</button>
                         </div>
                     </div>
                 </div>
@@ -344,6 +345,19 @@
 
         showAssignPanel = false;
         assigningPlaylistId = null;
+    }
+
+    private async Task ConfirmDelete(string playlistId, string name)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Usunąć playlistę '{name}'? Zostanie również usunięta z Twojego konta Spotify (unfollow)." );
+        if (!ok)
+            return;
+
+        var res = await Http.DeleteAsync($"api/playlists/{Uri.EscapeDataString(playlistId)}");
+        if (res.IsSuccessStatusCode)
+        {
+            await LoadPlaylists();
+        }
     }
 
     private void CancelAssign()

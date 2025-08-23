@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net.Http;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
@@ -1511,5 +1512,70 @@ namespace SpotifyBasicApi2025.Services
         }
 
         #endregion Playlists
+
+        public async Task<bool> UnfollowPlaylistAsync(string playlistId)
+        {
+            if (string.IsNullOrWhiteSpace(playlistId))
+
+                return false;
+
+            var ok = await requestService.SendAsync(HttpMethod.Delete, $"playlists/{playlistId}/followers");
+
+            if (!ok)
+            {
+                // Jeśli Spotify zwrócił błąd (np. 404, bo już nie ma), sprawdź istnienie playlisty – brak traktujemy jako sukces
+                var exists = await requestService.MakeSpotifyRequestAsync($"playlists/{playlistId}");
+                if (exists == null)
+                    return true;
+            }
+
+            return ok;
+        }
+
+        public async Task<SpotifyPlaylistObject?> GetPlaylistAsync(string playlistId)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"playlists/{playlistId}");
+
+            if (response == null)
+
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyPlaylistObject>(response.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+
+        public async Task<bool> DeleteOrUnfollowPlaylistAsync(string playlistId)
+        {
+            var user = await GetCurrentUserProfileAsync();
+            var userId = user?.Id;
+
+            if (string.IsNullOrWhiteSpace(userId))
+
+                return false;
+
+            var playlist = await GetPlaylistAsync(playlistId);
+
+            if (playlist == null)
+
+                return true; // już nie istnieje
+
+            var isOwner = string.Equals(playlist.Owner?.Id, userId, StringComparison.Ordinal);
+
+            var ok = await requestService.SendAsync(HttpMethod.Delete, $"playlists/{playlistId}/followers");
+
+            if (!ok)
+            {
+                // Sprawdź faktyczny stan po operacji
+                var stillExists = await GetPlaylistAsync(playlistId);
+
+                if (stillExists == null)
+
+                    return true; // usunięto lub odsubowano
+
+                // Dla właściciela żądanie powinno usuwać playlistę; jeśli nadal istnieje, raportuj błąd
+                return false;
+            }
+
+            return true;
+        }
     }
 }
