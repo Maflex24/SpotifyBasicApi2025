@@ -1,4 +1,6 @@
 @page "/playlists"
+@using System.Net.Http.Json
+@using System.Text.Json
 @inject IJSRuntime JS
 @inject HttpClient Http
 
@@ -118,9 +120,50 @@
 }
 
 @code {
-    private string sortKey = "name";
-    private string sortOrder = "asc";
-    private string? search;
+    private const string StoreKey = "playlists.filters.v1";
+
+    private string sortKeyField = "name";
+    private string sortOrderField = "asc";
+    private string? searchField;
+
+    private string sortKey
+    {
+        get => sortKeyField;
+        set
+        {
+            if (sortKeyField == value)
+                return;
+
+            sortKeyField = value;
+            _ = SaveToStore();
+        }
+    }
+
+    private string sortOrder
+    {
+        get => sortOrderField;
+        set
+        {
+            if (sortOrderField == value)
+                return;
+
+            sortOrderField = value;
+            _ = SaveToStore();
+        }
+    }
+
+    private string? search
+    {
+        get => searchField;
+        set
+        {
+            if (searchField == value)
+                return;
+
+            searchField = value;
+            _ = SaveToStore();
+        }
+    }
     private long? selectedFolderId;
     private List<PlaylistItem> playlists = new();
     private List<FolderItem> folders = new();
@@ -134,6 +177,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadFromStore();
         await LoadPlaylists();
         await LoadFolders();
     }
@@ -143,8 +187,12 @@
         var query = new List<string>();
         query.Add($"sort={sortKey}");
         query.Add($"order={sortOrder}");
-        if (!string.IsNullOrWhiteSpace(search)) query.Add($"search={Uri.EscapeDataString(search)}");
-        if (selectedFolderId.HasValue) query.Add($"folderId={selectedFolderId.Value}");
+
+        if (!string.IsNullOrWhiteSpace(search))
+            query.Add($"search={Uri.EscapeDataString(search)}");
+
+        if (selectedFolderId.HasValue)
+            query.Add($"folderId={selectedFolderId.Value}");
         query.Add("page=1");
         query.Add("pageSize=200");
 
@@ -239,6 +287,52 @@
         return result;
     }
 
+    private async Task LoadFromStore()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("localStorage.getItem", StoreKey);
+
+            if (string.IsNullOrWhiteSpace(json))
+                return;
+
+            var state = JsonSerializer.Deserialize<FiltersState>(json);
+
+            if (state == null)
+                return;
+
+            sortKeyField = string.IsNullOrWhiteSpace(state.SortKey) ? sortKeyField : state.SortKey!;
+            sortOrderField = string.IsNullOrWhiteSpace(state.SortOrder) ? sortOrderField : state.SortOrder!;
+            searchField = state.Search;
+
+            if (state.SelectedFolderId.HasValue)
+                selectedFolderId = state.SelectedFolderId;
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task SaveToStore()
+    {
+        try
+        {
+            var state = new FiltersState
+            {
+                SortKey = sortKey,
+                SortOrder = sortOrder,
+                Search = search,
+                SelectedFolderId = selectedFolderId
+            };
+
+            var json = JsonSerializer.Serialize(state);
+            await JS.InvokeVoidAsync("localStorage.setItem", StoreKey, json);
+        }
+        catch
+        {
+        }
+    }
+
     private async Task SaveAssign()
     {
         if (string.IsNullOrWhiteSpace(assigningPlaylistId))
@@ -264,6 +358,7 @@
     private sealed class PlaylistItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public int TotalTracks { get; set; } public string? Images { get; set; } public long? FolderId { get; set; } }
     private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
     private sealed class FolderOption { public long Id { get; set; } public string Label { get; set; } = string.Empty; }
+    private sealed class FiltersState { public string? SortKey { get; set; } public string? SortOrder { get; set; } public string? Search { get; set; } public long? SelectedFolderId { get; set; } }
 }
 
 
