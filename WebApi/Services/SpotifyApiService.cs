@@ -1484,6 +1484,20 @@ namespace SpotifyBasicApi2025.Services
 
             await context.SaveChangesAsync();
 
+            // Usuń playlisty tego użytkownika, które nie istnieją już na Spotify
+            var spotifyPlaylistIds = allPlaylists.Select(p => p.Id).ToHashSet();
+            var playlistsToDelete = await context.SpPlaylists
+                .Where(p => p.OwnerId == userId && !spotifyPlaylistIds.Contains(p.Id))
+                .ToListAsync();
+
+            var removedPlaylists = playlistsToDelete.Count;
+
+            if (removedPlaylists > 0)
+
+                context.SpPlaylists.RemoveRange(playlistsToDelete);
+
+            await context.SaveChangesAsync();
+
             return new
             {
                 message = "Synchronizacja playlist zakończona pomyślnie",
@@ -1491,7 +1505,8 @@ namespace SpotifyBasicApi2025.Services
                 newArtists = artistsCount,
                 newAlbums = albumsCount,
                 newTracks = tracksCount,
-                newPlaylistTracks = playlistTracksCount
+                newPlaylistTracks = playlistTracksCount,
+                removedPlaylists
             };
         }
 
