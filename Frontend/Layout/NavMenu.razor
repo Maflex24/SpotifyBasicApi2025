@@ -28,7 +28,21 @@
             <NavLink class="nav-link" href="tracks">Utwory</NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="playlists">Playlisty</NavLink>
+            <details class="nav-details">
+                <summary>
+                    <NavLink class="nav-link d-inline" href="playlists">Playlisty</NavLink>
+                </summary>
+                <div class="px-2 py-1">
+                    @if (playlistFolders.Count == 0 && !foldersLoaded)
+                    {
+                        <div class="text-secondary small">Wczytywanie…</div>
+                    }
+                    else
+                    {
+                        @RenderFolderTree(null, 0)
+                    }
+                </div>
+            </details>
         </div>
     </nav>
 </div>
@@ -42,4 +56,71 @@
     {
         collapseNavMenu = !collapseNavMenu;
     }
+
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private List<FolderItem> playlistFolders = new();
+    private List<PlaylistNavItem> folderPlaylists = new();
+    private bool foldersLoaded = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFoldersAndPlaylists();
+    }
+
+    private async Task LoadFoldersAndPlaylists()
+    {
+        try
+        {
+            var folders = await Http.GetFromJsonAsync<List<FolderItem>>("api/playlist-folders");
+            playlistFolders = folders ?? new List<FolderItem>();
+
+            var pls = await Http.GetFromJsonAsync<PlaylistsResponse>("api/library/playlists?page=1&pageSize=500");
+            folderPlaylists = pls?.items?.Select(p => new PlaylistNavItem { Id = p.Id, Name = p.Name, FolderId = p.FolderId }).ToList() ?? new List<PlaylistNavItem>();
+            foldersLoaded = true;
+        }
+        catch
+        {
+            foldersLoaded = true;
+        }
+    }
+
+    private RenderFragment RenderFolderTree(long? parentId, int depth) => builder =>
+    {
+        int seq = 0;
+        var children = playlistFolders.Where(f => f.ParentId == parentId).OrderBy(f => f.Name).ToList();
+        foreach (var f in children)
+        {
+            builder.OpenElement(seq++, "div");
+            builder.AddAttribute(seq++, "style", $"padding-left:{depth * 12}px");
+            builder.OpenElement(seq++, "details");
+            builder.OpenElement(seq++, "summary");
+            builder.AddContent(seq++, f.Name);
+            builder.CloseElement();
+
+            // playlists in folder
+            var pls = folderPlaylists.Where(p => p.FolderId == f.Id).OrderBy(p => p.Name).ToList();
+            foreach (var p in pls)
+            {
+                builder.OpenElement(seq++, "div");
+                builder.AddAttribute(seq++, "class", "small" );
+                builder.OpenElement(seq++, "a");
+                builder.AddAttribute(seq++, "href", $"/playlists/{p.Id}");
+                builder.AddContent(seq++, p.Name);
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+
+            // child folders
+            builder.AddContent(seq++, RenderFolderTree(f.Id, depth + 1));
+
+            builder.CloseElement(); // details
+            builder.CloseElement(); // div
+        }
+    };
+
+    private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
+    private sealed class PlaylistsResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<PlaylistNavItem> items { get; set; } = new(); }
+    private sealed class PlaylistNavItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public long? FolderId { get; set; } }
 }
