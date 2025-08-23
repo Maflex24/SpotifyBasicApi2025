@@ -105,7 +105,7 @@
                         <td>
                             @foreach (var a in t.Artists)
                             {
-                                <span class="badge bg-outline-light text-light me-1" style="font-size: 0.7rem;">@a.Name</span>
+                                <a class="badge bg-outline-light text-light me-1 text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
                             }
                         </td>
                         <td>@t.AlbumName</td>

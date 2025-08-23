@@ -90,6 +90,55 @@ namespace SpotifyBasicApi2025.Services
             }
         }
 
+        public async Task<List<SpotifyAlbumObject>> GetArtistAlbumsAsync(string artistId, string includeGroups = "album,single", string market = "PL")
+        {
+            var allAlbums = new List<SpotifyAlbumObject>();
+            var limit = 50;
+            var offset = 0;
+
+            while (true)
+            {
+                var url = $"artists/{artistId}/albums?include_groups={includeGroups}&market={market}&limit={limit}&offset={offset}";
+                var response = await requestService.MakeSpotifyRequestAsync(url);
+                if (response == null)
+                    break;
+
+                try
+                {
+                    var json = response.ToString() ?? string.Empty;
+                    var parsed = JsonSerializer.Deserialize<SpotifyArtistAlbumsResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsed?.Items == null || parsed.Items.Count == 0)
+                        break;
+
+                    allAlbums.AddRange(parsed.Items);
+
+                    if (string.IsNullOrEmpty(parsed.Next))
+                        break;
+
+                    offset += limit;
+                }
+                catch
+                {
+                    break;
+                }
+            }
+
+            // deduplicate by id (Spotify often returns duplicates between groups)
+            var dedup = allAlbums
+                .GroupBy(a => a.Id)
+                .Select(g => g.First())
+                .OrderByDescending(a => a.ReleaseDate)
+                .ToList();
+
+            return dedup;
+        }
+
+        private sealed class SpotifyArtistAlbumsResponse
+        {
+            public List<SpotifyAlbumObject> Items { get; set; } = new();
+            public string? Next { get; set; }
+        }
+
         private sealed class TopTracksResponse
         {
             [JsonPropertyName("tracks")] public List<SpotifyTrackObject> Tracks { get; set; } = new();
@@ -541,6 +590,48 @@ namespace SpotifyBasicApi2025.Services
 
             return JsonSerializer.Deserialize<SpotifySavedAlbumsResponse>(response.ToString()!);
         }
+
+        public async Task<SpotifyAlbumObject?> GetAlbumAsync(string albumId)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"albums/{albumId}");
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyAlbumObject>(response.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+
+        public async Task<List<SpotifyTrackObject>> GetAllAlbumTracks(string albumId)
+        {
+            var all = new List<SpotifyTrackObject>();
+            var limit = 50;
+            var offset = 0;
+
+            while (true)
+            {
+                var response = await requestService.MakeSpotifyRequestAsync($"albums/{albumId}/tracks?limit={limit}&offset={offset}");
+
+                if (response == null)
+                    break;
+
+                try
+                {
+                    var json = response.ToString() ?? string.Empty;
+                    var parsed = JsonSerializer.Deserialize<AlbumTracksResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsed?.Items == null || parsed.Items.Count == 0)
+                        break;
+                    all.AddRange(parsed.Items);
+                    if (string.IsNullOrEmpty(parsed.Next))
+                        break;
+                    offset += limit;
+                }
+                catch { break; }
+            }
+
+            return all;
+        }
+
+        private sealed class AlbumTracksResponse { public List<SpotifyTrackObject> Items { get; set; } = new(); public string? Next { get; set; } }
 
         public async Task<List<SpotifySavedAlbumItem>> GetAllUserSavedAlbums()
         {

@@ -161,6 +161,24 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpPost("albums/{id}")]
+        public async Task<IActionResult> AddAlbum(string id)
+        {
+            try
+            {
+                var result = await libraryService.AddAlbumToLibraryAsync(id);
+                return Ok(new { added = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpDelete("tracks/{id}")]
         public async Task<IActionResult> RemoveTrack(string id)
         {

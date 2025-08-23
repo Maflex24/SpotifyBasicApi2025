@@ -264,6 +264,57 @@ namespace SpotifyBasicApi2025.Services
             return ok;
         }
 
+        public async Task<bool> AddAlbumToLibraryAsync(string albumId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var already = await context.SpSavedAlbums.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId);
+
+            if (!already)
+            {
+                // Upewnij się, że album istnieje w tabeli SpAlbums
+                var album = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == albumId);
+                if (album == null)
+                {
+                    var spAlbum = await spotifyApiService.GetAlbumAsync(albumId);
+                    if (spAlbum == null)
+                        throw new InvalidOperationException("Nie udało się pobrać informacji o albumie ze Spotify");
+
+                    album = await spotifyApiService.SaveAlbumFromSpotifyAsync(spAlbum);
+                }
+
+                // Zapisz jako zapisany album
+                context.SpSavedAlbums.Add(new SpSavedAlbum
+                {
+                    UserId = userId,
+                    AlbumId = albumId,
+                    AddedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                // Dodaj przypis Album-User do naszej tabeli (dla spójności)
+                if (!await context.LibAlbumUserAssigns.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId))
+                {
+                    context.LibAlbumUserAssigns.Add(new LibAlbumUserAssign
+                    {
+                        UserId = userId,
+                        AlbumId = albumId,
+                        DateCreatedUtc = DateTime.UtcNow
+                    });
+                }
+
+                await context.SaveChangesAsync();
+            }
+
+            // Dodaj zapisany album w Spotify
+            var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
+            return ok;
+        }
+
         public async Task<bool> RemoveTrackFromLibraryAsync(string trackId)
         {
             var userId = await userService.GetCurrentUserIdAsync();

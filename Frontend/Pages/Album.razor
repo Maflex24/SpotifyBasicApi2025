@@ -1,0 +1,127 @@
+@page "/album/{Id}"
+@inject HttpClient Http
+@using System.Net.Http.Json
+
+<div class="container-fluid py-3">
+    @if (album == null)
+    {
+        <div>Wczytywanie…</div>
+    }
+    else
+    {
+        <div class="d-flex align-items-start gap-3 mb-3">
+            <img src="@GetBestImageUrl(album.images)" alt="okładka" style="width:160px;height:160px;object-fit:cover;border-radius:8px;" />
+            <div class="flex-fill">
+                <h3 class="mb-1">@album.name</h3>
+                <div class="text-secondary">@album.release_date</div>
+                <div class="d-flex flex-wrap gap-1 mt-1">
+                    @foreach (var art in (album.artists ?? Array.Empty<AArtist>()))
+                    {
+                        <a href="/artist/@art.id" class="badge bg-outline-light text-light text-decoration-none" style="font-size:0.75rem;">@art.name</a>
+                    }
+                </div>
+                <div class="mt-2 d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-light" @onclick="AddAlbum">+ Dodaj album do biblioteki</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: calc(100vh - 280px); overflow-y: auto;">
+            <table class="table table-dark table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:56px;"></th>
+                        <th>Nazwa</th>
+                        <th style="width:100px;">#</th>
+                        <th style="width:140px;">Akcje</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in tracks)
+                    {
+                        <tr>
+                            <td>
+                                <div class="cover-container">
+                                    <img class="cover-img-56" src="@GetBestImageUrl(album.images)" alt="okładka" />
+                                    <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.uri)">▶</button>
+                                </div>
+                            </td>
+                            <td>@t.name</td>
+                            <td>@t.track_number</td>
+                            <td class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-light" @onclick="() => AddTrack(t.id)">+ Utwór</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    private AlbumDto? album;
+    private List<TrackDto> tracks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAlbum();
+    }
+
+    private async Task LoadAlbum()
+    {
+        var aTask = Http.GetFromJsonAsync<AlbumDto>($"api/albums/{Uri.EscapeDataString(Id)}");
+        var tTask = Http.GetFromJsonAsync<TracksPayload>($"api/albums/{Uri.EscapeDataString(Id)}/tracks");
+        await Task.WhenAll(aTask!, tTask!);
+        album = aTask?.Result;
+        tracks = tTask?.Result?.items ?? new List<TrackDto>();
+    }
+
+    private async Task PlayTrack(string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri)) return;
+        var body = new { uris = new[] { uri } };
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
+        if (!res.IsSuccessStatusCode)
+        {
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var first = devices?.Devices?.FirstOrDefault();
+            if (first != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
+
+    private async Task AddAlbum()
+    {
+        if (album == null) return;
+        var res = await Http.PostAsync($"api/library/albums/{Uri.EscapeDataString(album.id)}", null);
+    }
+
+    private async Task AddTrack(string trackId)
+    {
+        var res = await Http.PostAsync($"api/library/tracks/{Uri.EscapeDataString(trackId)}", null);
+        // można dodać feedback/toast
+    }
+
+    private string? GetBestImageUrl(ImgDto[]? images)
+    {
+        if (images == null || images.Length == 0) return null;
+        return images.OrderByDescending(i => i.width ?? 0).First().url;
+    }
+
+    private sealed class TracksPayload { public List<TrackDto> items { get; set; } = new(); }
+    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
+    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
+
+    private sealed class AlbumDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? release_date { get; set; } public ImgDto[] images { get; set; } = Array.Empty<ImgDto>(); public AArtist[]? artists { get; set; } }
+    private sealed class ImgDto { public string url { get; set; } = string.Empty; public int? width { get; set; } public int? height { get; set; } }
+    private sealed class TrackDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public int track_number { get; set; } public string? uri { get; set; } }
+    private sealed class AArtist { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; }
+}
+
+
