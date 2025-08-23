@@ -1,30 +1,59 @@
 @page "/playlists/{PlaylistId}"
+@using System.Net.Http.Json
+@using Microsoft.JSInterop
 @inject IJSRuntime JS
 @inject HttpClient Http
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
         <h4 class="mb-0">Utwory playlisty</h4>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" />
+            <button class="btn btn-sm btn-outline-light" @onclick="Reload">Zastosuj</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
+        </div>
     </div>
+
+    @if (showTagFilters)
+    {
+        <div class="d-flex align-items-start gap-3 w-100 mb-2">
+            <div class="d-flex flex-column gap-1 flex-fill">
+                <div class="tag-chips-container mt-2">
+                    @foreach (var t in availableTags)
+                    {
+                        var state = GetTagState(t.Id);
+                        var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                    }
+
+                    <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                    <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                </div>
+            </div>
+        </div>
+    }
 
     <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;">
         <table class="table table-dark table-striped align-middle">
             <thead>
                 <tr>
                     <th style="width:72px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Nazwa</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Wykonawcy</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Album</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Rok</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagi</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var t in tracks)
+                @foreach (var t in filteredTracks)
                 {
                     <tr>
                         <td>
                             <div class="cover-container">
                                 <img class="cover-img-56" src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" />
+                                <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
                             </div>
                         </td>
                         <td>@t.Name</td>
@@ -36,31 +65,431 @@
                         </td>
                         <td>@t.AlbumName</td>
                         <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
+                        <td>
+                            @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
+                            {
+                                <span class="badge bg-primary me-1" style="font-size: 0.7rem;">@tag.TagName (@tag.Strength)</span>
+                            }
+                            @if ((t.Tags?.Count ?? 0) > 3)
+                            {
+                                <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@((t.Tags?.Count ?? 0) - 3)</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenTrackTagging(t.Id)">Taguj</button>
+                            </div>
+                        </td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
+    @if (showTrackTagging && taggingTrackId != null)
+    {
+        <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <strong>Tagowanie utworu</strong>
+                <button class="btn btn-sm btn-outline-light" @onclick="CloseTrackTagging">✕</button>
+            </div>
+            <TagSearchSelect Items="trackTagItems" Placeholder="Taguj utwór..." OnSelected="(id) => OnTrackTagSelectChanged(taggingTrackId!, id?.ToString())" ShowClear="false" />
+            @if (tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Count > 0)
+            {
+                var tsel = tracks.First(x => x.Id == taggingTrackId);
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var assign in tsel.Tags)
+                    {
+                        <div class="badge bg-secondary">
+                            @assign.TagName (@assign.Strength.ToString("0.0"))
+                            <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetTrackTagStrength(tsel.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
+                            <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetTrackTagStrength(tsel.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                            <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveTrackTag(tsel.Id, assign.TagId))">✖</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
 </div>
 
 @code {
     [Parameter] public string PlaylistId { get; set; } = string.Empty;
+
     private List<Track> tracks = new();
+    private List<Track> filteredTracks = new();
+    private List<TagDto> availableTags = new();
+    private List<TagItem> trackTagItems = new();
+    private Dictionary<string, long?> selectedTagByTrack = new();
+    private string? localSearch;
+    private string? LocalSearch
+    {
+        get => localSearch;
+        set
+        {
+            if (localSearch == value)
+                return;
+
+            localSearch = value;
+            ApplyLocalFilter();
+            ApplyClientSort();
+        }
+    }
+
+    private HashSet<long> includeTagIds = new();
+    private HashSet<long> excludeTagIds = new();
+    private string includeMode = "or";
+    private string excludeMode = "or";
+
+    private string clientSortColumn = "name";
+    private bool clientSortAsc = true;
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableTags();
+        await LoadTracks();
+    }
+
+    private async Task Reload()
     {
         await LoadTracks();
     }
 
-    private async Task LoadTracks()
+    private async Task LoadAvailableTags()
     {
-        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tracks?page=1&pageSize=200");
-        if (!res.IsSuccessStatusCode) return;
-        var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
-        tracks = payload?.items ?? new List<Track>();
+        var res = await Http.GetAsync("api/tags");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
+        availableTags = allTags.Where(t => t.ForTrack).ToList();
+        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
     }
 
-    private string ApiBase => string.Empty; // HttpClient.BaseAddress ustawione w Program.cs z appsettings
+    private async Task LoadTracks()
+    {
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tracks?page=1&pageSize=500");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
+        tracks = payload?.items ?? new List<Track>();
+        filteredTracks = tracks.ToList();
+
+        ApplyLocalFilter();
+        ApplyClientSort();
+    }
+
+    private void ApplyLocalFilter()
+    {
+        var source = tracks;
+
+        // search AND
+        if (!string.IsNullOrWhiteSpace(localSearch))
+        {
+            var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => t.ToLowerInvariant()).ToList();
+
+            source = source.Where(tr =>
+            {
+                var parts = new List<string>();
+                parts.Add(tr.Name ?? string.Empty);
+                parts.Add(tr.AlbumName ?? string.Empty);
+                parts.Add(string.Join(' ', tr.Artists?.Select(a => a.Name) ?? new List<string>()));
+
+                if (tr.Tags != null && tr.Tags.Count > 0)
+                    parts.Add(string.Join(' ', tr.Tags.Select(t => t.TagName)));
+
+                var hay = string.Join(' ', parts).ToLowerInvariant();
+
+                foreach (var term in terms)
+                {
+                    if (!hay.Contains(term))
+                        return false;
+                }
+
+                return true;
+            }).ToList();
+        }
+
+        // include/exclude by tag ids
+        if (includeTagIds.Count > 0)
+        {
+            var list = includeTagIds.ToList();
+            var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+            if (andMode)
+            {
+                foreach (var tid in list)
+                {
+                    var idLocal = tid;
+                    source = source.Where(t => (t.Tags?.Any(x => x.TagId == idLocal) ?? false)).ToList();
+                }
+            }
+            else
+            {
+                source = source.Where(t => (t.Tags?.Any(x => list.Contains(x.TagId)) ?? false)).ToList();
+            }
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            var list = excludeTagIds.ToList();
+            var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+            if (andMode)
+                source = source.Where(t => !list.All(tid => t.Tags?.Any(x => x.TagId == tid) ?? false)).ToList();
+            else
+                source = source.Where(t => !(t.Tags?.Any(x => list.Contains(x.TagId)) ?? false)).ToList();
+        }
+
+        filteredTracks = source.ToList();
+    }
+
+    private void OnSortByName() => OnClientSort("name");
+    private void OnSortByArtists() => OnClientSort("artists");
+    private void OnSortByAlbum() => OnClientSort("album");
+    private void OnSortByYear() => OnClientSort("year");
+
+    private void OnClientSort(string column)
+    {
+        if (clientSortColumn == column)
+        {
+            clientSortAsc = !clientSortAsc;
+
+            ApplyClientSort();
+
+            return;
+        }
+
+        clientSortColumn = column;
+        clientSortAsc = true;
+
+        ApplyClientSort();
+    }
+
+    private void ApplyClientSort()
+    {
+        if (filteredTracks == null || filteredTracks.Count == 0)
+            return;
+
+        string ArtistsKey(Track t) => string.Join(' ', t.Artists?.Select(a => a.Name) ?? new List<string>()).ToLowerInvariant();
+        string AlbumKey(Track t) => (t.AlbumName ?? string.Empty).ToLowerInvariant();
+        string NameKey(Track t) => (t.Name ?? string.Empty).ToLowerInvariant();
+        int YearKey(Track t) => t.ReleaseYear ?? -1;
+        IOrderedEnumerable<Track> ordered;
+        if (clientSortColumn == "artists")
+        {
+            ordered = clientSortAsc
+                ? filteredTracks.OrderBy(ArtistsKey)
+                : filteredTracks.OrderByDescending(ArtistsKey);
+
+            filteredTracks = ordered
+                .ThenBy(AlbumKey)
+                .ThenBy(t => t.TrackNumber)
+                .ThenBy(NameKey)
+                .ThenBy(YearKey)
+                .ToList();
+            return;
+        }
+
+        if (clientSortColumn == "year")
+        {
+            ordered = clientSortAsc
+                ? filteredTracks.OrderBy(YearKey)
+                : filteredTracks.OrderByDescending(YearKey);
+
+            filteredTracks = ordered
+                .ThenBy(AlbumKey)
+                .ThenBy(t => t.TrackNumber)
+                .ThenBy(NameKey)
+                .ToList();
+            
+            return;
+        }
+
+        if (clientSortColumn == "album")
+        {
+            ordered = clientSortAsc
+                ? filteredTracks.OrderBy(AlbumKey)
+                : filteredTracks.OrderByDescending(AlbumKey);
+
+            filteredTracks = ordered
+                .ThenBy(t => t.TrackNumber)
+                .ThenBy(NameKey)
+                .ThenBy(YearKey)
+                .ToList();
+            
+            return;
+        }
+
+        // default: name
+        ordered = clientSortAsc
+            ? filteredTracks.OrderBy(NameKey)
+            : filteredTracks.OrderByDescending(NameKey);
+
+        filteredTracks = ordered
+            .ThenBy(t => t.TrackNumber)
+            .ThenBy(AlbumKey)
+            .ThenBy(YearKey)
+            .ToList();
+    }
+
+    private string GetSortArrow(string column)
+    {
+        if (clientSortColumn != column)
+            return string.Empty;
+
+        return clientSortAsc ? " ↑" : " ↓";
+    }
+
+    private Dictionary<string, float?> hoverByKey = new();
+    private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
+    {
+        int seq = 0;
+        var display = hoverByKey.TryGetValue(key, out var h) && h.HasValue ? h.Value : value;
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "style", "display:inline-flex; align-items:center;");
+        builder.AddAttribute(seq++, "title", $"{display:0.0}");
+        for (int i = 1; i <= 6; i++)
+        {
+            var star = i;
+            var fill = display >= star ? 1.0f : (display >= star - 0.5f ? 0.5f : 0f);
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "style", "position:relative; display:inline-block; width:1.4rem; height:1.4rem; line-height:1.4rem; font-size:1.4rem; margin-right:4px;");
+            builder.AddAttribute(seq++, "onmouseleave", EventCallback.Factory.Create(this, () => { if (hoverByKey.ContainsKey(key)) hoverByKey.Remove(key); }));
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "text-secondary");
+            builder.AddAttribute(seq++, "style", "position:absolute; inset:0; pointer-events:none;");
+            builder.AddContent(seq++, "☆");
+            builder.CloseElement();
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "text-warning");
+            var width = fill >= 1.0f ? "100%" : (fill >= 0.5f ? "50%" : "0%");
+            builder.AddAttribute(seq++, "style", $"position:absolute; inset:0; width:{width}; overflow:hidden; white-space:nowrap; pointer-events:none;");
+            builder.AddContent(seq++, "★");
+            builder.CloseElement();
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "role", "button");
+            builder.AddAttribute(seq++, "style", "position:absolute; left:0; top:0; width:50%; height:100%; background:transparent;");
+            builder.AddAttribute(seq++, "onmouseover", EventCallback.Factory.Create(this, () => { hoverByKey[key] = star - 0.5f; }));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(star - 0.5f)));
+            builder.CloseElement();
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "role", "button");
+            builder.AddAttribute(seq++, "style", "position:absolute; right:0; top:0; width:50%; height:100%; background:transparent;");
+            builder.AddAttribute(seq++, "onmouseover", EventCallback.Factory.Create(this, () => { hoverByKey[key] = star; }));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, async () => await onChange(star)));
+            builder.CloseElement();
+
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+
+    private async Task SetTrackTagStrength(string trackId, long tagId, float strength)
+    {
+        var model = new AssignDto { TagId = tagId, ItemType = "track", SpotifyItemId = trackId, Strength = strength };
+
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var resCreate = await Http.PostAsJsonAsync("api/tags/assign", model);
+
+            if (!resCreate.IsSuccessStatusCode)
+                return;
+        }
+
+        await LoadTracks();
+    }
+
+    private async Task RemoveTrackTag(string trackId, long tagId)
+    {
+        var model = new AssignDto { TagId = tagId, ItemType = "track", SpotifyItemId = trackId, Strength = 0 };
+        var req = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        {
+            Content = JsonContent.Create(model)
+        });
+
+        if (!req.IsSuccessStatusCode)
+            return;
+
+        await LoadTracks();
+    }
+
+    private void OnTrackTagSelectChanged(string trackId, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            selectedTagByTrack[trackId] = null;
+            
+            return;
+        }
+
+        if (long.TryParse(value, out var id))
+            selectedTagByTrack[trackId] = id;
+        else
+            selectedTagByTrack[trackId] = null;
+    }
+
+    private async Task RemoveSelectedTrackTagIfAny(string trackId)
+    {
+        if (selectedTagByTrack.TryGetValue(trackId, out var v) && v.HasValue)
+        {
+            await RemoveTrackTag(trackId, v.Value);
+            selectedTagByTrack[trackId] = null;
+        }
+    }
+
+    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
+    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
+    private bool showTagFilters = true;
+    private void ToggleTagFilters() { showTagFilters = !showTagFilters; }
+
+    private int GetTagState(long tagId)
+    {
+        if (includeTagIds.Contains(tagId)) return 1;
+        if (excludeTagIds.Contains(tagId)) return 2;
+        return 0;
+    }
+
+    private void CycleTagState(long tagId)
+    {
+        var state = GetTagState(tagId);
+        if (state == 0) { includeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); return; }
+        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); return; }
+        excludeTagIds.Remove(tagId);
+        ApplyLocalFilter();
+        ApplyClientSort();
+    }
+
+    private async Task PlayTrack(string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri)) return;
+        var body = new { uris = new[] { uri } };
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var first = devices?.Devices?.FirstOrDefault();
+            if (first != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
+
+    private bool showTrackTagging = false;
+    private string? taggingTrackId;
+    private void OpenTrackTagging(string trackId) { taggingTrackId = trackId; showTrackTagging = true; }
+    private void CloseTrackTagging() { showTrackTagging = false; taggingTrackId = null; }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
     {
@@ -70,9 +499,14 @@
     }
 
     private sealed class TracksResponse { public int total { get; set; } public List<Track> items { get; set; } = new(); }
-    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<SimpleArtist> Artists { get; set; } = new(); }
+    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
+    private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
+    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForTrack { get; set; } }
+    private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
 }
 
 
