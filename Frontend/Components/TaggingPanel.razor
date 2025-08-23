@@ -1,5 +1,6 @@
 @using System.Net.Http.Json
 @inject HttpClient Http
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
     <div class="d-flex align-items-center justify-content-between mb-2">
@@ -70,7 +71,7 @@
         }
 
         StateHasChanged();
-
+        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", ItemType, SpotifyItemId); } catch { }
         if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
     }
 
@@ -87,7 +88,7 @@
             existing.Strength = strength;
 
         StateHasChanged();
-
+        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", ItemType, SpotifyItemId); } catch { }
         if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
     }
 
@@ -105,7 +106,7 @@
 
         localTags = localTags.Where(t => t.TagId != tagId).ToList();
         StateHasChanged();
-
+        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", ItemType, SpotifyItemId); } catch { }
         if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
     }
 

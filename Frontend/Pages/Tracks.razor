@@ -734,6 +734,7 @@
         {
             dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("infiniteScroll.observe", containerRef, sentinelRef, dotNetRef);
+            await JS.InvokeVoidAsync("tagSync.register", dotNetRef, nameof(OnTagsEvent));
         }
         catch { }
     }
@@ -743,7 +744,22 @@
         try { pollCts?.Cancel(); } catch { }
         pollCts?.Dispose();
         try { _ = JS.InvokeVoidAsync("infiniteScroll.disconnect"); } catch { }
+        try { if (dotNetRef != null) { _ = JS.InvokeVoidAsync("tagSync.unregister", dotNetRef); } } catch { }
         try { dotNetRef?.Dispose(); } catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnTagsEvent(string itemType, string spotifyItemId)
+    {
+        if (!string.Equals(itemType, "track", StringComparison.OrdinalIgnoreCase))
+
+            return;
+
+        if (tracks.Any(t => t.Id == spotifyItemId))
+        {
+            taggingTrackId = spotifyItemId;
+            await RefreshSingleTrackFromApi();
+        }
     }
 
     private sealed class PlaybackState { public PlaybackItem? Item { get; set; } }

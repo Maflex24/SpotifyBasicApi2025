@@ -1,3 +1,5 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
 @code {
     [Parameter] public string ApiBase { get; set; } = "http://127.0.0.1:8889/";
 
@@ -156,7 +158,10 @@
         var res = await client.PostAsJsonAsync("api/tags/assign", body);
 
         if (res.IsSuccessStatusCode)
+        {
             await LoadTagsForTrack();
+            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
+        }
     }
 
     private async Task AdjustAssignStrength(long tagId, float delta)
@@ -183,7 +188,10 @@
         var res = await client.PutAsJsonAsync("api/tags/assign", body);
 
         if (res.IsSuccessStatusCode)
+        {
             await LoadTagsForTrack();
+            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
+        }
     }
 
     private string? GetItemImageUrl()

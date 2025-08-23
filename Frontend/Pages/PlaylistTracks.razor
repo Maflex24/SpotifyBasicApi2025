@@ -136,6 +136,17 @@
         await LoadTracks();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("tagSync.register", selfRef, nameof(OnTagsEvent));
+        }
+        catch { }
+    }
+
     private async Task Reload()
     {
         await LoadTracks();
@@ -164,6 +175,29 @@
 
         ApplyLocalFilter();
         ApplyClientSort();
+    }
+
+    [JSInvokable]
+    public async Task OnTagsEvent(string itemType, string spotifyItemId)
+    {
+        if (!string.Equals(itemType, "track", StringComparison.OrdinalIgnoreCase))
+
+            return;
+
+        if (tracks.Any(t => t.Id == spotifyItemId))
+        {
+            var res = await Http.GetAsync($"api/library/tracks/{Uri.EscapeDataString(spotifyItemId)}");
+            if (!res.IsSuccessStatusCode) return;
+            var dto = await res.Content.ReadFromJsonAsync<Track>();
+            if (dto == null) return;
+            var idx = tracks.FindIndex(t => t.Id == dto.Id);
+            if (idx >= 0)
+            {
+                tracks[idx] = dto;
+                filteredTracks = tracks.ToList();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
     }
 
     private void ApplyLocalFilter()
