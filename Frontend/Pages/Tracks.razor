@@ -80,13 +80,13 @@
         <table class="table table-dark table-striped align-middle" style="table-layout: fixed;">
             <thead>
                 <tr>
-                    <th style="width:72px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
-                    <th style="width:28%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagi</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
+                    <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
+                    <th style="width:30%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
+                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
+                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
+                    <th style="width:6%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
+                    <th style="width:26%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; white-space:normal;">Tagi</th>
+                    <th style="width:90px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
                     <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
                 </tr>
             </thead>
@@ -120,13 +120,12 @@
                                 <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@((t.Tags?.Count ?? 0) - 3)</span>
                             }
                         </td>
-                        <td>
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenTrackTagging(t.Id)">Taguj</button>
+                        <td style="overflow: visible; white-space: nowrap;">
+                            <div class="d-flex align-items-center justify-content-center h-100 gap-2" style="min-height:56px;">
+                                <button class="btn btn-sm btn-outline-light" style="display:inline-block;" @onclick="() => OpenTrackTagging(t.Id)">Taguj</button>
                             </div>
                         </td>
                         <td class="d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-light" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
                             <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" @onclick="() => ConfirmRemoveTrack(t.Id)">✖</button>
                         </td>
                     </tr>
