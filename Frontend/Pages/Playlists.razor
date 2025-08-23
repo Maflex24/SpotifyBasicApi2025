@@ -62,8 +62,60 @@
                 </ul>
             }
         </div>
+
+        @if (showEditFolderPanel && editingFolder != null)
+        {
+            <div class="mt-3 p-2" style="background:#0f1117;border:1px solid #1f2937;border-radius:6px;max-width:520px;">
+                <div class="mb-2"><strong>Edycja folderu</strong></div>
+                <div class="mb-2 d-flex gap-2 align-items-center">
+                    <label class="form-label mb-0" style="width:120px;">Nazwa</label>
+                    <input class="form-control form-control-sm input-dark" style="max-width:360px;" @bind="editingName" />
+                </div>
+                <div class="mb-2 d-flex gap-2 align-items-center">
+                    <label class="form-label mb-0" style="width:120px;">Rodzic</label>
+                    <select class="form-select form-select-sm select-dark" style="max-width:360px;" @bind="editingParentId">
+                        <option value="">— brak —</option>
+                        @foreach (var opt in GetFolderOptions())
+                        {
+                            if (opt.Id == editingFolder.Id)
+                                continue;
+
+                            <option value="@opt.Id">@opt.Label</option>
+                        }
+                    </select>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-light" @onclick="SaveEditFolder">Zapisz</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEditFolder">Anuluj</button>
+                </div>
+            </div>
+        }
     </div>
 </div>
+
+@if (showAssignPanel && assigningPlaylistId != null)
+{
+    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(520px, 92vw)">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <strong>Przypisz playlistę do folderu</strong>
+            <button class="btn btn-sm btn-outline-light" @onclick="CancelAssign">✕</button>
+        </div>
+        <div class="mb-2 d-flex gap-2 align-items-center">
+            <label class="form-label mb-0" style="width:120px;">Folder</label>
+            <select class="form-select form-select-sm select-dark" style="max-width:360px;" @bind="assigningFolderId">
+                <option value="">— brak —</option>
+                @foreach (var opt in GetFolderOptions())
+                {
+                    <option value="@opt.Id">@opt.Label</option>
+                }
+            </select>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-light" @onclick="SaveAssign">Zapisz</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="CancelAssign">Anuluj</button>
+        </div>
+    </div>
+}
 
 @code {
     private string sortKey = "name";
@@ -72,6 +124,13 @@
     private long? selectedFolderId;
     private List<PlaylistItem> playlists = new();
     private List<FolderItem> folders = new();
+    private bool showEditFolderPanel = false;
+    private FolderItem? editingFolder;
+    private string editingName = string.Empty;
+    private long? editingParentId;
+    private bool showAssignPanel = false;
+    private string? assigningPlaylistId;
+    private long? assigningFolderId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -110,9 +169,10 @@
 
     private async Task OpenEditFolder(FolderItem f)
     {
-        var prompt = $"Edycja folderu: {f.Name}";
-        var name = await JS.InvokeAsync<string>("prompt", prompt, f.Name);
-        await UpdateFolder(f.Id, name, f.ParentId);
+        editingFolder = f;
+        editingName = f.Name;
+        editingParentId = f.ParentId;
+        showEditFolderPanel = true;
     }
 
     private async Task CreateFolder(string? name, long? parentId)
@@ -131,11 +191,71 @@
 
     private async Task OpenAssignFolder(string playlistId)
     {
-        // proste przypisanie: pierwszy folder (do dopracowania UI)
-        if (folders.Count == 0) return;
-        var folderId = folders.First().Id;
-        var res = await Http.PutAsJsonAsync($"api/playlists/{playlistId}/folder", new { FolderId = (long?)folderId });
-        if (res.IsSuccessStatusCode) await LoadPlaylists();
+        assigningPlaylistId = playlistId;
+        assigningFolderId = null;
+        showAssignPanel = true;
+    }
+
+    private async Task SaveEditFolder()
+    {
+        if (editingFolder == null)
+            return;
+
+        await UpdateFolder(editingFolder.Id, editingName, editingParentId);
+        showEditFolderPanel = false;
+        editingFolder = null;
+    }
+
+    private void CancelEditFolder()
+    {
+        showEditFolderPanel = false;
+        editingFolder = null;
+    }
+
+    private List<FolderOption> GetFolderOptions()
+    {
+        var result = new List<FolderOption>();
+
+        var roots = folders.Where(f => !f.ParentId.HasValue).OrderBy(f => f.Name).ToList();
+        var byParent = folders
+            .Where(f => f.ParentId.HasValue)
+            .GroupBy(f => f.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Name).ToList());
+
+        void WalkList(List<FolderItem> list, int depth)
+        {
+            foreach (var f in list)
+            {
+                var label = new string(' ', depth * 4) + f.Name;
+                result.Add(new FolderOption { Id = f.Id, Label = label });
+
+                if (byParent.TryGetValue(f.Id, out var children) && children.Count > 0)
+                    WalkList(children, depth + 1);
+            }
+        }
+
+        WalkList(roots, 0);
+
+        return result;
+    }
+
+    private async Task SaveAssign()
+    {
+        if (string.IsNullOrWhiteSpace(assigningPlaylistId))
+            return;
+
+        var res = await Http.PutAsJsonAsync($"api/library/playlists/{assigningPlaylistId}/folder-assign", new { FolderId = assigningFolderId });
+        if (res.IsSuccessStatusCode)
+            await LoadPlaylists();
+
+        showAssignPanel = false;
+        assigningPlaylistId = null;
+    }
+
+    private void CancelAssign()
+    {
+        showAssignPanel = false;
+        assigningPlaylistId = null;
     }
 
     private string ApiBase => string.Empty; // HttpClient.BaseAddress ustawione w Program.cs z appsettings
@@ -143,6 +263,7 @@
     private sealed class PlaylistsResponse { public int total { get; set; } public List<PlaylistItem> items { get; set; } = new(); }
     private sealed class PlaylistItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public int TotalTracks { get; set; } public string? Images { get; set; } public long? FolderId { get; set; } }
     private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
+    private sealed class FolderOption { public long Id { get; set; } public string Label { get; set; } = string.Empty; }
 }
 
 

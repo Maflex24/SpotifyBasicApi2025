@@ -58,6 +58,45 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpPut("playlist-folders/{id}/parent")]
+        public async Task<IActionResult> UpdateFolderParent(long id, [FromBody] FolderParentModel model)
+        {
+            try
+            {
+                await libraryService.UpdateFolderParentAsync(id, model.ParentId);
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPut("playlists/{id}/folder-assign")] // nowy endpoint assign (nie mylić ze starym)
+        public async Task<IActionResult> AssignPlaylistFolder(string id, [FromBody] PlaylistFolderAssignModel model)
+        {
+            try
+            {
+                await libraryService.AssignPlaylistToFolderAsync(id, model.FolderId);
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        public sealed class FolderParentModel { public long? ParentId { get; set; } }
+        public sealed class PlaylistFolderAssignModel { public long? FolderId { get; set; } }
+
         [HttpGet("artists")] 
         public async Task<IActionResult> GetUserArtists(
             [FromQuery] string? sort = null,

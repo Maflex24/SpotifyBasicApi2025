@@ -769,16 +769,33 @@ namespace SpotifyBasicApi2025.Services
             if (page <= 0) page = 1;
             if (pageSize <= 0) pageSize = 50;
 
-            var items = await query.Skip((page - 1) * pageSize).Take(pageSize)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Name,
-                    p.TotalTracks,
-                    p.Images,
-                    p.FolderId
-                })
+            var pageItems = await query.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(p => new { p.Id, p.Name, p.TotalTracks, p.Images })
                 .ToListAsync();
+
+            // Dołącz przypisany folder z tabeli assign
+            var pageIds = pageItems.Select(x => x.Id).ToList();
+            Dictionary<string, long?> assigns;
+            try
+            {
+                assigns = await context.LibPlaylistFolderAssigns
+                    .Where(a => a.UserId == userId && pageIds.Contains(a.PlaylistId))
+                    .ToDictionaryAsync(a => a.PlaylistId, a => a.FolderId);
+            }
+            catch
+            {
+                // Jeśli tabela nie istnieje (migracja nie zastosowana), zwróć bez przypisań
+                assigns = new Dictionary<string, long?>();
+            }
+
+            var items = pageItems.Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.TotalTracks,
+                p.Images,
+                FolderId = assigns.GetValueOrDefault(p.Id)
+            }).ToList();
 
             return new { total, page, pageSize, items };
         }
@@ -825,6 +842,67 @@ namespace SpotifyBasicApi2025.Services
             var items = tracks.Select(t => t.MapToTrackModel(tagsByTrack.GetValueOrDefault(t.Id, new List<TrackTagModel>()))).ToList();
 
             return new { total, page, pageSize, items };
+        }
+
+        public async Task AssignPlaylistToFolderAsync(string playlistId, long? folderId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var playlist = await context.SpPlaylists.AsNoTracking().FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
+            if (playlist == null)
+                throw new InvalidOperationException("Playlista nie należy do użytkownika lub nie istnieje");
+
+            if (folderId.HasValue)
+            {
+                var folderExists = await context.LibPlaylistFolders.AnyAsync(f => f.Id == folderId.Value && f.UserId == userId);
+                if (!folderExists)
+                    throw new InvalidOperationException("Folder nie istnieje");
+            }
+
+            var entity = await context.LibPlaylistFolderAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.PlaylistId == playlistId);
+            if (entity == null)
+            {
+                entity = new LibPlaylistFolderAssign
+                {
+                    UserId = userId,
+                    PlaylistId = playlistId,
+                    FolderId = folderId,
+                    DateCreatedUtc = DateTime.UtcNow
+                };
+                context.LibPlaylistFolderAssigns.Add(entity);
+            }
+            else
+            {
+                entity.FolderId = folderId;
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        public async Task UpdateFolderParentAsync(long folderId, long? parentId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var folder = await context.LibPlaylistFolders.FirstOrDefaultAsync(f => f.Id == folderId && f.UserId == userId);
+            if (folder == null)
+                throw new InvalidOperationException("Folder nie istnieje");
+
+            if (parentId.HasValue)
+            {
+                if (parentId.Value == folderId)
+                    throw new InvalidOperationException("Folder nie może być swoim rodzicem");
+
+                var parent = await context.LibPlaylistFolders.FirstOrDefaultAsync(f => f.Id == parentId.Value && f.UserId == userId);
+                if (parent == null)
+                    throw new InvalidOperationException("Folder nadrzędny nie istnieje");
+            }
+
+            folder.ParentId = parentId;
+            await context.SaveChangesAsync();
         }
     }
 }

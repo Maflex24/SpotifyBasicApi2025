@@ -122,6 +122,42 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("LibPlaylistFolders");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibPlaylistFolderAssign", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"), 1L, 1);
+
+                    b.Property<DateTime>("DateCreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long?>("FolderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PlaylistId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderId");
+
+                    b.HasIndex("PlaylistId");
+
+                    b.HasIndex("UserId", "PlaylistId")
+                        .IsUnique();
+
+                    b.ToTable("LibPlaylistFolderAssigns");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
                 {
                     b.Property<long>("Id")
@@ -762,6 +798,32 @@ namespace SpotifyBasicApi2025.Migrations
                         .IsRequired();
 
                     b.Navigation("ParentFolder");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibPlaylistFolderAssign", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.LibPlaylistFolder", "Folder")
+                        .WithMany()
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpPlaylist", "Playlist")
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SpotifyBasicApi2025.Entities.SpUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Folder");
+
+                    b.Navigation("Playlist");
 
                     b.Navigation("User");
                 });
