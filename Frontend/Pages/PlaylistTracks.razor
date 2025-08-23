@@ -1,0 +1,78 @@
+@page "/playlists/{PlaylistId}"
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
+        <h4 class="mb-0">Utwory playlisty</h4>
+    </div>
+
+    <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;">
+        <table class="table table-dark table-striped align-middle">
+            <thead>
+                <tr>
+                    <th style="width:72px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Nazwa</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Wykonawcy</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Album</th>
+                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Rok</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in tracks)
+                {
+                    <tr>
+                        <td>
+                            <div class="cover-container">
+                                <img class="cover-img-56" src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" />
+                            </div>
+                        </td>
+                        <td>@t.Name</td>
+                        <td>
+                            @foreach (var a in t.Artists)
+                            {
+                                <span class="badge bg-outline-light text-light me-1" style="font-size: 0.7rem;">@a.Name</span>
+                            }
+                        </td>
+                        <td>@t.AlbumName</td>
+                        <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string PlaylistId { get; set; } = string.Empty;
+    private List<Track> tracks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTracks();
+    }
+
+    private async Task LoadTracks()
+    {
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tracks?page=1&pageSize=200");
+        if (!res.IsSuccessStatusCode) return;
+        var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
+        tracks = payload?.items ?? new List<Track>();
+    }
+
+    private string ApiBase => string.Empty; // HttpClient.BaseAddress ustawione w Program.cs z appsettings
+
+    private string? GetBestImageUrl(List<SpotifyImage> images)
+    {
+        if (images == null || images.Count == 0) return null;
+        var ordered = images.Where(i => !string.IsNullOrWhiteSpace(i.Url)).OrderByDescending(i => i.Width ?? 0).ThenByDescending(i => i.Height ?? 0).ToList();
+        return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
+    }
+
+    private sealed class TracksResponse { public int total { get; set; } public List<Track> items { get; set; } = new(); }
+    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<SimpleArtist> Artists { get; set; } = new(); }
+    private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
+    private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+}
+
+

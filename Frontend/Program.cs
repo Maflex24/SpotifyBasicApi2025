@@ -6,7 +6,9 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
+// Użyj adresu API z konfiguracji (wwwroot/appsettings.json → "ApiBase")
+var apiBase = builder.Configuration["ApiBase"] ?? builder.HostEnvironment.BaseAddress;
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBase) });
 
 // Konfiguracja Bootstrap w dark theme
 builder.Services.AddSingleton(new FrontendTheme

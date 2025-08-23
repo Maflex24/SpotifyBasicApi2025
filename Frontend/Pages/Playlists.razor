@@ -1,8 +1,149 @@
 @page "/playlists"
+@inject IJSRuntime JS
+@inject HttpClient Http
 
-<div class="container py-3">
-    <h4>Playlisty</h4>
-    <p class="text-secondary">Lista playlist użytkownika (przeciąganie/przenoszenie, sortowanie do dodania).</p>
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
+        <h4 class="mb-0">Playlisty</h4>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj (AND)" @bind="search" @bind:event="oninput" />
+            <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
+                <option value="name">Nazwa</option>
+                <option value="tracks">Liczba utworów</option>
+            </select>
+            <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
+                <option value="asc">Rosnąco</option>
+                <option value="desc">Malejąco</option>
+            </select>
+            <button class="btn btn-sm btn-outline-light" @onclick="LoadPlaylists">Zastosuj</button>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
+        @foreach (var p in playlists)
+        {
+            <div class="col">
+                <div class="card bg-dark text-light h-100">
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-1">@p.Name</h6>
+                            <span class="badge bg-secondary">@p.TotalTracks</span>
+                        </div>
+                        <div class="mt-auto d-flex gap-2">
+                            <a class="btn btn-sm btn-outline-light" href="/playlists/@p.Id">Otwórz</a>
+                            <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAssignFolder(p.Id)">Folder</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Foldery</h6>
+            <button class="btn btn-sm btn-outline-light" @onclick="OpenCreateFolder">+ Nowy folder</button>
+        </div>
+        <div>
+            @if (folders.Count == 0)
+            {
+                <div class="text-secondary">Brak folderów</div>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var f in folders)
+                    {
+                        <li>
+                            @f.Name
+                            <button class="btn btn-sm btn-outline-light ms-2" @onclick="() => OpenEditFolder(f)">Edytuj</button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
 </div>
+
+@code {
+    private string sortKey = "name";
+    private string sortOrder = "asc";
+    private string? search;
+    private long? selectedFolderId;
+    private List<PlaylistItem> playlists = new();
+    private List<FolderItem> folders = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlaylists();
+        await LoadFolders();
+    }
+
+    private async Task LoadPlaylists()
+    {
+        var query = new List<string>();
+        query.Add($"sort={sortKey}");
+        query.Add($"order={sortOrder}");
+        if (!string.IsNullOrWhiteSpace(search)) query.Add($"search={Uri.EscapeDataString(search)}");
+        if (selectedFolderId.HasValue) query.Add($"folderId={selectedFolderId.Value}");
+        query.Add("page=1");
+        query.Add("pageSize=200");
+
+        var res = await Http.GetAsync($"api/library/playlists?{string.Join('&', query)}");
+        if (!res.IsSuccessStatusCode) return;
+        var payload = await res.Content.ReadFromJsonAsync<PlaylistsResponse>();
+        playlists = payload?.items ?? new List<PlaylistItem>();
+    }
+
+    private async Task LoadFolders()
+    {
+        var res = await Http.GetAsync("api/playlist-folders");
+        if (!res.IsSuccessStatusCode) return;
+        folders = await res.Content.ReadFromJsonAsync<List<FolderItem>>() ?? new List<FolderItem>();
+    }
+
+    private async Task OpenCreateFolder()
+    {
+        var name = await JS.InvokeAsync<string>("prompt", "Nazwa folderu:");
+        await CreateFolder(name, null);
+    }
+
+    private async Task OpenEditFolder(FolderItem f)
+    {
+        var prompt = $"Edycja folderu: {f.Name}";
+        var name = await JS.InvokeAsync<string>("prompt", prompt, f.Name);
+        await UpdateFolder(f.Id, name, f.ParentId);
+    }
+
+    private async Task CreateFolder(string? name, long? parentId)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var res = await Http.PostAsJsonAsync("api/playlist-folders", new { Name = name, ParentId = parentId });
+        if (res.IsSuccessStatusCode) await LoadFolders();
+    }
+
+    private async Task UpdateFolder(long id, string? name, long? parentId)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var res = await Http.PutAsJsonAsync($"api/playlist-folders/{id}", new { Name = name, ParentId = parentId });
+        if (res.IsSuccessStatusCode) await LoadFolders();
+    }
+
+    private async Task OpenAssignFolder(string playlistId)
+    {
+        // proste przypisanie: pierwszy folder (do dopracowania UI)
+        if (folders.Count == 0) return;
+        var folderId = folders.First().Id;
+        var res = await Http.PutAsJsonAsync($"api/playlists/{playlistId}/folder", new { FolderId = (long?)folderId });
+        if (res.IsSuccessStatusCode) await LoadPlaylists();
+    }
+
+    private string ApiBase => string.Empty; // HttpClient.BaseAddress ustawione w Program.cs z appsettings
+
+    private sealed class PlaylistsResponse { public int total { get; set; } public List<PlaylistItem> items { get; set; } = new(); }
+    private sealed class PlaylistItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public int TotalTracks { get; set; } public string? Images { get; set; } public long? FolderId { get; set; } }
+    private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
+}
+
 
 

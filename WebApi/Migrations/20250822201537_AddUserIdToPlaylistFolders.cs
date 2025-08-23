@@ -11,8 +11,8 @@ namespace SpotifyBasicApi2025.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "UserId",
                 table: "LibPlaylistFolders",
-                type: "nvarchar(128)",
-                maxLength: 128,
+                type: "nvarchar(450)",
+                maxLength: 450,
                 nullable: false,
                 defaultValue: "");
 
@@ -21,13 +21,7 @@ namespace SpotifyBasicApi2025.Migrations
                 table: "LibPlaylistFolders",
                 column: "UserId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_LibPlaylistFolders_SpUsers_UserId",
-                table: "LibPlaylistFolders",
-                column: "UserId",
-                principalTable: "SpUsers",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            // FK dodamy w kolejnej migracji naprawczej, aby uniknąć cyklicznych kaskad podczas pierwszego wdrożenia
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

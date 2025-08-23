@@ -16,6 +16,48 @@ namespace SpotifyBasicApi2025.Controllers
             this.spotifyApiService = spotifyApiService;
         }
 
+        [HttpGet("playlists")]
+        public async Task<IActionResult> GetUserPlaylists(
+            [FromQuery] string? sort = null,
+            [FromQuery] string? order = null,
+            [FromQuery] string? search = null,
+            [FromQuery] long? folderId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50)
+        {
+            try
+            {
+                var result = await libraryService.GetUserPlaylistsAsync(sort, order, search, folderId, page, pageSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("playlists/{id}/tracks")]
+        public async Task<IActionResult> GetPlaylistTracks(string id, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
+        {
+            try
+            {
+                var result = await libraryService.GetPlaylistTracksAsync(id, page, pageSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpGet("artists")] 
         public async Task<IActionResult> GetUserArtists(
             [FromQuery] string? sort = null,

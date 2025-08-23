@@ -722,5 +722,109 @@ namespace SpotifyBasicApi2025.Services
 
             return artistInfos.Cast<object>().ToList();
         }
+
+        public async Task<object> GetUserPlaylistsAsync(
+            string? sort = null,
+            string? order = null,
+            string? search = null,
+            long? folderId = null,
+            int page = 1,
+            int pageSize = 50)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.SpPlaylists
+                .AsQueryable()
+                .Where(p => p.OwnerId == userId);
+
+            if (folderId.HasValue)
+                query = query.Where(p => p.FolderId == folderId.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(t => t.ToLower()).ToList();
+
+                foreach (var term in terms)
+                {
+                    var tlocal = term;
+                    query = query.Where(p => p.Name != null && EF.Functions.Like(p.Name.ToLower(), "%" + tlocal + "%"));
+                }
+            }
+
+            var sortKey = (sort ?? "name").ToLowerInvariant();
+            var desc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
+
+            query = sortKey switch
+            {
+                "tracks" => desc ? query.OrderByDescending(p => p.TotalTracks).ThenBy(p => p.Name) : query.OrderBy(p => p.TotalTracks).ThenBy(p => p.Name),
+                _ => desc ? query.OrderByDescending(p => p.Name) : query.OrderBy(p => p.Name),
+            };
+
+            var total = await query.CountAsync();
+
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 50;
+
+            var items = await query.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name,
+                    p.TotalTracks,
+                    p.Images,
+                    p.FolderId
+                })
+                .ToListAsync();
+
+            return new { total, page, pageSize, items };
+        }
+
+        public async Task<object> GetPlaylistTracksAsync(string playlistId, int page = 1, int pageSize = 100)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            // Weryfikuj dostęp do playlisty: musi należeć do użytkownika
+            var playlist = await context.SpPlaylists.AsNoTracking().FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
+            if (playlist == null)
+                throw new InvalidOperationException("Playlista nie należy do użytkownika lub nie istnieje");
+
+            var q = context.SpPlaylistTracks
+                .Where(pt => pt.PlaylistId == playlistId)
+                .Include(pt => pt.Track)!
+                    .ThenInclude(t => t.Album)
+                .Include(pt => pt.Track)!
+                    .ThenInclude(t => t.TrackArtists)!
+                        .ThenInclude(ta => ta.Artist)
+                .Select(pt => pt.Track!)
+                .AsQueryable();
+
+            var total = await q.CountAsync();
+
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 100;
+
+            var tracks = await q.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+            var trackIds = tracks.Select(t => t.Id).ToList();
+            var trackTags = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "track" && trackIds.Contains(ass.SpotifyItemId))
+                .Include(ass => ass.Tag)
+                .ThenInclude(t => t.TagGroup)
+                .ToListAsync();
+
+            var tagsByTrack = trackTags
+                .GroupBy(ass => ass.SpotifyItemId)
+                .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToTrackTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
+
+            var items = tracks.Select(t => t.MapToTrackModel(tagsByTrack.GetValueOrDefault(t.Id, new List<TrackTagModel>()))).ToList();
+
+            return new { total, page, pageSize, items };
+        }
     }
 }
