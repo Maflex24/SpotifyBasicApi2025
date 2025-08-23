@@ -681,6 +681,15 @@ namespace SpotifyBasicApi2025.Services
                 {
                     "year" => sortOrderDesc ? query.OrderByDescending(x => x.ReleaseDate) : query.OrderBy(x => x.ReleaseDate),
                     "popularity" => sortOrderDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
+                    "artist" => sortOrderDesc
+                        ? query.OrderByDescending(x => x.AlbumArtistAssigns
+                            .Select(aaa => aaa.Artist.Name)
+                            .OrderBy(n => n)
+                            .FirstOrDefault())
+                        : query.OrderBy(x => x.AlbumArtistAssigns
+                            .Select(aaa => aaa.Artist.Name)
+                            .OrderBy(n => n)
+                            .FirstOrDefault()),
                     _ => sortOrderDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
                 };
             }

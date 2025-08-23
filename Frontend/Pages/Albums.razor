@@ -9,6 +9,7 @@
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
                 <option value="name">Nazwa</option>
+                <option value="artist">Wykonawca</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
                 <option value="year">Rok</option>
@@ -106,6 +107,7 @@
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAlbumTagging(a.Id)">Taguj</button>
+                                <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@a.TotalTracks</span>
                             </div>
                         </div>
                     </div>
