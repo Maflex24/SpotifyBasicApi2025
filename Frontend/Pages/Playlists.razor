@@ -32,6 +32,10 @@
                             <h6 class="card-title mb-1">@p.Name</h6>
                             <span class="badge bg-secondary">@p.TotalTracks</span>
                         </div>
+                        @if (p.FolderId.HasValue)
+                        {
+                            <div class="small text-secondary mb-2">Folder: @GetFolderName(p.FolderId.Value)</div>
+                        }
                         <div class="mt-auto d-flex gap-2">
                             <a class="btn btn-sm btn-outline-light" href="/playlists/@p.Id">Otwórz</a>
                             <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAssignFolder(p.Id)">Folder</button>
@@ -219,6 +223,12 @@
         var res = await Http.GetAsync("api/playlist-folders");
         if (!res.IsSuccessStatusCode) return;
         folders = await res.Content.ReadFromJsonAsync<List<FolderItem>>() ?? new List<FolderItem>();
+    }
+
+    private string GetFolderName(long id)
+    {
+        var f = folders.FirstOrDefault(x => x.Id == id);
+        return f?.Name ?? (id.ToString());
     }
 
     private async Task OpenCreateFolder()
