@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: spotifybasic-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  webapi:
+    build:
+      context: .
+      dockerfile: WebApi/Dockerfile
+    container_name: spotifybasic-webapi
+    depends_on:
+      - db
+    environment:
+      - DOTNET_RUNNING_IN_CONTAINER=true
+      - DB_PROVIDER=MySql
+      - ConnectionStrings__DbConnectionString=${DB_CONNECTION_STRING}
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Frontend__Url=${FRONTEND_URL}
+      - Spotify__ClientId=${SPOTIFY_CLIENT_ID}
+      - Spotify__ClientSecret=${SPOTIFY_CLIENT_SECRET}
+      - Spotify__RedirectUri=${SPOTIFY_REDIRECT_URI}
+      - Spotify__ApiUrl=${SPOTIFY_API_URL}
+    ports:
+      - "8889:8889"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Frontend/Dockerfile
+    container_name: spotifybasic-frontend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    ports:
+      - "8888:8888"
+    depends_on:
+      - webapi
+    volumes:
+      - ${FRONTEND_APPSETTINGS_PATH:-./Frontend/wwwroot/appsettings.json}:/app/wwwroot/appsettings.json:ro
+
+volumes:
+  db_data:
+
+

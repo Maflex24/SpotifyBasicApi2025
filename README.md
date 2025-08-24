@@ -74,6 +74,21 @@ Odświeża token dostępu używając refresh token.
 - Tokeny dostępu wygasają po godzinie, użyj refresh token do ich odświeżenia
 - **Używaj adresu `127.0.0.1` zamiast `localhost`** - Spotify wymaga adresów loopback dla lokalnego rozwoju
 
+## Environment (.env)
+
+Utwórz plik `.env` bazując na `.env.example` i ustaw zmienne:
+
+```
+# Provider: SqlServer lub MySql
+DB_PROVIDER=SqlServer
+
+# Connection string do bazy (WebApi)
+ConnectionStrings__DbConnectionString=Server=(localdb)\\mssqllocaldb;Database=SpotifyBasicApi2025Db;Trusted_Connection=True;
+
+# Frontend -> adres API
+FRONTEND__API_BASE=http://127.0.0.1:8889/
+```
+
 ## Rozwiązywanie problemów
 
 ### Problem z URI przekierowania
