@@ -60,6 +60,13 @@ builder.WebHost.UseUrls("http://*:8889");
 
 var app = builder.Build();
 
+// Auto-migracje bazy danych przy starcie aplikacji
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
+    dbContext.Database.Migrate();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
