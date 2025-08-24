@@ -1,4 +1,5 @@
 @page "/tracks"
+@using Frontend.Components
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @implements IDisposable
@@ -65,40 +66,27 @@
 
     @if (showTrackTagging && taggingTrackId != null)
     {
-        <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <strong>Tagowanie utworu</strong>
-                <button class="btn btn-sm btn-outline-light" @onclick="CloseTrackTagging">✕</button>
-            </div>
-            <TagSearchSelect Items="trackTagItems" Placeholder="Taguj utwór..." OnSelected="(id) => OnTrackTagSelectChanged(taggingTrackId!, id?.ToString())" ShowClear="false" />
-            @if (tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Count > 0)
-            {
-                var t = tracks.First(x => x.Id == taggingTrackId);
-                <div class="d-flex flex-wrap gap-2 mt-2">
-                    @foreach (var assign in t.Tags)
-                    {
-                        <div class="badge bg-secondary">
-                            @assign.TagName (@assign.Strength.ToString("0.0"))
-                            <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetTrackTagStrength(t.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
-                            <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetTrackTagStrength(t.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
-                        </div>
-                    }
-                </div>
-            }
-        </div>
+        <TaggingPanel Title="Tagowanie utworu"
+                                 ItemType="track"
+                                 SpotifyItemId="@taggingTrackId"
+                                 Items="trackTagItems"
+                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                                 Placeholder="Taguj utwór..."
+                                 OnChanged="RefreshSingleTrackFromApi"
+                                 OnClose="CloseTrackTagging" />
     }
 
     <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;" @ref="containerRef">
-        <table class="table table-dark table-striped align-middle">
+        <table class="table table-dark table-striped align-middle" style="table-layout: fixed;">
             <thead>
                 <tr>
-                    <th style="width:72px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagi</th>
-                    <th style="position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
+                    <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
+                    <th style="width:30%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
+                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
+                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
+                    <th style="width:6%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
+                    <th style="width:26%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; white-space:normal;">Tagi</th>
+                    <th style="width:90px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
                     <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
                 </tr>
             </thead>
@@ -117,10 +105,19 @@
                         <td>
                             @foreach (var a in t.Artists)
                             {
-                                <span class="badge bg-outline-light text-light me-1" style="font-size: 0.7rem;">@a.Name</span>
+                                <a class="badge bg-outline-light text-light me-1 text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
                             }
                         </td>
-                        <td>@t.AlbumName</td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(t.AlbumId))
+                            {
+                                <a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>
+                            }
+                            else
+                            {
+                                @t.AlbumName
+                            }
+                        </td>
                         <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
                         <td>
                             @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
@@ -132,13 +129,12 @@
                                 <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@((t.Tags?.Count ?? 0) - 3)</span>
                             }
                         </td>
-                        <td>
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenTrackTagging(t.Id)">Taguj</button>
+                        <td style="overflow: visible; white-space: nowrap;">
+                            <div class="d-flex align-items-center justify-content-center h-100 gap-2" style="min-height:56px;">
+                                <button class="btn btn-sm btn-outline-light" style="display:inline-block;" @onclick="() => OpenTrackTagging(t.Id)">Taguj</button>
                             </div>
                         </td>
                         <td class="d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-light" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
                             <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" @onclick="() => ConfirmRemoveTrack(t.Id)">✖</button>
                         </td>
                     </tr>
@@ -564,6 +560,28 @@
         await LoadTracks();
     }
 
+    private async Task RefreshSingleTrackFromApi()
+    {
+        if (string.IsNullOrWhiteSpace(taggingTrackId))
+
+            return;
+
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var dto = await client.GetFromJsonAsync<Track>($"api/library/tracks/{Uri.EscapeDataString(taggingTrackId)}");
+
+        if (dto == null)
+
+            return;
+
+        var idx = tracks.FindIndex(t => t.Id == dto.Id);
+        if (idx >= 0)
+        {
+            tracks[idx] = dto;
+            filteredTracks = tracks.ToList();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private void OpenTrackTagging(string trackId)
     {
         taggingTrackId = trackId;
@@ -627,9 +645,34 @@
         }
 
         if (long.TryParse(value, out var id))
+        {
             selectedTagByTrack[trackId] = id;
+
+            _ = AssignTagDefaultAsync(trackId, id);
+        }
         else
+        {
             selectedTagByTrack[trackId] = null;
+        }
+    }
+
+    private async Task AssignTagDefaultAsync(string trackId, long tagId)
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        var model = new AssignDto { TagId = tagId, ItemType = "track", SpotifyItemId = trackId, Strength = 3.0f };
+
+        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+
+            if (!resCreate.IsSuccessStatusCode)
+
+                return;
+        }
+
+        await LoadTracks(reset: false);
     }
 
     private async Task RemoveSelectedTrackTagIfAny(string trackId)
@@ -700,6 +743,7 @@
         {
             dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("infiniteScroll.observe", containerRef, sentinelRef, dotNetRef);
+            await JS.InvokeVoidAsync("tagSync.register", dotNetRef, nameof(OnTagsEvent));
         }
         catch { }
     }
@@ -709,7 +753,22 @@
         try { pollCts?.Cancel(); } catch { }
         pollCts?.Dispose();
         try { _ = JS.InvokeVoidAsync("infiniteScroll.disconnect"); } catch { }
+        try { if (dotNetRef != null) { _ = JS.InvokeVoidAsync("tagSync.unregister", dotNetRef); } } catch { }
         try { dotNetRef?.Dispose(); } catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnTagsEvent(string itemType, string spotifyItemId)
+    {
+        if (!string.Equals(itemType, "track", StringComparison.OrdinalIgnoreCase))
+
+            return;
+
+        if (tracks.Any(t => t.Id == spotifyItemId))
+        {
+            taggingTrackId = spotifyItemId;
+            await RefreshSingleTrackFromApi();
+        }
     }
 
     private sealed class PlaybackState { public PlaybackItem? Item { get; set; } }

@@ -27,6 +27,8 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         public DbSet<LibTagGroup> LibTagGroups { get; set; }
         public DbSet<LibTagAssign> LibTagAssigns { get; set; }
+        public DbSet<LibPlaylistFolder> LibPlaylistFolders { get; set; }
+        public DbSet<LibPlaylistFolderAssign> LibPlaylistFolderAssigns { get; set; }
 
         // Library connections
         public DbSet<LibArtistUserAssign> LibArtistUserAssigns { get; set; }
@@ -138,6 +140,47 @@ namespace SpotifyBasicApi2025.Entities.Context
 
             modelBuilder.Entity<SpPlaylist>()
                 .HasIndex(p => p.Name);
+            // Playlist folders
+            modelBuilder.Entity<LibPlaylistFolder>()
+                .HasOne(f => f.ParentFolder)
+                .WithMany(f => f.Children)
+                .HasForeignKey(f => f.ParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<LibPlaylistFolder>()
+                .HasOne(f => f.User)
+                .WithMany()
+                .HasForeignKey(f => f.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<SpPlaylist>()
+                .HasOne(p => p.PlaylistFolder)
+                .WithMany(f => f.Playlists)
+                .HasForeignKey(p => p.FolderId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Assign: User + Playlist -> Folder (opcjonalny)
+            modelBuilder.Entity<LibPlaylistFolderAssign>()
+                .HasIndex(a => new { a.UserId, a.PlaylistId })
+                .IsUnique();
+
+            modelBuilder.Entity<LibPlaylistFolderAssign>()
+                .HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<LibPlaylistFolderAssign>()
+                .HasOne(a => a.Playlist)
+                .WithMany()
+                .HasForeignKey(a => a.PlaylistId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibPlaylistFolderAssign>()
+                .HasOne(a => a.Folder)
+                .WithMany()
+                .HasForeignKey(a => a.FolderId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<SpUser>()
                 .HasIndex(u => u.DisplayName);

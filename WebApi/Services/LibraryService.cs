@@ -264,6 +264,57 @@ namespace SpotifyBasicApi2025.Services
             return ok;
         }
 
+        public async Task<bool> AddAlbumToLibraryAsync(string albumId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var already = await context.SpSavedAlbums.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId);
+
+            if (!already)
+            {
+                // Upewnij się, że album istnieje w tabeli SpAlbums
+                var album = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == albumId);
+                if (album == null)
+                {
+                    var spAlbum = await spotifyApiService.GetAlbumAsync(albumId);
+                    if (spAlbum == null)
+                        throw new InvalidOperationException("Nie udało się pobrać informacji o albumie ze Spotify");
+
+                    album = await spotifyApiService.SaveAlbumFromSpotifyAsync(spAlbum);
+                }
+
+                // Zapisz jako zapisany album
+                context.SpSavedAlbums.Add(new SpSavedAlbum
+                {
+                    UserId = userId,
+                    AlbumId = albumId,
+                    AddedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                // Dodaj przypis Album-User do naszej tabeli (dla spójności)
+                if (!await context.LibAlbumUserAssigns.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId))
+                {
+                    context.LibAlbumUserAssigns.Add(new LibAlbumUserAssign
+                    {
+                        UserId = userId,
+                        AlbumId = albumId,
+                        DateCreatedUtc = DateTime.UtcNow
+                    });
+                }
+
+                await context.SaveChangesAsync();
+            }
+
+            // Dodaj zapisany album w Spotify
+            var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
+            var ok = await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
+            return ok;
+        }
+
         public async Task<bool> RemoveTrackFromLibraryAsync(string trackId)
         {
             var userId = await userService.GetCurrentUserIdAsync();
@@ -630,6 +681,15 @@ namespace SpotifyBasicApi2025.Services
                 {
                     "year" => sortOrderDesc ? query.OrderByDescending(x => x.ReleaseDate) : query.OrderBy(x => x.ReleaseDate),
                     "popularity" => sortOrderDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
+                    "artist" => sortOrderDesc
+                        ? query.OrderByDescending(x => x.AlbumArtistAssigns
+                            .Select(aaa => aaa.Artist.Name)
+                            .OrderBy(n => n)
+                            .FirstOrDefault())
+                        : query.OrderBy(x => x.AlbumArtistAssigns
+                            .Select(aaa => aaa.Artist.Name)
+                            .OrderBy(n => n)
+                            .FirstOrDefault()),
                     _ => sortOrderDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
                 };
             }
@@ -721,6 +781,213 @@ namespace SpotifyBasicApi2025.Services
                 .ToListAsync();
 
             return artistInfos.Cast<object>().ToList();
+        }
+
+        public async Task<object> GetUserPlaylistsAsync(
+            string? sort = null,
+            string? order = null,
+            string? search = null,
+            long? folderId = null,
+            int page = 1,
+            int pageSize = 50)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.SpPlaylists
+                .AsQueryable()
+                .Where(p => p.OwnerId == userId);
+
+            if (folderId.HasValue)
+                query = query.Where(p => p.FolderId == folderId.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(t => t.ToLower()).ToList();
+
+                foreach (var term in terms)
+                {
+                    var tlocal = term;
+                    query = query.Where(p => p.Name != null && EF.Functions.Like(p.Name.ToLower(), "%" + tlocal + "%"));
+                }
+            }
+
+            var sortKey = (sort ?? "name").ToLowerInvariant();
+            var desc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
+
+            query = sortKey switch
+            {
+                "tracks" => desc ? query.OrderByDescending(p => p.TotalTracks).ThenBy(p => p.Name) : query.OrderBy(p => p.TotalTracks).ThenBy(p => p.Name),
+                _ => desc ? query.OrderByDescending(p => p.Name) : query.OrderBy(p => p.Name),
+            };
+
+            var total = await query.CountAsync();
+
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 50;
+
+            var pageItems = await query.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(p => new { p.Id, p.Name, p.TotalTracks, p.Images })
+                .ToListAsync();
+
+            // Dołącz przypisany folder z tabeli assign
+            var pageIds = pageItems.Select(x => x.Id).ToList();
+            Dictionary<string, long?> assigns;
+            try
+            {
+                assigns = await context.LibPlaylistFolderAssigns
+                    .Where(a => a.UserId == userId && pageIds.Contains(a.PlaylistId))
+                    .ToDictionaryAsync(a => a.PlaylistId, a => a.FolderId);
+            }
+            catch
+            {
+                // Jeśli tabela nie istnieje (migracja nie zastosowana), zwróć bez przypisań
+                assigns = new Dictionary<string, long?>();
+            }
+
+            var items = pageItems.Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.TotalTracks,
+                p.Images,
+                FolderId = assigns.GetValueOrDefault(p.Id)
+            }).ToList();
+
+            return new { total, page, pageSize, items };
+        }
+
+        public async Task<object> GetPlaylistTracksAsync(string playlistId, int page = 1, int pageSize = 100)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            // Weryfikuj dostęp do playlisty: musi należeć do użytkownika
+            var playlist = await context.SpPlaylists.AsNoTracking().FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
+            if (playlist == null)
+                throw new InvalidOperationException("Playlista nie należy do użytkownika lub nie istnieje");
+
+            var q = context.SpPlaylistTracks
+                .Where(pt => pt.PlaylistId == playlistId)
+                .Include(pt => pt.Track)!
+                    .ThenInclude(t => t.Album)
+                .Include(pt => pt.Track)!
+                    .ThenInclude(t => t.TrackArtists)!
+                        .ThenInclude(ta => ta.Artist)
+                .Select(pt => pt.Track!)
+                .AsQueryable();
+
+            var total = await q.CountAsync();
+
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 100;
+
+            var tracks = await q.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+            var trackIds = tracks.Select(t => t.Id).ToList();
+            var trackTags = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "track" && trackIds.Contains(ass.SpotifyItemId))
+                .Include(ass => ass.Tag)
+                .ThenInclude(t => t.TagGroup)
+                .ToListAsync();
+
+            var tagsByTrack = trackTags
+                .GroupBy(ass => ass.SpotifyItemId)
+                .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToTrackTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
+
+            var items = tracks.Select(t => t.MapToTrackModel(tagsByTrack.GetValueOrDefault(t.Id, new List<TrackTagModel>()))).ToList();
+
+            return new { total, page, pageSize, items };
+        }
+
+        public async Task<object?> GetSingleTrackAsync(string trackId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var t = await context.SpTracks
+                .Include(x => x.Album)
+                .Include(x => x.TrackArtists)!.ThenInclude(ta => ta.Artist)
+                .FirstOrDefaultAsync(x => x.Id == trackId);
+
+            if (t == null)
+                return null;
+
+            var tagAssigns = await context.LibTagAssigns
+                .Where(a => a.UserId == userId && a.ItemType == "track" && a.SpotifyItemId == trackId)
+                .Include(a => a.Tag).ThenInclude(g => g.TagGroup)
+                .ToListAsync();
+
+            var tags = tagAssigns.Select(a => a.MapToTrackTagModel(a.Tag, a.Tag.TagGroup)).ToList();
+
+            return t.MapToTrackModel(tags);
+        }
+
+        public async Task AssignPlaylistToFolderAsync(string playlistId, long? folderId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var playlist = await context.SpPlaylists.AsNoTracking().FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
+            if (playlist == null)
+                throw new InvalidOperationException("Playlista nie należy do użytkownika lub nie istnieje");
+
+            if (folderId.HasValue)
+            {
+                var folderExists = await context.LibPlaylistFolders.AnyAsync(f => f.Id == folderId.Value && f.UserId == userId);
+                if (!folderExists)
+                    throw new InvalidOperationException("Folder nie istnieje");
+            }
+
+            var entity = await context.LibPlaylistFolderAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.PlaylistId == playlistId);
+            if (entity == null)
+            {
+                entity = new LibPlaylistFolderAssign
+                {
+                    UserId = userId,
+                    PlaylistId = playlistId,
+                    FolderId = folderId,
+                    DateCreatedUtc = DateTime.UtcNow
+                };
+                context.LibPlaylistFolderAssigns.Add(entity);
+            }
+            else
+            {
+                entity.FolderId = folderId;
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        public async Task UpdateFolderParentAsync(long folderId, long? parentId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var folder = await context.LibPlaylistFolders.FirstOrDefaultAsync(f => f.Id == folderId && f.UserId == userId);
+            if (folder == null)
+                throw new InvalidOperationException("Folder nie istnieje");
+
+            if (parentId.HasValue)
+            {
+                if (parentId.Value == folderId)
+                    throw new InvalidOperationException("Folder nie może być swoim rodzicem");
+
+                var parent = await context.LibPlaylistFolders.FirstOrDefaultAsync(f => f.Id == parentId.Value && f.UserId == userId);
+                if (parent == null)
+                    throw new InvalidOperationException("Folder nadrzędny nie istnieje");
+            }
+
+            folder.ParentId = parentId;
+            await context.SaveChangesAsync();
         }
     }
 }

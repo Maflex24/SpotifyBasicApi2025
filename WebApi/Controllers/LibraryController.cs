@@ -16,6 +16,87 @@ namespace SpotifyBasicApi2025.Controllers
             this.spotifyApiService = spotifyApiService;
         }
 
+        [HttpGet("playlists")]
+        public async Task<IActionResult> GetUserPlaylists(
+            [FromQuery] string? sort = null,
+            [FromQuery] string? order = null,
+            [FromQuery] string? search = null,
+            [FromQuery] long? folderId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50)
+        {
+            try
+            {
+                var result = await libraryService.GetUserPlaylistsAsync(sort, order, search, folderId, page, pageSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("playlists/{id}/tracks")]
+        public async Task<IActionResult> GetPlaylistTracks(string id, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
+        {
+            try
+            {
+                var result = await libraryService.GetPlaylistTracksAsync(id, page, pageSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPut("playlist-folders/{id}/parent")]
+        public async Task<IActionResult> UpdateFolderParent(long id, [FromBody] FolderParentModel model)
+        {
+            try
+            {
+                await libraryService.UpdateFolderParentAsync(id, model.ParentId);
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPut("playlists/{id}/folder-assign")] // nowy endpoint assign (nie mylić ze starym)
+        public async Task<IActionResult> AssignPlaylistFolder(string id, [FromBody] PlaylistFolderAssignModel model)
+        {
+            try
+            {
+                await libraryService.AssignPlaylistToFolderAsync(id, model.FolderId);
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        public sealed class FolderParentModel { public long? ParentId { get; set; } }
+        public sealed class PlaylistFolderAssignModel { public long? FolderId { get; set; } }
+
         [HttpGet("artists")] 
         public async Task<IActionResult> GetUserArtists(
             [FromQuery] string? sort = null,
@@ -69,6 +150,24 @@ namespace SpotifyBasicApi2025.Controllers
             {
                 var result = await libraryService.RemoveAlbumFromLibraryAsync(id);
                 return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPost("albums/{id}")]
+        public async Task<IActionResult> AddAlbum(string id)
+        {
+            try
+            {
+                var result = await libraryService.AddAlbumToLibraryAsync(id);
+                return Ok(new { added = result });
             }
             catch (InvalidOperationException ex)
             {
@@ -189,6 +288,25 @@ namespace SpotifyBasicApi2025.Controllers
                     sort, order, tags, sortTagId, artistId, albumId, year,
                     includeTags, includeMode, excludeTags, excludeMode,
                     page, pageSize, search);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("tracks/{id}")]
+        public async Task<IActionResult> GetSingleTrack(string id)
+        {
+            try
+            {
+                var result = await libraryService.GetSingleTrackAsync(id);
+                if (result == null) return NotFound();
                 return Ok(result);
             }
             catch (InvalidOperationException ex)

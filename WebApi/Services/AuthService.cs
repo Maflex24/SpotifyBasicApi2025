@@ -32,6 +32,9 @@ namespace SpotifyBasicApi2025.Services
                 "user-library-modify",
                 "playlist-read-private",
                 "playlist-read-collaborative",
+                // wymagane do usuwania / modyfikacji playlist (unfollow/delete)
+                "playlist-modify-public",
+                "playlist-modify-private",
                 // Player scopes
                 "user-read-playback-state",
                 "user-modify-playback-state",

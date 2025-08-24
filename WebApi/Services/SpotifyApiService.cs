@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net.Http;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
@@ -87,6 +88,55 @@ namespace SpotifyBasicApi2025.Services
             {
                 return new List<SpotifyTrackObject>();
             }
+        }
+
+        public async Task<List<SpotifyAlbumObject>> GetArtistAlbumsAsync(string artistId, string includeGroups = "album,single", string market = "PL")
+        {
+            var allAlbums = new List<SpotifyAlbumObject>();
+            var limit = 50;
+            var offset = 0;
+
+            while (true)
+            {
+                var url = $"artists/{artistId}/albums?include_groups={includeGroups}&market={market}&limit={limit}&offset={offset}";
+                var response = await requestService.MakeSpotifyRequestAsync(url);
+                if (response == null)
+                    break;
+
+                try
+                {
+                    var json = response.ToString() ?? string.Empty;
+                    var parsed = JsonSerializer.Deserialize<SpotifyArtistAlbumsResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsed?.Items == null || parsed.Items.Count == 0)
+                        break;
+
+                    allAlbums.AddRange(parsed.Items);
+
+                    if (string.IsNullOrEmpty(parsed.Next))
+                        break;
+
+                    offset += limit;
+                }
+                catch
+                {
+                    break;
+                }
+            }
+
+            // deduplicate by id (Spotify often returns duplicates between groups)
+            var dedup = allAlbums
+                .GroupBy(a => a.Id)
+                .Select(g => g.First())
+                .OrderByDescending(a => a.ReleaseDate)
+                .ToList();
+
+            return dedup;
+        }
+
+        private sealed class SpotifyArtistAlbumsResponse
+        {
+            public List<SpotifyAlbumObject> Items { get; set; } = new();
+            public string? Next { get; set; }
         }
 
         private sealed class TopTracksResponse
@@ -540,6 +590,48 @@ namespace SpotifyBasicApi2025.Services
 
             return JsonSerializer.Deserialize<SpotifySavedAlbumsResponse>(response.ToString()!);
         }
+
+        public async Task<SpotifyAlbumObject?> GetAlbumAsync(string albumId)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"albums/{albumId}");
+
+            if (response == null)
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyAlbumObject>(response.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+
+        public async Task<List<SpotifyTrackObject>> GetAllAlbumTracks(string albumId)
+        {
+            var all = new List<SpotifyTrackObject>();
+            var limit = 50;
+            var offset = 0;
+
+            while (true)
+            {
+                var response = await requestService.MakeSpotifyRequestAsync($"albums/{albumId}/tracks?limit={limit}&offset={offset}");
+
+                if (response == null)
+                    break;
+
+                try
+                {
+                    var json = response.ToString() ?? string.Empty;
+                    var parsed = JsonSerializer.Deserialize<AlbumTracksResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsed?.Items == null || parsed.Items.Count == 0)
+                        break;
+                    all.AddRange(parsed.Items);
+                    if (string.IsNullOrEmpty(parsed.Next))
+                        break;
+                    offset += limit;
+                }
+                catch { break; }
+            }
+
+            return all;
+        }
+
+        private sealed class AlbumTracksResponse { public List<SpotifyTrackObject> Items { get; set; } = new(); public string? Next { get; set; } }
 
         public async Task<List<SpotifySavedAlbumItem>> GetAllUserSavedAlbums()
         {
@@ -1484,6 +1576,20 @@ namespace SpotifyBasicApi2025.Services
 
             await context.SaveChangesAsync();
 
+            // Usuń playlisty tego użytkownika, które nie istnieją już na Spotify
+            var spotifyPlaylistIds = allPlaylists.Select(p => p.Id).ToHashSet();
+            var playlistsToDelete = await context.SpPlaylists
+                .Where(p => p.OwnerId == userId && !spotifyPlaylistIds.Contains(p.Id))
+                .ToListAsync();
+
+            var removedPlaylists = playlistsToDelete.Count;
+
+            if (removedPlaylists > 0)
+
+                context.SpPlaylists.RemoveRange(playlistsToDelete);
+
+            await context.SaveChangesAsync();
+
             return new
             {
                 message = "Synchronizacja playlist zakończona pomyślnie",
@@ -1491,10 +1597,76 @@ namespace SpotifyBasicApi2025.Services
                 newArtists = artistsCount,
                 newAlbums = albumsCount,
                 newTracks = tracksCount,
-                newPlaylistTracks = playlistTracksCount
+                newPlaylistTracks = playlistTracksCount,
+                removedPlaylists
             };
         }
 
         #endregion Playlists
+
+        public async Task<bool> UnfollowPlaylistAsync(string playlistId)
+        {
+            if (string.IsNullOrWhiteSpace(playlistId))
+
+                return false;
+
+            var ok = await requestService.SendAsync(HttpMethod.Delete, $"playlists/{playlistId}/followers");
+
+            if (!ok)
+            {
+                // Jeśli Spotify zwrócił błąd (np. 404, bo już nie ma), sprawdź istnienie playlisty – brak traktujemy jako sukces
+                var exists = await requestService.MakeSpotifyRequestAsync($"playlists/{playlistId}");
+                if (exists == null)
+                    return true;
+            }
+
+            return ok;
+        }
+
+        public async Task<SpotifyPlaylistObject?> GetPlaylistAsync(string playlistId)
+        {
+            var response = await requestService.MakeSpotifyRequestAsync($"playlists/{playlistId}");
+
+            if (response == null)
+
+                return null;
+
+            return JsonSerializer.Deserialize<SpotifyPlaylistObject>(response.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+
+        public async Task<bool> DeleteOrUnfollowPlaylistAsync(string playlistId)
+        {
+            var user = await GetCurrentUserProfileAsync();
+            var userId = user?.Id;
+
+            if (string.IsNullOrWhiteSpace(userId))
+
+                return false;
+
+            var playlist = await GetPlaylistAsync(playlistId);
+
+            if (playlist == null)
+
+                return true; // już nie istnieje
+
+            var isOwner = string.Equals(playlist.Owner?.Id, userId, StringComparison.Ordinal);
+
+            var ok = await requestService.SendAsync(HttpMethod.Delete, $"playlists/{playlistId}/followers");
+
+            if (!ok)
+            {
+                // Sprawdź faktyczny stan po operacji
+                var stillExists = await GetPlaylistAsync(playlistId);
+
+                if (stillExists == null)
+
+                    return true; // usunięto lub odsubowano
+
+                // Dla właściciela żądanie powinno usuwać playlistę; jeśli nadal istnieje, raportuj błąd
+                return false;
+            }
+
+            return true;
+        }
     }
 }
