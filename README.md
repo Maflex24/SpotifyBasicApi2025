@@ -103,3 +103,49 @@ Jeśli wcześniej używałeś `localhost`, musisz zaktualizować:
 - Plik `appsettings.json`
 - Wszystkie odwołania w kodzie (jeśli występują)
 
+## Wdrożenie na VPS (z centralnym nginx)
+
+Zakładamy, że działa centralny reverse proxy (repo `OVH-cloud---VPS-Serwer---nginx`) i istnieje sieć `edge-proxy`. Domeny: `gspotifylibrarymanager.com`, `www.gspotifylibrarymanager.com`.
+
+1) Przygotuj `.env` (na bazie `env.example.prod`):
+```
+FRONTEND_URL=https://gspotifylibrarymanager.com
+ConnectionStrings__DbConnectionString=Server=db;Port=3306;Database=spotifybasic;User=root;Password=<silne_haslo>;SslMode=None;
+MYSQL_ROOT_PASSWORD=<silne_haslo>
+MYSQL_DATABASE=spotifybasic
+SPOTIFY_CLIENT_ID=<from Spotify>
+SPOTIFY_CLIENT_SECRET=<from Spotify>
+SPOTIFY_REDIRECT_URI=https://gspotifylibrarymanager.com/callback
+SPOTIFY_API_URL=https://api.spotify.com/v1/
+```
+
+2) Upewnij się, że sieć istnieje:
+```bash
+docker network create edge-proxy || true
+```
+
+3) Zbuduj i uruchom:
+```bash
+docker compose --env-file ./env.example.prod up -d --build
+```
+
+4) Wydaj certyfikaty w centralnym proxy (jeśli nie zrobione) i przeładuj nginx:
+```bash
+cd ../OVH-cloud---VPS-Serwer---nginx
+docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
+  -d gspotifylibrarymanager.com -d www.gspotifylibrarymanager.com
+docker compose exec nginx nginx -s reload
+```
+
+5) Przydatne komendy:
+```bash
+docker compose up -d --build
+docker compose down
+docker compose logs -f webapi
+docker compose logs -f frontend
+```
+
+Uwagi:
+- WebApi czeka 25s po starcie DB (wpis `entrypoint` z `sleep 25`).
+- Ruch do frontu i API idzie przez `edge-proxy` (aliasy: `spotify-frontend`, `spotify-webapi`).
+

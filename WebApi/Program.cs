@@ -3,6 +3,7 @@ using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using DotNetEnv;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,14 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
+});
+
+// Forwarded headers (X-Forwarded-For / X-Forwarded-Proto) dla pracy za reverse proxy
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // Konfiguracja HttpClientFactory dla Spotify API
@@ -112,6 +121,8 @@ if (!isContainer)
     app.UseHttpsRedirection();
 
 app.UseStaticFiles();
+
+app.UseForwardedHeaders();
 
 app.UseCors("FrontendCors");
 
