@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: mysql:8.0
@@ -23,7 +21,7 @@ services:
     environment:
       - DOTNET_RUNNING_IN_CONTAINER=true
       - DB_PROVIDER=MySql
-      - ConnectionStrings__DbConnectionString=${DB_CONNECTION_STRING}
+      - ConnectionStrings__DbConnectionString=${ConnectionStrings__DbConnectionString}
       - ASPNETCORE_ENVIRONMENT=Production
       - Frontend__Url=${FRONTEND_URL}
       - Spotify__ClientId=${SPOTIFY_CLIENT_ID}
@@ -46,7 +44,7 @@ services:
     depends_on:
       - webapi
     volumes:
-      - ${FRONTEND_APPSETTINGS_PATH:-./Frontend/wwwroot/appsettings.json}:/app/wwwroot/appsettings.json:ro
+      - ${FRONTEND_APPSETTINGS_PATH:-./Frontend/wwwroot/appsettings.json}:/usr/share/nginx/html/appsettings.json:ro
     networks:
       edge-proxy:
         aliases:
