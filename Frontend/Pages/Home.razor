@@ -14,6 +14,7 @@
     }
 </div>
 
+@inject HttpClient Http
 @code {
     private string? Message;
 
@@ -21,9 +22,7 @@
     {
         try
         {
-            using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
-            var res = await client.GetAsync("api/auth/login");
+            var res = await Http.GetAsync("api/auth/login");
 
             if (!res.IsSuccessStatusCode)
             {
@@ -50,7 +49,7 @@
     [Microsoft.AspNetCore.Components.Inject]
     public required NavigationManager Navigation { get; set; }
 
-    private string ApiBase => "http://127.0.0.1:8889/";
+    
 
     private sealed class AuthUrlResponse { public string? authUrl { get; set; } }
 }

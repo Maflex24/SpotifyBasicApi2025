@@ -2,6 +2,7 @@
 @using Frontend.Components
 @inject LocalStorageService Store
 @inject IJSRuntime JS
+@inject HttpClient Http
 @implements IDisposable
 @using Microsoft.JSInterop
 
@@ -219,7 +220,6 @@
                 page++;
             }
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var query = new List<string>();
         query.Add($"sort={sortKey}");
         query.Add($"order={sortOrder}");
@@ -257,7 +257,7 @@
         query.Add($"page={page}");
         query.Add($"pageSize={pageSize}");
 
-        var res = await client.GetAsync($"api/library/tracks?{string.Join('&', query)}");
+        var res = await Http.GetAsync($"api/library/tracks?{string.Join('&', query)}");
         if (!res.IsSuccessStatusCode)
             return;
 
@@ -298,8 +298,7 @@
 
     private async Task LoadAvailableTags()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/tags");
+        var res = await Http.GetAsync("api/tags");
         if (!res.IsSuccessStatusCode)
             return;
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
@@ -309,8 +308,7 @@
 
     private async Task LoadArtistsOptions()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/library/albums/artists");
+        var res = await Http.GetAsync("api/library/albums/artists");
         if (!res.IsSuccessStatusCode)
             return;
         availableArtists = await res.Content.ReadFromJsonAsync<List<ArtistOption>>() ?? new List<ArtistOption>();
@@ -318,8 +316,7 @@
 
     private async Task LoadAlbumsOptions()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/library/albums");
+        var res = await Http.GetAsync("api/library/albums");
         if (!res.IsSuccessStatusCode)
             return;
         var payload = await res.Content.ReadFromJsonAsync<AlbumsResponse>();
@@ -544,14 +541,13 @@
 
     private async Task SetTrackTagStrength(string trackId, long tagId, float strength)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "track", SpotifyItemId = trackId, Strength = strength };
 
-        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
 
         if (!res.IsSuccessStatusCode)
         {
-            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+            var resCreate = await Http.PostAsJsonAsync("api/tags/assign", model);
 
             if (!resCreate.IsSuccessStatusCode)
                 return;
@@ -566,8 +562,7 @@
 
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var dto = await client.GetFromJsonAsync<Track>($"api/library/tracks/{Uri.EscapeDataString(taggingTrackId)}");
+        var dto = await Http.GetFromJsonAsync<Track>($"api/library/tracks/{Uri.EscapeDataString(taggingTrackId)}");
 
         if (dto == null)
 
@@ -596,9 +591,8 @@
 
     private async Task RemoveTrackTag(string trackId, long tagId)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "track", SpotifyItemId = trackId, Strength = 0 };
-        var req = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        var req = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
         {
             Content = JsonContent.Create(model)
         });
@@ -658,14 +652,13 @@
 
     private async Task AssignTagDefaultAsync(string trackId, long tagId)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "track", SpotifyItemId = trackId, Strength = 3.0f };
 
-        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
 
         if (!res.IsSuccessStatusCode)
         {
-            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+            var resCreate = await Http.PostAsJsonAsync("api/tags/assign", model);
 
             if (!resCreate.IsSuccessStatusCode)
 
@@ -688,19 +681,21 @@
 
     private async Task PlayTrack(string? uri)
     {
-        if (string.IsNullOrWhiteSpace(uri)) return;
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        if (string.IsNullOrWhiteSpace(uri))
+
+            return;
+        
         var body = new { uris = new[] { uri } };
-        var res = await client.PutAsJsonAsync("api/player/play", body);
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
 
         if (!res.IsSuccessStatusCode)
         {
-            var devices = await client.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
             var first = devices?.Devices?.FirstOrDefault();
             if (first != null)
             {
-                await client.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await client.PutAsJsonAsync("api/player/play", body);
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
             }
         }
 
@@ -776,8 +771,7 @@
 
     private async Task FetchPlaybackState()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var state = await client.GetFromJsonAsync<PlaybackState>("api/player/state");
+        var state = await Http.GetFromJsonAsync<PlaybackState>("api/player/state");
 
         var newId = state?.Item?.Id;
         if (string.IsNullOrWhiteSpace(newId) && !string.IsNullOrWhiteSpace(state?.Item?.Uri))
@@ -800,8 +794,7 @@
         if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć utwór z biblioteki?"))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.DeleteAsync($"api/library/tracks/{Uri.EscapeDataString(trackId)}");
+        var res = await Http.DeleteAsync($"api/library/tracks/{Uri.EscapeDataString(trackId)}");
         if (!res.IsSuccessStatusCode)
             return;
 
@@ -827,7 +820,7 @@
     private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
     private async Task ToggleTagFilters() { showTagFilters = !showTagFilters; await SaveToStore(); }
 
-    private string ApiBase => "http://127.0.0.1:8889/";
+    
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
     {

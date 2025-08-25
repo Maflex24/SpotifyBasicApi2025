@@ -1,6 +1,7 @@
 @page "/artists"
 @inject LocalStorageService Store
 @inject IJSRuntime JS
+@inject HttpClient Http
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -174,7 +175,6 @@
 
     private async Task LoadArtists()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var query = new List<string>();
         query.Add($"sort={sortKey}");
         query.Add($"order={sortOrder}");
@@ -200,7 +200,7 @@
             query.Add($"excludeMode={excludeMode}");
         }
 
-        var res = await client.GetAsync($"api/library/artists?{string.Join('&', query)}");
+        var res = await Http.GetAsync($"api/library/artists?{string.Join('&', query)}");
 
         if (!res.IsSuccessStatusCode)
             return;
@@ -223,9 +223,8 @@
 
     private async Task LoadAvailableTags()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         // Pobierz wszystkie tagi użytkownika i filtruj tylko ForArtist
-        var res = await client.GetAsync("api/tags");
+        var res = await Http.GetAsync("api/tags");
 
         if (!res.IsSuccessStatusCode)
             return;
@@ -237,8 +236,7 @@
 
     private async Task LoadGenres()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/library/artists/genres");
+        var res = await Http.GetAsync("api/library/artists/genres");
         if (!res.IsSuccessStatusCode)
             return;
         var list = await res.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>();
@@ -300,15 +298,14 @@
 
     private async Task SetArtistTagStrength(string artistId, long tagId, float strength)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "artist", SpotifyItemId = artistId, Strength = strength };
 
         // Spróbuj update; jeśli 404, zrób create
-        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
 
         if (!res.IsSuccessStatusCode)
         {
-            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+            var resCreate = await Http.PostAsJsonAsync("api/tags/assign", model);
             if (!resCreate.IsSuccessStatusCode)
                 return;
         }
@@ -319,9 +316,8 @@
 
     private async Task RemoveArtistTag(string artistId, long tagId)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "artist", SpotifyItemId = artistId, Strength = 0 };
-        var req = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        var req = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
         {
             Content = JsonContent.Create(model)
         });
@@ -353,8 +349,7 @@
         await SetArtistTagStrength(taggingArtistId, tagId.Value, 3.0f);
     }
 
-    private string ApiBase => "http://127.0.0.1:8889/";
-
+    
     private sealed class ArtistsResponse { public int total { get; set; } public List<Artist> items { get; set; } = new(); }
     private sealed class Artist 
     { 
@@ -461,9 +456,7 @@
 
     private async Task PlayArtistTopTracks(string artistId)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
-        var top = await client.GetFromJsonAsync<TopTracksResponse>($"api/spotify/artists/{artistId}/top-tracks");
+        var top = await Http.GetFromJsonAsync<TopTracksResponse>($"api/spotify/artists/{artistId}/top-tracks");
         var uris = top?.items?.Where(t => !string.IsNullOrWhiteSpace(t.Uri)).Select(t => t.Uri).ToList() ?? new List<string>();
 
         if (uris.Count == 0)
@@ -474,19 +467,19 @@
             uris = uris
         };
 
-        var res = await client.PutAsJsonAsync("api/player/play", body);
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
 
         if (!res.IsSuccessStatusCode)
         {
             // spróbuj przenieść odtwarzanie na pierwsze dostępne urządzenie i zagrać ponownie
-            var devices = await client.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
 
             var first = devices?.Devices?.FirstOrDefault();
 
             if (first != null)
             {
-                await client.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await client.PutAsJsonAsync("api/player/play", body);
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
             }
         }
     }
@@ -496,8 +489,7 @@
         if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć artystę z biblioteki?"))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.DeleteAsync($"api/library/artists/{Uri.EscapeDataString(artistId)}");
+        var res = await Http.DeleteAsync($"api/library/artists/{Uri.EscapeDataString(artistId)}");
         if (!res.IsSuccessStatusCode)
             return;
 

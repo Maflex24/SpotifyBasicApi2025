@@ -117,6 +117,7 @@
     }
 </div>
 
+@inject HttpClient Http
 @code {
     private List<TagGroup> groups = new();
     private Dictionary<long, List<Tag>> groupIdToTags = new();
@@ -133,8 +134,7 @@
 
     private async Task LoadGroups()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/tags-group");
+        var res = await Http.GetAsync("api/tags-group");
 
         if (res.IsSuccessStatusCode)
             groups = (await res.Content.ReadFromJsonAsync<List<TagGroup>>()) ?? new();
@@ -149,8 +149,7 @@
 
         var cats = string.Join(',', groups.Select(x => x.Id));
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync($"api/tags/list?categoriesIds={cats}");
+        var res = await Http.GetAsync($"api/tags/list?categoriesIds={cats}");
 
         if (!res.IsSuccessStatusCode)
             return;
@@ -176,12 +175,10 @@
 
     private async Task SaveNewGroup()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
         if (creatingGroup is null)
             return;
 
-        var res = await client.PostAsJsonAsync("api/tags-group", creatingGroup);
+        var res = await Http.PostAsJsonAsync("api/tags-group", creatingGroup);
 
         if (res.IsSuccessStatusCode)
         {
@@ -211,12 +208,10 @@
 
     private async Task SaveGroup()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
         if (editingGroup is null)
             return;
 
-        var res = await client.PutAsJsonAsync($"api/tags-group/{editingGroup.Id}", editingGroup);
+        var res = await Http.PutAsJsonAsync($"api/tags-group/{editingGroup.Id}", editingGroup);
 
         if (res.IsSuccessStatusCode)
         {
@@ -233,8 +228,7 @@
 
     private async Task DeleteGroup(TagGroup group)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.DeleteAsync($"api/tags-group/{group.Id}");
+        var res = await Http.DeleteAsync($"api/tags-group/{group.Id}");
 
         if (res.IsSuccessStatusCode)
         {
@@ -276,14 +270,12 @@
 
     private async Task SaveTag()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
         if (editingTag is null)
             return;
 
         if (editingTag.Id == 0)
         {
-            var resC = await client.PostAsJsonAsync("api/tags", editingTag);
+            var resC = await Http.PostAsJsonAsync("api/tags", editingTag);
 
             if (resC.IsSuccessStatusCode)
             {
@@ -293,7 +285,7 @@
         }
         else
         {
-            var resU = await client.PutAsJsonAsync($"api/tags/{editingTag.Id}", editingTag);
+            var resU = await Http.PutAsJsonAsync($"api/tags/{editingTag.Id}", editingTag);
 
             if (resU.IsSuccessStatusCode)
             {
@@ -305,14 +297,13 @@
 
     private async Task DeleteTag(Tag tag)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.DeleteAsync($"api/tags/{tag.Id}");
+        var res = await Http.DeleteAsync($"api/tags/{tag.Id}");
 
         if (res.IsSuccessStatusCode)
             await LoadAllTags();
     }
 
-    private string ApiBase => "http://127.0.0.1:8889/";
+    
 
     private sealed class TagGroup { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
     private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }

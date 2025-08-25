@@ -2,6 +2,7 @@
 @using Frontend.Components
 @inject LocalStorageService Store
 @inject IJSRuntime JS
+@inject HttpClient Http
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -148,7 +149,7 @@
 
     private async Task LoadAlbums()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
+        
         var query = new List<string>();
         query.Add($"sort={sortKey}");
         query.Add($"order={sortOrder}");
@@ -174,7 +175,7 @@
             query.Add($"excludeMode={excludeMode}");
         }
 
-        var res = await client.GetAsync($"api/library/albums?{string.Join('&', query)}");
+        var res = await Http.GetAsync($"api/library/albums?{string.Join('&', query)}");
 
         if (!res.IsSuccessStatusCode)
             return;
@@ -195,8 +196,7 @@
 
     private async Task LoadAlbumArtists()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/library/albums/artists");
+        var res = await Http.GetAsync("api/library/albums/artists");
 
         if (!res.IsSuccessStatusCode)
             return;
@@ -207,8 +207,7 @@
 
     private async Task LoadAvailableTags()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.GetAsync("api/tags");
+        var res = await Http.GetAsync("api/tags");
 
         if (!res.IsSuccessStatusCode)
             return;
@@ -268,14 +267,12 @@
 
     private async Task SetAlbumTagStrength(string albumId, long tagId, float strength)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "album", SpotifyItemId = albumId, Strength = strength };
-
-        var res = await client.PutAsJsonAsync("api/tags/assign", model);
+        var res = await Http.PutAsJsonAsync("api/tags/assign", model);
 
         if (!res.IsSuccessStatusCode)
         {
-            var resCreate = await client.PostAsJsonAsync("api/tags/assign", model);
+            var resCreate = await Http.PostAsJsonAsync("api/tags/assign", model);
 
             if (!resCreate.IsSuccessStatusCode)
                 return;
@@ -287,9 +284,8 @@
 
     private async Task RemoveAlbumTag(string albumId, long tagId)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var model = new AssignDto { TagId = tagId, ItemType = "album", SpotifyItemId = albumId, Strength = 0 };
-        var req = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        var req = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
         {
             Content = JsonContent.Create(model)
         });
@@ -326,19 +322,18 @@
         if (string.IsNullOrWhiteSpace(uri))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         var body = new { context_uri = uri };
-        var res = await client.PutAsJsonAsync("api/player/play", body);
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
 
         if (!res.IsSuccessStatusCode)
         {
-            var devices = await client.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
             var first = devices?.Devices?.FirstOrDefault();
 
             if (first != null)
             {
-                await client.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await client.PutAsJsonAsync("api/player/play", body);
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
             }
         }
     }
@@ -348,8 +343,7 @@
         if (!await JS.InvokeAsync<bool>("confirm", "Czy na pewno chcesz usunąć album z biblioteki?"))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.DeleteAsync($"api/library/albums/{Uri.EscapeDataString(albumId)}");
+        var res = await Http.DeleteAsync($"api/library/albums/{Uri.EscapeDataString(albumId)}");
         if (!res.IsSuccessStatusCode)
             return;
 
@@ -436,7 +430,7 @@
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
 
-    private string ApiBase => "http://127.0.0.1:8889/";
+    
 
     private const string StoreKey = "filters:albums";
 

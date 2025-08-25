@@ -1,7 +1,7 @@
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
+@inject HttpClient Http
 @code {
-    [Parameter] public string ApiBase { get; set; } = "http://127.0.0.1:8889/";
 
     private PlaybackState? state;
     private System.Timers.Timer? timer;
@@ -20,8 +20,7 @@
     {
         try
         {
-            using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-            var res = await client.GetAsync("api/player/state");
+            var res = await Http.GetAsync("api/player/state");
             if (!res.IsSuccessStatusCode)
                 return;
             state = await res.Content.ReadFromJsonAsync<PlaybackState>();
@@ -33,16 +32,15 @@
 
     private async Task TogglePlay()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
         if (state?.is_playing == true)
-            await client.PutAsync("api/player/pause", null);
+            await Http.PutAsync("api/player/pause", null);
         else
-            await client.PutAsync("api/player/play", null);
+            await Http.PutAsync("api/player/play", null);
         await RefreshState();
     }
 
-    private async Task Next() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/next", null); await RefreshState(); }
-    private async Task Prev() { using var client = new HttpClient { BaseAddress = new Uri(ApiBase) }; await client.PostAsync("api/player/previous", null); await RefreshState(); }
+    private async Task Next() { await Http.PostAsync("api/player/next", null); await RefreshState(); }
+    private async Task Prev() { await Http.PostAsync("api/player/previous", null); await RefreshState(); }
 
     private bool isCurrentInLibrary = false;
     private bool showTagging = false;
@@ -67,8 +65,7 @@
             return;
         }
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var exists = await client.GetFromJsonAsync<ExistsResponse>($"api/library/tracks/{trackId}/exists");
+        var exists = await Http.GetFromJsonAsync<ExistsResponse>($"api/library/tracks/{trackId}/exists");
 
         if (exists != null)
             isCurrentInLibrary = exists.exists;
@@ -97,18 +94,16 @@
         if (string.IsNullOrWhiteSpace(trackId))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
         if (!isCurrentInLibrary)
         {
-            var res = await client.PostAsync($"api/library/tracks/{trackId}", null);
+            var res = await Http.PostAsync($"api/library/tracks/{trackId}", null);
 
             if (res.IsSuccessStatusCode)
                 isCurrentInLibrary = true;
         }
         else
         {
-            var res = await client.DeleteAsync($"api/library/tracks/{trackId}");
+            var res = await Http.DeleteAsync($"api/library/tracks/{trackId}");
 
             if (res.IsSuccessStatusCode)
             {
@@ -136,12 +131,10 @@
         if (string.IsNullOrWhiteSpace(trackId))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
-        var tags = await client.GetFromJsonAsync<List<TagItem>>("api/tags");
+        var tags = await Http.GetFromJsonAsync<List<TagItem>>("api/tags");
         userTrackTags = tags?.Where(t => true).ToList() ?? new List<TagItem>();
 
-        var assigns = await client.GetFromJsonAsync<List<AssignDto>>($"api/tags/assign/track/{trackId}");
+        var assigns = await Http.GetFromJsonAsync<List<AssignDto>>($"api/tags/assign/track/{trackId}");
         currentTrackAssigns = assigns?.Select(a => (a.TagId, a.Strength)).ToList() ?? new List<(long, float)>();
     }
 
@@ -152,10 +145,8 @@
         if (string.IsNullOrWhiteSpace(trackId) || tagId is null)
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
         var body = new TagAssignModel { TagId = tagId.Value, SpotifyItemId = trackId, ItemType = "track", Strength = 3.0f };
-        var res = await client.PostAsJsonAsync("api/tags/assign", body);
+        var res = await Http.PostAsJsonAsync("api/tags/assign", body);
 
         if (res.IsSuccessStatusCode)
         {
@@ -182,10 +173,8 @@
         if (string.IsNullOrWhiteSpace(trackId))
             return;
 
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-
         var body = new TagAssignModel { TagId = tagId, SpotifyItemId = trackId, ItemType = "track", Strength = strength };
-        var res = await client.PutAsJsonAsync("api/tags/assign", body);
+        var res = await Http.PutAsJsonAsync("api/tags/assign", body);
 
         if (res.IsSuccessStatusCode)
         {

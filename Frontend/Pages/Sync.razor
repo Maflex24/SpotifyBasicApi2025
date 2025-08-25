@@ -16,6 +16,7 @@
     }
 </div>
 
+@inject HttpClient Http
 @code {
     private string? Message;
 
@@ -27,13 +28,11 @@
 
     private async Task Call(string path)
     {
-        using var client = new HttpClient { BaseAddress = new Uri(ApiBase) };
-        var res = await client.PostAsync(path, null);
+        var res = await Http.PostAsync(path, null);
         var text = await res.Content.ReadAsStringAsync();
         Message = text;
     }
 
-    private string ApiBase => "http://127.0.0.1:8889/";
 }
 
 
