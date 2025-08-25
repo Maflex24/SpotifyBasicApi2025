@@ -126,7 +126,8 @@ docker network create edge-proxy || true
 
 3) Zbuduj i uruchom:
 ```bash
-docker compose --env-file ./env.example.prod up -d --build
+-- docker compose --env-file ./env.example.prod up -d --build
+docker compose --env-file ./.env up -d --build
 ```
 
 4) Wydaj certyfikaty w centralnym proxy (jeśli nie zrobione) i przeładuj nginx:
