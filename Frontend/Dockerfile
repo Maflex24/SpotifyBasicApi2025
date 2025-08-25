@@ -10,12 +10,12 @@ COPY Frontend/. ./Frontend/
 WORKDIR /src/Frontend
 RUN dotnet publish -c Release -o /app/publish
 
-# Serve via ASP.NET static files
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
-WORKDIR /app
-ENV ASPNETCORE_URLS=http://+:8888
-EXPOSE 8888
-COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "Frontend.dll"]
+# Final stage: serve static Blazor WASM via nginx
+FROM nginx:alpine AS final
+WORKDIR /usr/share/nginx/html
+EXPOSE 80
+# Copy published wwwroot to nginx html
+COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
+# Default nginx CMD/ENTRYPOINT are fine
 
 
