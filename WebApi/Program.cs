@@ -77,7 +77,7 @@ builder.Services.AddScoped<LibraryService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options =>
 {
-    var provider = Environment.GetEnvironmentVariable("DB_PROVIDER") ?? builder.Configuration["Database:Provider"] ?? "SqlServer";
+    var provider = Environment.GetEnvironmentVariable("DB_PROVIDER") ?? builder.Configuration["Database:Provider"] ?? "MySql";
 
     var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DbConnectionString")
         ?? builder.Configuration.GetConnectionString("DbConnectionString")
