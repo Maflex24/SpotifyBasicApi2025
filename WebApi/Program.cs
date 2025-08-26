@@ -77,8 +77,6 @@ builder.Services.AddScoped<LibraryService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options =>
 {
-    var provider = Environment.GetEnvironmentVariable("DB_PROVIDER") ?? builder.Configuration["Database:Provider"] ?? "MySql";
-
     var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DbConnectionString")
         ?? builder.Configuration.GetConnectionString("DbConnectionString")
         ?? string.Empty;
@@ -86,14 +84,14 @@ builder.Services.AddDbContext<DatabaseContext>(options =>
     if (string.IsNullOrWhiteSpace(connectionString))
         throw new InvalidOperationException("Brak connection stringa. Ustaw ConnectionStrings__DbConnectionString w env lub appsettings.");
 
-    if (string.Equals(provider, "MySql", StringComparison.OrdinalIgnoreCase))
+    var mySqlVersion = new MySqlServerVersion(new Version(8, 0, 36));
+    options.UseMySql(connectionString, mySqlVersion, mySqlOptions =>
     {
-        var mySqlVersion = new MySqlServerVersion(new Version(8, 0, 36));
-        options.UseMySql(connectionString, mySqlVersion);
-        return;
-    }
-
-    options.UseSqlServer(connectionString);
+        mySqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null);
+    });
 });
 
 // Konfiguracja portu dla API (backend) - oddzielnie od frontu

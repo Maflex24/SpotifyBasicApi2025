@@ -80,7 +80,7 @@ Utwórz plik `.env` bazując na `.env.example` i ustaw zmienne:
 
 ```
 # Provider: SqlServer lub MySql
-DB_PROVIDER=SqlServer
+DB_PROVIDER=MySql
 
 # Connection string do bazy (WebApi)
 ConnectionStrings__DbConnectionString=Server=(localdb)\\mssqllocaldb;Database=SpotifyBasicApi2025Db;Trusted_Connection=True;

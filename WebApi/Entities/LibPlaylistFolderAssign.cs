@@ -9,11 +9,11 @@ namespace SpotifyBasicApi2025.Entities
         public long Id { get; set; }
 
         [Required]
-        [MaxLength(450)]
+        [MaxLength(255)]
         public string UserId { get; set; } = string.Empty;
 
         [Required]
-        [MaxLength(450)]
+        [MaxLength(255)]
         public string PlaylistId { get; set; } = string.Empty;
 
         public long? FolderId { get; set; }
