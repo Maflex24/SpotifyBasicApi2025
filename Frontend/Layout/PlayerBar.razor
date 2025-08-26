@@ -1,4 +1,5 @@
 @using Microsoft.JSInterop
+@using System.Net.Http.Json
 @inject IJSRuntime JS
 @inject HttpClient Http
 @code {
@@ -183,6 +184,26 @@
         }
     }
 
+    private async Task RemoveAssign(long tagId)
+    {
+        var trackId = GetCurrentTrackId();
+
+        if (string.IsNullOrWhiteSpace(trackId))
+            return;
+
+        var model = new TagAssignModel { TagId = tagId, SpotifyItemId = trackId, ItemType = "track", Strength = 0 };
+        var req = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        {
+            Content = JsonContent.Create(model)
+        });
+
+        if (!req.IsSuccessStatusCode)
+            return;
+
+        await LoadTagsForTrack();
+        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
+    }
+
     private string? GetItemImageUrl()
     {
         var images = state?.item?.album?.images;
@@ -282,6 +303,7 @@
                         @name (@assign.Strength.ToString("0.0"))
                         <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => AdjustAssignStrength(assign.TagId, -0.5f))">−</button>
                         <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => AdjustAssignStrength(assign.TagId, 0.5f))">+</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveAssign(assign.TagId))">✖</button>
                     </div>
                 }
             </div>

@@ -123,12 +123,19 @@ namespace SpotifyBasicApi2025.Services
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortOrderDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (sortKey == "weight" && sortTagId.HasValue)
+            if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
             {
-                // Sortuj po sile wybranego tagu (brak = 0)
-                query = sortOrderDesc
-                    ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == a.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault())
-                    : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == a.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault());
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var firstTagId = tagIds.First();
+
+                    // Sortuj po sile wybranego tagu (brak = 0)
+                    query = sortOrderDesc
+                        ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == a.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault())
+                        : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == a.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault());
+                }
             }
             else
             {
@@ -513,11 +520,18 @@ namespace SpotifyBasicApi2025.Services
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (sortKey == "weight" && sortTagId.HasValue)
+            if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
             {
-                query = sortDesc
-                    ? query.OrderByDescending(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault())
-                    : query.OrderBy(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault());
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var firstTagId = tagIds.First();
+
+                    query = sortDesc
+                    ? query.OrderByDescending(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault())
+                    : query.OrderBy(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault());
+                }
             }
             else
             {
@@ -585,6 +599,7 @@ namespace SpotifyBasicApi2025.Services
 
             return new { total, page, pageSize, items = dtos };
         }
+
         public async Task<object> GetUserAlbumsAsync(
             string? sort = null,
             string? order = null,
@@ -669,11 +684,18 @@ namespace SpotifyBasicApi2025.Services
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortOrderDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (sortKey == "weight" && sortTagId.HasValue)
+            if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
             {
-                query = sortOrderDesc
-                    ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault())
-                    : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == sortTagId.Value).Select(ass => ass.Strength).FirstOrDefault());
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var firstTagId = tagIds.First();
+
+                    query = sortOrderDesc
+                    ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault())
+                    : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault());
+                }
             }
             else
             {
