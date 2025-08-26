@@ -16,6 +16,9 @@ WORKDIR /usr/share/nginx/html
 EXPOSE 80
 # Copy published wwwroot to nginx html
 COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
+
+# Use custom nginx.conf with SPA fallback
+COPY Frontend/nginx.conf /etc/nginx/conf.d/default.conf
 # Default nginx CMD/ENTRYPOINT are fine
 
 
