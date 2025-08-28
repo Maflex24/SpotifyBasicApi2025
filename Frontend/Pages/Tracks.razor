@@ -43,6 +43,7 @@
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="() => LoadTracks(true)">Zastosuj</button>
             <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
+            <button class="btn btn-sm btn-outline-success" @onclick="PlayFiltered">Odtwórz</button>
 
             @if (showTagFilters)
             {
@@ -705,6 +706,39 @@
             currentPlayingTrackId = uri.Substring(lastColon + 1);
         else
             currentPlayingTrackId = null;
+    }
+
+    private async Task PlayFiltered()
+    {
+        // Dociągnij wszystkie strony, aby odtwarzanie objęło pełny wynik filtrowania
+        while (hasMore && !isLoading)
+            await LoadTracks(reset: false);
+
+        ApplyLocalFilter();
+        ApplyClientSort();
+
+        var uris = filteredTracks
+            .Where(t => !string.IsNullOrWhiteSpace(t.Uri))
+            .Select(t => t.Uri!)
+            .ToList();
+
+        if (uris.Count == 0)
+            return;
+
+        var body = new { uris };
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var first = devices?.Devices?.FirstOrDefault();
+
+            if (first != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
     }
 
     private CancellationTokenSource? pollCts;
