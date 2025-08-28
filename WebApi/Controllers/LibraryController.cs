@@ -28,6 +28,7 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var result = await libraryService.GetUserPlaylistsAsync(sort, order, search, folderId, page, pageSize);
+
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -94,10 +95,13 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
-        public sealed class FolderParentModel { public long? ParentId { get; set; } }
-        public sealed class PlaylistFolderAssignModel { public long? FolderId { get; set; } }
+        public sealed class FolderParentModel
+        { public long? ParentId { get; set; } }
 
-        [HttpGet("artists")] 
+        public sealed class PlaylistFolderAssignModel
+        { public long? FolderId { get; set; } }
+
+        [HttpGet("artists")]
         public async Task<IActionResult> GetUserArtists(
             [FromQuery] string? sort = null,
             [FromQuery] string? order = null,
@@ -319,7 +323,7 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
-        [HttpGet("albums")] 
+        [HttpGet("albums")]
         public async Task<IActionResult> GetUserAlbums(
             [FromQuery] string? sort = null,
             [FromQuery] string? order = null,
@@ -384,5 +388,3 @@ namespace SpotifyBasicApi2025.Controllers
         }
     }
 }
-
-
