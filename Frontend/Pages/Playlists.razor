@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 @using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Routing
 @inject IJSRuntime JS
 @inject HttpClient Http
 @inject NavigationManager Nav
@@ -152,6 +153,7 @@
     private DotNetObjectReference<Playlists>? dotNetRef;
     private ElementReference sentinelRef;
     private bool foldersExpanded = true;
+    private long? lastSelectedFolderId;
 
     private string sortKeyField = "name";
     private string sortOrderField = "asc";
@@ -216,6 +218,8 @@
             var fid = query["folderId"];
             if (!string.IsNullOrWhiteSpace(fid) && long.TryParse(fid, out var f))
                 selectedFolderId = f;
+            else
+                selectedFolderId = null;
         }
         catch { }
         await LoadFromStore();
@@ -224,6 +228,9 @@
         hasMore = true;
         await LoadPlaylists();
         await LoadFolders();
+
+        lastSelectedFolderId = selectedFolderId;
+        Nav.LocationChanged += OnLocationChanged;
     }
 
     private async Task LoadPlaylists()
@@ -247,7 +254,7 @@
 
         var res = await Http.GetAsync($"api/library/playlists?{string.Join('&', query)}");
         
-        if (!res.IsSuccessStatusCode) return;
+        if (!res.IsSuccessStatusCode) { isLoading = false; return; }
         var payload = await res.Content.ReadFromJsonAsync<PlaylistsResponse>();
         var items = payload?.items ?? new List<PlaylistItem>();
 
@@ -280,6 +287,34 @@
         }
     }
 
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        try
+        {
+            var uri = new Uri(e.Location);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            long? newFolderId = null;
+            var fid = query["folderId"];
+            if (!string.IsNullOrWhiteSpace(fid) && long.TryParse(fid, out var f))
+                newFolderId = f;
+
+            if (newFolderId != selectedFolderId)
+            {
+                selectedFolderId = newFolderId;
+                playlists.Clear();
+                currentPage = 1;
+                hasMore = true;
+
+                await InvokeAsync(async () =>
+                {
+                    await LoadPlaylists();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch { }
+    }
+
     [JSInvokable]
     public async Task OnBottomReached()
     {
@@ -290,6 +325,7 @@
     public async ValueTask DisposeAsync()
     {
         try { await JS.InvokeVoidAsync("infiniteScroll.disconnect"); } catch { }
+        Nav.LocationChanged -= OnLocationChanged;
         dotNetRef?.Dispose();
     }
 

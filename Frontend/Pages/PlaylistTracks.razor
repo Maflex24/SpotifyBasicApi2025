@@ -110,6 +110,7 @@
 
 @code {
     [Parameter] public string PlaylistId { get; set; } = string.Empty;
+    private string? lastPlaylistId;
 
     private List<Track> tracks = new();
     private List<Track> filteredTracks = new();
@@ -143,6 +144,15 @@
     {
         await LoadAvailableTags();
         await LoadTracks();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.Equals(lastPlaylistId, PlaylistId, StringComparison.Ordinal))
+        {
+            lastPlaylistId = PlaylistId;
+            await LoadTracks();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
