@@ -12,6 +12,7 @@
             <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" />
             <button class="btn btn-sm btn-outline-light" @onclick="Reload">Zastosuj</button>
             <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
+            <button class="btn btn-sm btn-outline-success" @onclick="PlayFiltered">Odtwórz</button>
         </div>
     </div>
 
@@ -518,6 +519,32 @@
         {
             var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
             var first = devices?.Devices?.FirstOrDefault();
+            if (first != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
+
+    private async Task PlayFiltered()
+    {
+        var uris = filteredTracks
+            .Where(t => !string.IsNullOrWhiteSpace(t.Uri))
+            .Select(t => t.Uri!)
+            .ToList();
+
+        if (uris.Count == 0)
+            return;
+
+        var body = new { uris = uris };
+        var res = await Http.PutAsJsonAsync("api/player/play", body);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var first = devices?.Devices?.FirstOrDefault();
+
             if (first != null)
             {
                 await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
