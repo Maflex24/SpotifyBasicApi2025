@@ -28,21 +28,17 @@
             <NavLink class="nav-link" href="tracks">Utwory</NavLink>
         </div>
         <div class="nav-item px-3">
-            <details class="nav-details">
-                <summary>
-                    <NavLink class="nav-link d-inline" href="playlists">Playlisty</NavLink>
-                </summary>
-                <div class="px-2 py-1">
-                    @if (playlistFolders.Count == 0 && !foldersLoaded)
-                    {
-                        <div class="text-secondary small">Wczytywanie…</div>
-                    }
-                    else
-                    {
-                        @RenderFolderTree(null, 0)
-                    }
-                </div>
-            </details>
+            <NavLink class="nav-link" href="playlists">Playlisty</NavLink>
+            <div class="px-2 py-1">
+                @if (playlistFolders.Count == 0 && !foldersLoaded)
+                {
+                    <div class="text-secondary small">Wczytywanie…</div>
+                }
+                else
+                {
+                    @RenderFolderTree(null, 0)
+                }
+            </div>
         </div>
     </nav>
 </div>
