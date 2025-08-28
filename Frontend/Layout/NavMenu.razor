@@ -75,7 +75,7 @@
             playlistFolders = folders ?? new List<FolderItem>();
 
             var pls = await Http.GetFromJsonAsync<PlaylistsResponse>("api/library/playlists?page=1&pageSize=500");
-            folderPlaylists = pls?.items?.Select(p => new PlaylistNavItem { Id = p.Id, Name = p.Name, FolderId = p.FolderId }).ToList() ?? new List<PlaylistNavItem>();
+            folderPlaylists = pls?.items?.Select(p => new PlaylistNavItem { Id = p.Id, Name = p.Name, FolderId = p.FolderId, Images = p.Images ?? new List<SpotifyImage>() }).ToList() ?? new List<PlaylistNavItem>();
             foldersLoaded = true;
         }
         catch
@@ -95,8 +95,10 @@
             builder.OpenElement(seq++, "details");
             if (expandedFolderIds.Contains(f.Id))
                 builder.AddAttribute(seq++, "open", true);
-            builder.AddAttribute(seq++, "ontoggle", EventCallback.Factory.Create(this, () => OnFolderToggle(f.Id)));
             builder.OpenElement(seq++, "summary");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => ToggleFolder(f.Id)));
+            builder.AddAttribute(seq++, "onclick:stopPropagation", true);
+            builder.AddAttribute(seq++, "onclick:preventDefault", true);
             builder.AddContent(seq++, f.Name);
             builder.CloseElement();
 
@@ -105,11 +107,28 @@
             foreach (var p in pls)
             {
                 builder.OpenElement(seq++, "div");
-                builder.AddAttribute(seq++, "class", "small" );
+                builder.AddAttribute(seq++, "class", "d-flex align-items-center gap-2 mb-1" );
+
+                builder.OpenElement(seq++, "div");
+                builder.AddAttribute(seq++, "class", "cover-container");
+                builder.OpenElement(seq++, "img");
+                builder.AddAttribute(seq++, "class", "cover-img-56");
+                builder.AddAttribute(seq++, "src", GetPlaylistThumbUrl(p.Id));
+                builder.AddAttribute(seq++, "alt", "okładka");
+                builder.CloseElement();
+                builder.OpenElement(seq++, "button");
+                builder.AddAttribute(seq++, "class", "cover-overlay");
+                builder.AddAttribute(seq++, "title", "Odtwórz");
+                builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => PlayPlaylist(p.Id)));
+                builder.AddContent(seq++, "▶");
+                builder.CloseElement();
+                builder.CloseElement();
+
                 builder.OpenElement(seq++, "a");
                 builder.AddAttribute(seq++, "href", $"/playlists/{p.Id}");
                 builder.AddContent(seq++, p.Name);
                 builder.CloseElement();
+
                 builder.CloseElement();
             }
 
@@ -121,16 +140,17 @@
         }
     };
 
-    private async Task OnFolderToggle(long folderId)
+    private async Task ToggleFolder(long folderId)
     {
         if (expandedFolderIds.Contains(folderId))
         {
             expandedFolderIds.Remove(folderId);
-            return;
         }
-
-        expandedFolderIds.Add(folderId);
-        await RefreshPlaylistsForFolderAsync(folderId);
+        else
+        {
+            expandedFolderIds.Add(folderId);
+            await RefreshPlaylistsForFolderAsync(folderId);
+        }
         StateHasChanged();
     }
 
@@ -139,11 +159,15 @@
         try
         {
             var res = await Http.GetFromJsonAsync<PlaylistsResponse>("api/library/playlists?page=1&pageSize=500");
-            var list = (res?.items ?? new List<PlaylistNavItem>()).Where(p => p.FolderId == folderId).OrderBy(p => p.Name).ToList();
+            var list = (res?.items ?? new List<PlaylistDto>())
+                .Where(p => p.FolderId == folderId)
+                .Select(p => new PlaylistNavItem { Id = p.Id, Name = p.Name, FolderId = p.FolderId, Images = p.Images ?? new List<SpotifyImage>() })
+                .OrderBy(p => p.Name)
+                .ToList();
 
             // usuń stare wpisy tego folderu i dodaj aktualne
             folderPlaylists = folderPlaylists.Where(p => p.FolderId != folderId).ToList();
-            folderPlaylists.AddRange(list.Select(p => new PlaylistNavItem { Id = p.Id, Name = p.Name, FolderId = folderId }));
+            folderPlaylists.AddRange(list);
         }
         catch { }
     }
@@ -179,7 +203,45 @@
         }
     }
 
+    private async Task PlayPlaylist(string playlistId)
+    {
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(playlistId)}/tracks?page=1&pageSize=500");
+        if (!res.IsSuccessStatusCode) return;
+        var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
+        var uris = payload?.items?.Where(t => !string.IsNullOrWhiteSpace(t.Uri)).Select(t => t.Uri!).ToList() ?? new List<string>();
+        if (uris.Count == 0) return;
+        var body = new { uris };
+        var playRes = await Http.PutAsJsonAsync("api/player/play", body);
+        if (!playRes.IsSuccessStatusCode)
+        {
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var first = devices?.Devices?.FirstOrDefault();
+            if (first != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
+
+    private string? GetPlaylistThumbUrl(string playlistId)
+    {
+        var pl = folderPlaylists.FirstOrDefault(x => x.Id == playlistId);
+        if (pl != null && pl.Images != null && pl.Images.Count > 0)
+        {
+            var best = pl.Images.Where(i => !string.IsNullOrWhiteSpace(i.Url)).OrderBy(i => i.Width ?? int.MaxValue).ThenBy(i => i.Height ?? int.MaxValue).FirstOrDefault();
+            return best?.Url ?? pl.Images.FirstOrDefault()?.Url;
+        }
+        return null;
+    }
+
     private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
-    private sealed class PlaylistsResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<PlaylistNavItem> items { get; set; } = new(); }
-    private sealed class PlaylistNavItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public long? FolderId { get; set; } }
+    private sealed class PlaylistsResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<PlaylistDto> items { get; set; } = new(); }
+    private sealed class PlaylistDto { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public long? FolderId { get; set; } public List<SpotifyImage>? Images { get; set; } }
+    private sealed class PlaylistNavItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public long? FolderId { get; set; } public List<SpotifyImage> Images { get; set; } = new(); }
+    private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
+    private sealed class TracksResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<TrackItem> items { get; set; } = new(); }
+    private sealed class TrackItem { public string Id { get; set; } = string.Empty; public string? Uri { get; set; } }
+    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
+    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
 }
