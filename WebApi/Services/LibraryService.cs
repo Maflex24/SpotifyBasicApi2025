@@ -851,9 +851,7 @@ namespace SpotifyBasicApi2025.Services
             if (page <= 0) page = 1;
             if (pageSize <= 0) pageSize = 50;
 
-            var pageItems = await query.Skip((page - 1) * pageSize).Take(pageSize)
-                .Select(p => new { p.Id, p.Name, p.TotalTracks, p.Images })
-                .ToListAsync();
+            var pageItems = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
 
             // Dołącz przypisany folder z tabeli assign
             var pageIds = pageItems.Select(x => x.Id).ToList();
@@ -870,14 +868,7 @@ namespace SpotifyBasicApi2025.Services
                 assigns = new Dictionary<string, long?>();
             }
 
-            var items = pageItems.Select(p => new
-            {
-                p.Id,
-                p.Name,
-                p.TotalTracks,
-                p.Images,
-                FolderId = assigns.GetValueOrDefault(p.Id)
-            }).ToList();
+            var items = pageItems.Select(p => p.MapToPlaylistModel(assigns.GetValueOrDefault(p.Id))).ToList();
 
             return new { total, page, pageSize, items };
         }

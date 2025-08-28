@@ -444,5 +444,23 @@ namespace SpotifyBasicApi2025.Models.Extensions
 		}
 
 		#endregion Tracks
+
+		#region Playlists
+
+		public static PlaylistModel MapToPlaylistModel(this SpPlaylist entity, long? folderId = null)
+		{
+			var images = ImageMappingExtensions.ParseSpotifyImages(entity.Images);
+
+			return new PlaylistModel
+			{
+				Id = entity.Id,
+				Name = entity.Name,
+				TotalTracks = entity.TotalTracks,
+				Images = images,
+				FolderId = folderId
+			};
+		}
+
+		#endregion Playlists
     }
 }

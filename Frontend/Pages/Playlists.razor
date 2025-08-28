@@ -1,9 +1,12 @@
 @page "/playlists"
 @using System.Net.Http.Json
 @using System.Text.Json
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Routing
 @inject IJSRuntime JS
 @inject HttpClient Http
 @inject NavigationManager Nav
+@implements IAsyncDisposable
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -22,14 +25,84 @@
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
+    <div class="mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-2" @onclick="ToggleFoldersSection" style="cursor:pointer;">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi @(foldersExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                <h6 class="mb-0">Foldery (zwiń/rozwiń)</h6>
+            </div>
+            <button class="btn btn-sm btn-outline-light" @onclick:stopPropagation="true" @onclick="OpenCreateFolder">+ Nowy folder</button>
+        </div>
+
+        @if (foldersExpanded)
+        {
+            <div>
+                @if (folders.Count == 0)
+                {
+                    <div class="text-secondary">Brak folderów</div>
+                }
+                else
+                {
+                    <ul>
+                        @foreach (var f in folders)
+                        {
+                            <li>
+                                @f.Name
+                                <button class="btn btn-sm btn-outline-light ms-2" @onclick="() => OpenEditFolder(f)">Edytuj</button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            @if (showEditFolderPanel && editingFolder != null)
+            {
+                <div class="mt-3 p-2" style="background:#0f1117;border:1px solid #1f2937;border-radius:6px;max-width:520px;">
+                    <div class="mb-2"><strong>Edycja folderu</strong></div>
+                    <div class="mb-2 d-flex gap-2 align-items-center">
+                        <label class="form-label mb-0" style="width:120px;">Nazwa</label>
+                        <input class="form-control form-control-sm input-dark" style="max-width:360px;" @bind="editingName" />
+                    </div>
+                    <div class="mb-2 d-flex gap-2 align-items-center">
+                        <label class="form-label mb-0" style="width:120px;">Rodzic</label>
+                        <select class="form-select form-select-sm select-dark" style="max-width:360px;" @bind="editingParentId">
+                            <option value="">— brak —</option>
+                            @foreach (var opt in GetFolderOptions())
+                            {
+                                if (opt.Id == editingFolder.Id)
+                                    continue;
+
+                                <option value="@opt.Id">@opt.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-light" @onclick="SaveEditFolder">Zapisz</button>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEditFolder">Anuluj</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3" id="playlists-container">
         @foreach (var p in playlists)
         {
             <div class="col">
                 <div class="card bg-dark text-light h-100">
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="card-title mb-1">@p.Name</h6>
+                            <div class="d-flex align-items-center gap-2">
+
+                                @if (p.Images != null && p.Images.Count > 0)
+                                {
+                                    <div class="cover-container">
+                                        <img class="cover-img-56" src="@GetBestImageUrl(p.Images)" alt="okładka" />
+                                        <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayPlaylist(p.Id)">▶</button>
+                                    </div>
+                                }
+                                <h6 class="card-title mb-1">@p.Name</h6>
+                            </div>
                             <span class="badge bg-secondary">@p.TotalTracks</span>
                         </div>
                         @if (p.FolderId.HasValue)
@@ -47,58 +120,7 @@
         }
     </div>
 
-    <div class="mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">Foldery</h6>
-            <button class="btn btn-sm btn-outline-light" @onclick="OpenCreateFolder">+ Nowy folder</button>
-        </div>
-        <div>
-            @if (folders.Count == 0)
-            {
-                <div class="text-secondary">Brak folderów</div>
-            }
-            else
-            {
-                <ul>
-                    @foreach (var f in folders)
-                    {
-                        <li>
-                            @f.Name
-                            <button class="btn btn-sm btn-outline-light ms-2" @onclick="() => OpenEditFolder(f)">Edytuj</button>
-                        </li>
-                    }
-                </ul>
-            }
-        </div>
-
-        @if (showEditFolderPanel && editingFolder != null)
-        {
-            <div class="mt-3 p-2" style="background:#0f1117;border:1px solid #1f2937;border-radius:6px;max-width:520px;">
-                <div class="mb-2"><strong>Edycja folderu</strong></div>
-                <div class="mb-2 d-flex gap-2 align-items-center">
-                    <label class="form-label mb-0" style="width:120px;">Nazwa</label>
-                    <input class="form-control form-control-sm input-dark" style="max-width:360px;" @bind="editingName" />
-                </div>
-                <div class="mb-2 d-flex gap-2 align-items-center">
-                    <label class="form-label mb-0" style="width:120px;">Rodzic</label>
-                    <select class="form-select form-select-sm select-dark" style="max-width:360px;" @bind="editingParentId">
-                        <option value="">— brak —</option>
-                        @foreach (var opt in GetFolderOptions())
-                        {
-                            if (opt.Id == editingFolder.Id)
-                                continue;
-
-                            <option value="@opt.Id">@opt.Label</option>
-                        }
-                    </select>
-                </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-light" @onclick="SaveEditFolder">Zapisz</button>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEditFolder">Anuluj</button>
-                </div>
-            </div>
-        }
-    </div>
+    <div id="infinite-sentinel" @ref="sentinelRef" style="height: 1px;"></div>
 </div>
 
 @if (showAssignPanel && assigningPlaylistId != null)
@@ -127,6 +149,14 @@
 
 @code {
     private const string StoreKey = "playlists.filters.v1";
+    private int currentPage = 1;
+    private const int PageSize = 200;
+    private bool isLoading = false;
+    private bool hasMore = true;
+    private DotNetObjectReference<Playlists>? dotNetRef;
+    private ElementReference sentinelRef;
+    private bool foldersExpanded = true;
+    private long? lastSelectedFolderId;
 
     private string sortKeyField = "name";
     private string sortOrderField = "asc";
@@ -180,6 +210,7 @@
     private bool showAssignPanel = false;
     private string? assigningPlaylistId;
     private long? assigningFolderId;
+    private long? previousAssigningFolderId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -191,15 +222,28 @@
             var fid = query["folderId"];
             if (!string.IsNullOrWhiteSpace(fid) && long.TryParse(fid, out var f))
                 selectedFolderId = f;
+            else
+                selectedFolderId = null;
         }
         catch { }
         await LoadFromStore();
+        playlists.Clear();
+        currentPage = 1;
+        hasMore = true;
         await LoadPlaylists();
         await LoadFolders();
+
+        lastSelectedFolderId = selectedFolderId;
+        Nav.LocationChanged += OnLocationChanged;
     }
 
     private async Task LoadPlaylists()
     {
+        if (isLoading || !hasMore)
+            return;
+
+        isLoading = true;
+
         var query = new List<string>();
         query.Add($"sort={sortKey}");
         query.Add($"order={sortOrder}");
@@ -209,13 +253,22 @@
 
         if (selectedFolderId.HasValue)
             query.Add($"folderId={selectedFolderId.Value}");
-        query.Add("page=1");
-        query.Add("pageSize=200");
+        query.Add($"page={currentPage}");
+        query.Add($"pageSize={PageSize}");
 
         var res = await Http.GetAsync($"api/library/playlists?{string.Join('&', query)}");
-        if (!res.IsSuccessStatusCode) return;
+        
+        if (!res.IsSuccessStatusCode) { isLoading = false; return; }
         var payload = await res.Content.ReadFromJsonAsync<PlaylistsResponse>();
-        playlists = payload?.items ?? new List<PlaylistItem>();
+        var items = payload?.items ?? new List<PlaylistItem>();
+
+        if (items.Count < PageSize)
+            hasMore = false;
+
+        playlists.AddRange(items);
+        currentPage++;
+
+        isLoading = false;
     }
 
     private async Task LoadFolders()
@@ -223,6 +276,61 @@
         var res = await Http.GetAsync("api/playlist-folders");
         if (!res.IsSuccessStatusCode) return;
         folders = await res.Content.ReadFromJsonAsync<List<FolderItem>>() ?? new List<FolderItem>();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("infiniteScroll.observeWindow", sentinelRef, dotNetRef);
+            }
+            catch { }
+        }
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        try
+        {
+            var uri = new Uri(e.Location);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            long? newFolderId = null;
+            var fid = query["folderId"];
+            if (!string.IsNullOrWhiteSpace(fid) && long.TryParse(fid, out var f))
+                newFolderId = f;
+
+            if (newFolderId != selectedFolderId)
+            {
+                selectedFolderId = newFolderId;
+                playlists.Clear();
+                currentPage = 1;
+                hasMore = true;
+
+                await InvokeAsync(async () =>
+                {
+                    await LoadPlaylists();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnBottomReached()
+    {
+        await LoadPlaylists();
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("infiniteScroll.disconnect"); } catch { }
+        Nav.LocationChanged -= OnLocationChanged;
+        dotNetRef?.Dispose();
     }
 
     private string GetFolderName(long id)
@@ -237,7 +345,7 @@
         await CreateFolder(name, null);
     }
 
-    private async Task OpenEditFolder(FolderItem f)
+    private void OpenEditFolder(FolderItem f)
     {
         editingFolder = f;
         editingName = f.Name;
@@ -259,11 +367,12 @@
         if (res.IsSuccessStatusCode) await LoadFolders();
     }
 
-    private async Task OpenAssignFolder(string playlistId)
+    private void OpenAssignFolder(string playlistId)
     {
         assigningPlaylistId = playlistId;
         assigningFolderId = null;
         showAssignPanel = true;
+        previousAssigningFolderId = playlists.FirstOrDefault(x => x.Id == playlistId)?.FolderId;
     }
 
     private async Task SaveEditFolder()
@@ -362,10 +471,25 @@
 
         var res = await Http.PutAsJsonAsync($"api/library/playlists/{assigningPlaylistId}/folder-assign", new { FolderId = assigningFolderId });
         if (res.IsSuccessStatusCode)
+        {
+            playlists.Clear();
+            currentPage = 1;
+            hasMore = true;
+
             await LoadPlaylists();
+
+            try
+            {
+                await JS.InvokeVoidAsync("folderSync.notify", previousAssigningFolderId);
+                await JS.InvokeVoidAsync("folderSync.notify", assigningFolderId);
+            }
+            catch { }
+        }
 
         showAssignPanel = false;
         assigningPlaylistId = null;
+        previousAssigningFolderId = null;
+        assigningFolderId = null;
     }
 
     private async Task ConfirmDelete(string playlistId, string name)
@@ -377,6 +501,10 @@
         var res = await Http.DeleteAsync($"api/playlists/{Uri.EscapeDataString(playlistId)}");
         if (res.IsSuccessStatusCode)
         {
+            playlists.Clear();
+            currentPage = 1;
+            hasMore = true;
+
             await LoadPlaylists();
         }
     }
@@ -387,10 +515,59 @@
         assigningPlaylistId = null;
     }
 
-    private string ApiBase => string.Empty; // HttpClient.BaseAddress ustawione w Program.cs z appsettings
+    private void ToggleFoldersSection()
+    {
+        foldersExpanded = !foldersExpanded;
+    }
+
+    private async Task PlayPlaylist(string playlistId)
+    {
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(playlistId)}/tracks?page=1&pageSize=500");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
+        var uris = payload?.items?.Where(t => !string.IsNullOrWhiteSpace(t.Uri)).Select(t => t.Uri!).ToList() ?? new List<string>();
+
+        if (uris.Count == 0)
+            return;
+
+        var body = new { uris = uris };
+        var playRes = await Http.PutAsJsonAsync("api/player/play", body);
+
+        if (!playRes.IsSuccessStatusCode)
+        {
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var first = devices?.Devices?.FirstOrDefault();
+            if (first != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+    }
 
     private sealed class PlaylistsResponse { public int total { get; set; } public List<PlaylistItem> items { get; set; } = new(); }
-    private sealed class PlaylistItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public int TotalTracks { get; set; } public string? Images { get; set; } public long? FolderId { get; set; } }
+    private sealed class PlaylistItem { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public int TotalTracks { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public long? FolderId { get; set; } }
+    private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
+    private sealed class TracksResponse { public int total { get; set; } public List<PlaylistTrackItem> items { get; set; } = new(); }
+    private sealed class PlaylistTrackItem { public string Id { get; set; } = string.Empty; public string? Uri { get; set; } }
+    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
+    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
+
+    private string? GetBestImageUrl(List<SpotifyImage> images)
+    {
+        if (images == null || images.Count == 0)
+            return null;
+
+        var ordered = images
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .OrderBy(i => i.Width ?? int.MaxValue)
+            .ThenBy(i => i.Height ?? int.MaxValue)
+            .ToList();
+
+        return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
+    }
     private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
     private sealed class FolderOption { public long Id { get; set; } public string Label { get; set; } = string.Empty; }
     private sealed class FiltersState { public string? SortKey { get; set; } public string? SortOrder { get; set; } public string? Search { get; set; } public long? SelectedFolderId { get; set; } }
