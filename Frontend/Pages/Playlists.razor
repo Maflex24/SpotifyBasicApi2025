@@ -437,6 +437,10 @@
         var res = await Http.DeleteAsync($"api/playlists/{Uri.EscapeDataString(playlistId)}");
         if (res.IsSuccessStatusCode)
         {
+            playlists.Clear();
+            currentPage = 1;
+            hasMore = true;
+
             await LoadPlaylists();
         }
     }
