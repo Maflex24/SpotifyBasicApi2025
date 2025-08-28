@@ -55,10 +55,12 @@
 
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private List<FolderItem> playlistFolders = new();
     private List<PlaylistNavItem> folderPlaylists = new();
     private bool foldersLoaded = false;
+    private HashSet<long> expandedFolderIds = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -91,6 +93,9 @@
             builder.OpenElement(seq++, "div");
             builder.AddAttribute(seq++, "style", $"padding-left:{depth * 12}px");
             builder.OpenElement(seq++, "details");
+            if (expandedFolderIds.Contains(f.Id))
+                builder.AddAttribute(seq++, "open", true);
+            builder.AddAttribute(seq++, "ontoggle", EventCallback.Factory.Create(this, () => OnFolderToggle(f.Id)));
             builder.OpenElement(seq++, "summary");
             builder.AddContent(seq++, f.Name);
             builder.CloseElement();
@@ -115,6 +120,64 @@
             builder.CloseElement(); // div
         }
     };
+
+    private async Task OnFolderToggle(long folderId)
+    {
+        if (expandedFolderIds.Contains(folderId))
+        {
+            expandedFolderIds.Remove(folderId);
+            return;
+        }
+
+        expandedFolderIds.Add(folderId);
+        await RefreshPlaylistsForFolderAsync(folderId);
+        StateHasChanged();
+    }
+
+    private async Task RefreshPlaylistsForFolderAsync(long folderId)
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<PlaylistsResponse>("api/library/playlists?page=1&pageSize=500");
+            var list = (res?.items ?? new List<PlaylistNavItem>()).Where(p => p.FolderId == folderId).OrderBy(p => p.Name).ToList();
+
+            // usuń stare wpisy tego folderu i dodaj aktualne
+            folderPlaylists = folderPlaylists.Where(p => p.FolderId != folderId).ToList();
+            folderPlaylists.AddRange(list.Select(p => new PlaylistNavItem { Id = p.Id, Name = p.Name, FolderId = folderId }));
+        }
+        catch { }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("folderSync.register", selfRef, nameof(OnFolderChanged));
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnFolderChanged(long? folderId)
+    {
+        if (folderId.HasValue)
+        {
+            if (expandedFolderIds.Contains(folderId.Value))
+            {
+                await RefreshPlaylistsForFolderAsync(folderId.Value);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        else
+        {
+            // odśwież wszystkie otwarte foldery jeśli brak wskazania
+            foreach (var fid in expandedFolderIds.ToList())
+                await RefreshPlaylistsForFolderAsync(fid);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private sealed class FolderItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long? ParentId { get; set; } }
     private sealed class PlaylistsResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<PlaylistNavItem> items { get; set; } = new(); }

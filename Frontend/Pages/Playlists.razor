@@ -210,6 +210,7 @@
     private bool showAssignPanel = false;
     private string? assigningPlaylistId;
     private long? assigningFolderId;
+    private long? previousAssigningFolderId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -371,6 +372,7 @@
         assigningPlaylistId = playlistId;
         assigningFolderId = null;
         showAssignPanel = true;
+        previousAssigningFolderId = playlists.FirstOrDefault(x => x.Id == playlistId)?.FolderId;
     }
 
     private async Task SaveEditFolder()
@@ -475,10 +477,19 @@
             hasMore = true;
 
             await LoadPlaylists();
+
+            try
+            {
+                await JS.InvokeVoidAsync("folderSync.notify", previousAssigningFolderId);
+                await JS.InvokeVoidAsync("folderSync.notify", assigningFolderId);
+            }
+            catch { }
         }
 
         showAssignPanel = false;
         assigningPlaylistId = null;
+        previousAssigningFolderId = null;
+        assigningFolderId = null;
     }
 
     private async Task ConfirmDelete(string playlistId, string name)
