@@ -19,6 +19,24 @@ window.infiniteScroll = (function () {
 		observer.observe(sentinelEl);
 	}
 
+	function observeWindow(sentinelEl, dotNetRef) {
+		if (!sentinelEl || !dotNetRef)
+			return;
+
+		if (observer)
+			observer.disconnect();
+
+		observer = new IntersectionObserver((entries) => {
+			for (const entry of entries) {
+				if (entry.isIntersecting) {
+					dotNetRef.invokeMethodAsync('OnBottomReached');
+				}
+			}
+		}, { root: null, rootMargin: '0px', threshold: 0.1 });
+
+		observer.observe(sentinelEl);
+	}
+
 	function disconnect() {
 		if (observer) {
 			observer.disconnect();
@@ -26,7 +44,7 @@ window.infiniteScroll = (function () {
 		}
 	}
 
-	return { observe, disconnect };
+	return { observe, observeWindow, disconnect };
 })();
 
 
