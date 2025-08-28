@@ -430,7 +430,13 @@
 
         var res = await Http.PutAsJsonAsync($"api/library/playlists/{assigningPlaylistId}/folder-assign", new { FolderId = assigningFolderId });
         if (res.IsSuccessStatusCode)
+        {
+            playlists.Clear();
+            currentPage = 1;
+            hasMore = true;
+
             await LoadPlaylists();
+        }
 
         showAssignPanel = false;
         assigningPlaylistId = null;
