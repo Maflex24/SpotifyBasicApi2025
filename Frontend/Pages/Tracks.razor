@@ -12,6 +12,8 @@
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
                 <option value="name">Nazwa</option>
+                <option value="album">Album</option>
+                <option value="artists">Wykonawcy</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
                 <option value="year">Rok</option>
@@ -83,10 +85,10 @@
             <thead>
                 <tr>
                     <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
-                    <th style="width:30%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByName">Nazwa @GetSortArrow("name")</th>
-                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByArtists">Wykonawcy @GetSortArrow("artists")</th>
-                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick="OnSortByAlbum">Album @GetSortArrow("album")</th>
-                    <th style="width:6%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick="OnSortByYear">Rok @GetSortArrow("year")</th>
+                    <th style="width:30%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("name"))'>Nazwa @GetSortArrow("name")</th>
+                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("artists"))'>Wykonawcy @GetSortArrow("artists")</th>
+                    <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("album"))'>Album @GetSortArrow("album")</th>
+                    <th style="width:6%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick='@(() => OnServerSortClick("year"))'>Rok @GetSortArrow("year")</th>
                     <th style="width:26%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; white-space:normal;">Tagi</th>
                     <th style="width:90px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
                     <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
@@ -148,8 +150,33 @@
 </div>
 
 @code {
-    private string sortKey = "name";
-    private string sortOrder = "asc";
+    private string _sortKey = "name";
+    private string sortKey
+    {
+        get => _sortKey;
+        set
+        {
+            if (_sortKey == value)
+                return;
+
+            _sortKey = value;
+            _ = LoadTracks(true);
+        }
+    }
+
+    private string _sortOrder = "asc";
+    private string sortOrder
+    {
+        get => _sortOrder;
+        set
+        {
+            if (_sortOrder == value)
+                return;
+
+            _sortOrder = value;
+            _ = LoadTracks(true);
+        }
+    }
     private string? selectedTagFilter;
     private string? selectedTagSort;
     private string? selectedArtistId;
@@ -381,115 +408,33 @@
 
             return true;
         }).ToList();
-
-        ApplyClientSort();
     }
 
-    private string clientSortColumn = "name";
-    private bool clientSortAsc = true;
+    
 
-    private void OnSortByName() => OnClientSort("name");
-    private void OnSortByArtists() => OnClientSort("artists");
-    private void OnSortByAlbum() => OnClientSort("album");
-    private void OnSortByYear() => OnClientSort("year");
-
-    private void OnClientSort(string column)
+    private async Task OnServerSortClick(string column)
     {
-        if (clientSortColumn == column)
+        if (sortKey == column)
         {
-            clientSortAsc = !clientSortAsc;
+            sortOrder = sortOrder == "asc" ? "desc" : "asc";
 
-            ApplyClientSort();
+            await LoadTracks(true);
 
             return;
         }
 
-        clientSortColumn = column;
-        clientSortAsc = true;
+        sortKey = column;
+        sortOrder = "asc";
 
-        ApplyClientSort();
-    }
-
-    private void ApplyClientSort()
-    {
-        if (filteredTracks == null || filteredTracks.Count == 0)
-
-            return;
-
-        string ArtistsKey(Track t) => string.Join(' ', t.Artists?.Select(a => a.Name) ?? new List<string>()).ToLowerInvariant();
-        string AlbumKey(Track t) => (t.AlbumName ?? string.Empty).ToLowerInvariant();
-        string NameKey(Track t) => (t.Name ?? string.Empty).ToLowerInvariant();
-        int YearKey(Track t) => t.ReleaseYear ?? -1;
-
-        IOrderedEnumerable<Track> ordered;
-
-        if (clientSortColumn == "year")
-        {
-            ordered = clientSortAsc
-                ? filteredTracks.OrderBy(YearKey)
-                : filteredTracks.OrderByDescending(YearKey);
-
-            filteredTracks = ordered
-                .ThenBy(ArtistsKey)
-                .ThenBy(AlbumKey)
-                .ThenBy(t => t.TrackNumber)
-                .ThenBy(NameKey)
-                .ToList();
-            
-            return;
-        }
-
-        if (clientSortColumn == "artists")
-        {
-            ordered = clientSortAsc
-                ? filteredTracks.OrderBy(ArtistsKey)
-                : filteredTracks.OrderByDescending(ArtistsKey);
-
-            filteredTracks = ordered
-                .ThenBy(AlbumKey)
-                .ThenBy(t => t.TrackNumber)
-                .ThenBy(NameKey)
-                .ThenBy(YearKey)
-                .ToList();
-            
-            return;
-        }
-
-        if (clientSortColumn == "album")
-        {
-            ordered = clientSortAsc
-                ? filteredTracks.OrderBy(AlbumKey)
-                : filteredTracks.OrderByDescending(AlbumKey);
-
-            filteredTracks = ordered
-                .ThenBy(t => t.TrackNumber)
-                .ThenBy(ArtistsKey)
-                .ThenBy(NameKey)
-                .ThenBy(YearKey)
-                .ToList();
-            
-            return;
-        }
-
-        // default: name
-        ordered = clientSortAsc
-            ? filteredTracks.OrderBy(NameKey)
-            : filteredTracks.OrderByDescending(NameKey);
-
-        filteredTracks = ordered
-            .ThenBy(ArtistsKey)
-            .ThenBy(t => t.TrackNumber)
-            .ThenBy(AlbumKey)
-            .ThenBy(YearKey)
-            .ToList();
+        await LoadTracks(true);
     }
 
     private string GetSortArrow(string column)
     {
-        if (clientSortColumn != column)
+        if (sortKey != column)
             return string.Empty;
 
-        return clientSortAsc ? " ↑" : " ↓";
+        return string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase) ? " ↑" : " ↓";
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -715,7 +660,6 @@
             await LoadTracks(reset: false);
 
         ApplyLocalFilter();
-        ApplyClientSort();
 
         var uris = filteredTracks
             .Where(t => !string.IsNullOrWhiteSpace(t.Uri))
