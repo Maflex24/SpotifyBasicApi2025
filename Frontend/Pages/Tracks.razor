@@ -89,7 +89,7 @@
                     <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("artists"))'>Wykonawcy @GetSortArrow("artists")</th>
                     <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("album"))'>Album @GetSortArrow("album")</th>
                     <th style="width:6%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer;" @onclick='@(() => OnServerSortClick("year"))'>Rok @GetSortArrow("year")</th>
-                    <th style="width:26%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; white-space:normal;">Tagi</th>
+                    <th style="width:26%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; white-space:normal; cursor:pointer;" @onclick='@(() => OnServerSortClick("tags"))'>Tagi @GetSortArrow("tags")</th>
                     <th style="width:90px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;">Tagowanie</th>
                     <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
                 </tr>

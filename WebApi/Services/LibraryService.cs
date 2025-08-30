@@ -551,6 +551,13 @@ namespace SpotifyBasicApi2025.Services
                             .Select(ta => ta.Artist.Name)
                             .OrderBy(n => n)
                             .FirstOrDefault()),
+                    "tags" => sortDesc
+                        ? query.OrderByDescending(x => context.LibTagAssigns
+                            .Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == x.Id)
+                            .Count())
+                        : query.OrderBy(x => context.LibTagAssigns
+                            .Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == x.Id)
+                            .Count()),
                     _ => sortDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
                 };
             }
