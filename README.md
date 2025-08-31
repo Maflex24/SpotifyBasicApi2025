@@ -183,6 +183,8 @@ zcat ./backups/mysql/spotifybasic-*.sql.gz | head -n 20
 scp <uzytkownik>@<twoj-vps>:/sciezka/do/projektu/backups/mysql/spotifybasic-YYYY-MM-DD_HHMMSS.sql.gz .
 ```
 
+Najłatwiej zrobić to programem `WinSCP`
+
 Uwagi:
 - Polecenia zakładają, że pracujesz w katalogu projektu (obok pliku `docker-compose.yml`).
 - Jeśli nie pamiętasz nazwy kontenera, sprawdź: `docker ps --format '{{.Names}}' | grep spotifybasic-db`.
