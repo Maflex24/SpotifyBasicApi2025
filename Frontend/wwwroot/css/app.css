@@ -192,6 +192,11 @@ code {
     background: #dc3545; /* red */
 }
 
+.tag-count-info {
+    color: #30fd63;
+    font-weight: bold;
+}
+
 /* Tag search select */
 .tag-search-select {
     position: relative;
