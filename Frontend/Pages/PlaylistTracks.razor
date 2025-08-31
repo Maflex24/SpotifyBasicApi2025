@@ -16,6 +16,22 @@
         </div>
     </div>
 
+    <div class="d-flex justify-content-start align-items-center mb-3 gap-2 flex-wrap">
+        <span class="text-muted me-2">Zapisane filtry:</span>
+        <select class="form-select form-select-sm w-auto select-dark" @bind="selectedSavedFilterId">
+            <option value="">Wybierz filtr...</option>
+            @foreach (var f in savedFilters)
+            {
+                <option value="@f.Id.ToString()">@f.Name</option>
+            }
+        </select>
+        <input class="form-control form-control-sm input-dark" style="width: 160px;" placeholder="Nazwa filtra" @bind="newFilterName" />
+        <button class="btn btn-sm btn-outline-primary" title="Zapisz jako nowy" @onclick="SaveCurrentFilter">Zapisz</button>
+        <button class="btn btn-sm btn-outline-light" title="Zastosuj wybrany" @onclick="ApplySelectedFilter">Wczytaj</button>
+        <button class="btn btn-sm btn-outline-warning" title="Zmień nazwę / nadpisz" @onclick="RenameSelectedFilter">Zmień nazwę</button>
+        <button class="btn btn-sm btn-outline-danger" title="Usuń wybrany" @onclick="DeleteSelectedFilter">Usuń</button>
+    </div>
+
     @if (showTagFilters)
     {
         <div class="d-flex align-items-start gap-3 w-100 mb-2">
@@ -25,7 +41,7 @@
                     {
                         var state = GetTagState(t.Id);
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
                     }
 
                     <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
@@ -110,6 +126,11 @@
 </div>
 
 @code {
+    private List<SavedFilterItem> savedFilters = new();
+    private string? selectedSavedFilterId;
+    private string? newFilterName;
+    private sealed class SavedFilterItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public string Scope { get; set; } = string.Empty; public string? ContextId { get; set; } public string PayloadJson { get; set; } = string.Empty; }
+
     [Parameter] public string PlaylistId { get; set; } = string.Empty;
     private string? lastPlaylistId;
     private string? playlistName;
@@ -141,12 +162,15 @@
 
     private string clientSortColumn = "name";
     private bool clientSortAsc = true;
+    private bool showTagFilters = true;
+    private Dictionary<long, int> tagCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAvailableTags();
         await LoadTracks();
         await LoadPlaylistName();
+        await LoadSavedFilters();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -156,6 +180,7 @@
             lastPlaylistId = PlaylistId;
             await LoadTracks();
             await LoadPlaylistName();
+            await LoadSavedFilters();
         }
     }
 
@@ -175,6 +200,13 @@
         await LoadTracks();
     }
 
+    private async Task LoadSavedFilters()
+    {
+        var res = await Http.GetAsync($"api/library/filters?scope=playlist&contextId={Uri.EscapeDataString(PlaylistId)}");
+        if (!res.IsSuccessStatusCode) return;
+        savedFilters = await res.Content.ReadFromJsonAsync<List<SavedFilterItem>>() ?? new List<SavedFilterItem>();
+    }
+
     private async Task LoadAvailableTags()
     {
         var res = await Http.GetAsync("api/tags");
@@ -184,6 +216,7 @@
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForTrack).ToList();
         trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        await LoadPlaylistTagCounts();
     }
 
     private async Task LoadTracks()
@@ -198,6 +231,7 @@
 
         ApplyLocalFilter();
         ApplyClientSort();
+        await LoadPlaylistTagCounts();
     }
 
     private async Task LoadPlaylistName()
@@ -501,10 +535,89 @@
         }
     }
 
-    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
-    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
-    private bool showTagFilters = true;
+    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
+    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
     private void ToggleTagFilters() { showTagFilters = !showTagFilters; }
+
+    private sealed class PlaylistState
+    {
+        public string? localSearch { get; set; }
+        public string? includeMode { get; set; }
+        public string? excludeMode { get; set; }
+        public long[]? includeTagIds { get; set; }
+        public long[]? excludeTagIds { get; set; }
+        public bool? showTagFilters { get; set; }
+    }
+
+    private PlaylistState BuildCurrentState() => new PlaylistState
+    {
+        localSearch = localSearch,
+        includeMode = includeMode,
+        excludeMode = excludeMode,
+        includeTagIds = includeTagIds.ToArray(),
+        excludeTagIds = excludeTagIds.ToArray(),
+        showTagFilters = showTagFilters
+    };
+
+    private async Task SaveCurrentFilter()
+    {
+        if (string.IsNullOrWhiteSpace(newFilterName)) return;
+        var payloadJson = System.Text.Json.JsonSerializer.Serialize(BuildCurrentState());
+        var body = new { Scope = "playlist", ContextId = PlaylistId, Name = newFilterName!, PayloadJson = payloadJson };
+        var res = await Http.PostAsJsonAsync("api/library/filters", body);
+        if (res.IsSuccessStatusCode)
+        {
+            newFilterName = string.Empty;
+            await LoadSavedFilters();
+        }
+    }
+
+    private async Task ApplySelectedFilter()
+    {
+        if (string.IsNullOrWhiteSpace(selectedSavedFilterId)) return;
+        if (!long.TryParse(selectedSavedFilterId, out var id)) return;
+        var item = savedFilters.FirstOrDefault(x => x.Id == id);
+        if (item == null || string.IsNullOrWhiteSpace(item.PayloadJson)) return;
+        var state = System.Text.Json.JsonSerializer.Deserialize<PlaylistState>(item.PayloadJson);
+        if (state == null) return;
+
+        localSearch = state.localSearch;
+        includeMode = state.includeMode ?? includeMode;
+        excludeMode = state.excludeMode ?? excludeMode;
+        includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
+        excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
+        showTagFilters = state.showTagFilters ?? showTagFilters;
+
+        ApplyLocalFilter();
+        ApplyClientSort();
+        await LoadPlaylistTagCounts();
+    }
+
+    private async Task RenameSelectedFilter()
+    {
+        if (string.IsNullOrWhiteSpace(selectedSavedFilterId)) return;
+        if (!long.TryParse(selectedSavedFilterId, out var id)) return;
+        if (string.IsNullOrWhiteSpace(newFilterName)) return;
+        var payloadJson = System.Text.Json.JsonSerializer.Serialize(BuildCurrentState());
+        var body = new { Scope = "playlist", ContextId = PlaylistId, Name = newFilterName!, PayloadJson = payloadJson };
+        var res = await Http.PutAsJsonAsync($"api/library/filters/{id}", body);
+        if (res.IsSuccessStatusCode)
+        {
+            await LoadSavedFilters();
+        }
+    }
+
+    private async Task DeleteSelectedFilter()
+    {
+        if (string.IsNullOrWhiteSpace(selectedSavedFilterId)) return;
+        if (!long.TryParse(selectedSavedFilterId, out var id)) return;
+        var res = await Http.DeleteAsync($"api/library/filters/{id}");
+        if (res.IsSuccessStatusCode)
+        {
+            selectedSavedFilterId = null;
+            await LoadSavedFilters();
+        }
+    }
 
     private int GetTagState(long tagId)
     {
@@ -516,11 +629,12 @@
     private void CycleTagState(long tagId)
     {
         var state = GetTagState(tagId);
-        if (state == 0) { includeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); return; }
-        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); return; }
+        if (state == 0) { includeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); _ = LoadPlaylistTagCounts(); return; }
+        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); _ = LoadPlaylistTagCounts(); return; }
         excludeTagIds.Remove(tagId);
         ApplyLocalFilter();
         ApplyClientSort();
+        _ = LoadPlaylistTagCounts();
     }
 
     private async Task PlayTrack(string? uri)
@@ -590,6 +704,38 @@
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class PlaylistsListResponse { public List<PlaylistSummary> items { get; set; } = new(); }
     private sealed class PlaylistSummary { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+
+    private sealed class TagCountItem { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
+
+    private async Task LoadPlaylistTagCounts()
+    {
+        var query = new List<string>();
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
+
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tags/counts?{string.Join('&', query)}");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var items = await res.Content.ReadFromJsonAsync<List<TagCountItem>>() ?? new List<TagCountItem>();
+        tagCounts = items.ToDictionary(x => x.id, x => x.count);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private int GetTagCount(long tagId)
+    {
+        return tagCounts.TryGetValue(tagId, out var c) ? c : 0;
+    }
 }
 
 

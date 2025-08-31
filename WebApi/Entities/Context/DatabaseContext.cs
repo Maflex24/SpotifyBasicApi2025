@@ -36,6 +36,7 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<LibAlbumUserAssign> LibAlbumUserAssigns { get; set; }
 
         public DbSet<LibTrackUserAssign> LibTrackUserAssigns { get; set; }
+        public DbSet<LibSavedFilter> LibSavedFilters { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -318,6 +319,10 @@ namespace SpotifyBasicApi2025.Entities.Context
             // Unikalny indeks - jeden utwór na użytkownika
             modelBuilder.Entity<LibTrackUserAssign>()
                 .HasIndex(tua => new { tua.UserId, tua.TrackId })
+                .IsUnique();
+
+            modelBuilder.Entity<LibSavedFilter>()
+                .HasIndex(f => new { f.UserId, f.Scope, f.ContextId, f.Name })
                 .IsUnique();
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
