@@ -158,6 +158,51 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("LibPlaylistFolderAssigns");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibSavedFilter", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContextId")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Scope", "ContextId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("LibSavedFilters");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTag", b =>
                 {
                     b.Property<long>("Id")

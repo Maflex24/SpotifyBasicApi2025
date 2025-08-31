@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
+
+using SpotifyBasicApi2025.Entities;
+
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
 
@@ -12,6 +15,83 @@ namespace SpotifyBasicApi2025.Services
         private readonly UserService userService;
         private readonly SpotifyRequestService spotifyRequestService;
         private readonly SpotifyApiService spotifyApiService;
+
+        public DbSet<LibSavedFilter> SavedFilters => context.Set<LibSavedFilter>();
+
+        // Saved filters API
+        public async Task<List<object>> GetSavedFiltersAsync(string scope, string? contextId = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var q = context.LibSavedFilters
+                .AsNoTracking()
+                .Where(f => f.UserId == userId && f.Scope == scope);
+
+            if (!string.IsNullOrWhiteSpace(contextId))
+                q = q.Where(f => f.ContextId == contextId);
+
+            var items = await q
+                .OrderBy(f => f.Name)
+                .Select(f => new { f.Id, f.Name, f.Scope, f.ContextId, f.PayloadJson })
+                .ToListAsync();
+
+            return items.Cast<object>().ToList();
+        }
+
+        public async Task<long> CreateSavedFilterAsync(string scope, string? contextId, string name, string payloadJson)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var entity = new LibSavedFilter
+            {
+                UserId = userId,
+                Scope = scope,
+                ContextId = contextId,
+                Name = name,
+                PayloadJson = payloadJson,
+                CreatedAtUtc = DateTime.UtcNow,
+                UpdatedAtUtc = DateTime.UtcNow
+            };
+
+            context.LibSavedFilters.Add(entity);
+            await context.SaveChangesAsync();
+
+            return entity.Id;
+        }
+
+        public async Task UpdateSavedFilterAsync(long id, string name, string payloadJson)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var entity = await context.LibSavedFilters.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+            if (entity == null)
+                throw new InvalidOperationException("Filtr nie istnieje");
+
+            entity.Name = name;
+            entity.PayloadJson = payloadJson;
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        public async Task DeleteSavedFilterAsync(long id)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var entity = await context.LibSavedFilters.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+            if (entity == null)
+                return;
+
+            context.LibSavedFilters.Remove(entity);
+            await context.SaveChangesAsync();
+        }
 
         public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService, SpotifyApiService spotifyApiService)
         {

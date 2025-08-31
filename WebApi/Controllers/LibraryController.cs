@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SpotifyBasicApi2025.Services;
+using SpotifyBasicApi2025.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace SpotifyBasicApi2025.Controllers
 {
@@ -9,11 +11,61 @@ namespace SpotifyBasicApi2025.Controllers
     {
         private readonly LibraryService libraryService;
         private readonly SpotifyApiService spotifyApiService;
+        
 
         public LibraryController(LibraryService libraryService, SpotifyApiService spotifyApiService)
         {
             this.libraryService = libraryService;
             this.spotifyApiService = spotifyApiService;
+        }
+        [HttpGet("filters")] // GET api/library/filters?scope=tracks&contextId=...
+        public async Task<IActionResult> GetSavedFilters([FromQuery] string scope, [FromQuery] string? contextId = null)
+        {
+            try
+            {
+                var result = await libraryService.GetSavedFiltersAsync(scope, contextId);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex) { return Unauthorized(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
+        }
+
+        public sealed class SaveFilterModel { public string Scope { get; set; } = string.Empty; public string? ContextId { get; set; } public string Name { get; set; } = string.Empty; public string PayloadJson { get; set; } = string.Empty; }
+
+        [HttpPost("filters")] // POST api/library/filters
+        public async Task<IActionResult> CreateSavedFilter([FromBody] SaveFilterModel model)
+        {
+            try
+            {
+                var id = await libraryService.CreateSavedFilterAsync(model.Scope, model.ContextId, model.Name, model.PayloadJson);
+                return Ok(new { Id = id });
+            }
+            catch (InvalidOperationException ex) { return Unauthorized(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
+        }
+
+        [HttpPut("filters/{id}")] // rename or replace payload
+        public async Task<IActionResult> UpdateSavedFilter(long id, [FromBody] SaveFilterModel model)
+        {
+            try
+            {
+                await libraryService.UpdateSavedFilterAsync(id, model.Name, model.PayloadJson);
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Unauthorized(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
+        }
+
+        [HttpDelete("filters/{id}")]
+        public async Task<IActionResult> DeleteSavedFilter(long id)
+        {
+            try
+            {
+                await libraryService.DeleteSavedFilterAsync(id);
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Unauthorized(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
         }
 
         [HttpGet("playlists")]

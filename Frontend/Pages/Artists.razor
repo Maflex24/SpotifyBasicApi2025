@@ -2,6 +2,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @inject HttpClient Http
+@using System.Text.Json
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
@@ -31,27 +32,43 @@
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
             <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
-
-            @if (showTagFilters)
-            {
-                <div class="d-flex align-items-start gap-3 w-100 mt-2">
-                    <div class="d-flex flex-column gap-1 flex-fill">
-                        <div class="tag-chips-container mt-2">
-                            @foreach (var t in availableTags)
-                            {
-                                var state = GetTagState(t.Id);
-                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
-                            }
-
-                            <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
-                            <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
-                        </div>
-                    </div>
-                </div>
-            }
         </div>
     </div>
+
+    <div class="d-flex justify-content-start align-items-center mb-3 gap-2 flex-wrap">
+        <span class="text-muted me-2">Zapisane filtry:</span>
+        <select class="form-select form-select-sm w-auto select-dark" @bind="selectedSavedFilterId">
+            <option value="">Wybierz filtr...</option>
+            @foreach (var f in savedFilters)
+            {
+                <option value="@f.Id.ToString()">@f.Name</option>
+            }
+        </select>
+        <input class="form-control form-control-sm input-dark" style="width: 160px;" placeholder="Nazwa filtra" @bind="newFilterName" />
+        <button class="btn btn-sm btn-outline-primary" title="Zapisz jako nowy" @onclick="SaveCurrentFilter">Zapisz</button>
+        <button class="btn btn-sm btn-outline-light" title="Zastosuj wybrany" @onclick="ApplySelectedFilter">Wczytaj</button>
+        <button class="btn btn-sm btn-outline-warning" title="Zmień nazwę / nadpisz" @onclick="RenameSelectedFilter">Zmień nazwę</button>
+        <button class="btn btn-sm btn-outline-danger" title="Usuń wybrany" @onclick="DeleteSelectedFilter">Usuń</button>
+    </div>
+
+    @if (showTagFilters)
+    {
+        <div class="d-flex align-items-start gap-3 w-100 mt-2">
+            <div class="d-flex flex-column gap-1 flex-fill">
+                <div class="tag-chips-container mt-2">
+                    @foreach (var t in availableTags)
+                    {
+                        var state = GetTagState(t.Id);
+                        var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
+                    }
+
+                    <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                    <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                </div>
+            </div>
+        </div>
+    }
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
         @foreach (var a in filteredArtists)
@@ -145,6 +162,11 @@
 }
 
 @code {
+    private List<SavedFilterItem> savedFilters = new();
+    private string? selectedSavedFilterId;
+    private string? newFilterName;
+    private sealed class SavedFilterItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public string Scope { get; set; } = string.Empty; public string? ContextId { get; set; } public string PayloadJson { get; set; } = string.Empty; }
+
     private string sortKey = "name";
     private string sortOrder = "asc";
     private string? selectedGenre;
@@ -172,6 +194,14 @@
         await LoadGenres();
         await LoadAvailableTags();
         await LoadArtists();
+        await LoadSavedFilters();
+    }
+
+    private async Task LoadSavedFilters()
+    {
+        var res = await Http.GetAsync("api/library/filters?scope=artists");
+        if (!res.IsSuccessStatusCode) return;
+        savedFilters = await res.Content.ReadFromJsonAsync<List<SavedFilterItem>>() ?? new List<SavedFilterItem>();
     }
 
     private async Task LoadArtists()
@@ -512,6 +542,84 @@
         excludeMode = "or";
 
         await LoadArtists();
+    }
+
+    private ArtistsState BuildCurrentState() => new ArtistsState
+    {
+        sortKey = sortKey,
+        sortOrder = sortOrder,
+        selectedGenre = selectedGenre,
+        selectedTagFilter = selectedTagFilter,
+        selectedTagSort = selectedTagSort,
+        localSearch = localSearch,
+        includeMode = includeMode,
+        excludeMode = excludeMode,
+        includeTagIds = includeTagIds.ToArray(),
+        excludeTagIds = excludeTagIds.ToArray(),
+        showTagFilters = showTagFilters
+    };
+
+    private async Task SaveCurrentFilter()
+    {
+        if (string.IsNullOrWhiteSpace(newFilterName)) return;
+        var payloadJson = JsonSerializer.Serialize(BuildCurrentState());
+        var body = new { Scope = "artists", ContextId = (string?)null, Name = newFilterName!, PayloadJson = payloadJson };
+        var res = await Http.PostAsJsonAsync("api/library/filters", body);
+        if (res.IsSuccessStatusCode)
+        {
+            newFilterName = string.Empty;
+            await LoadSavedFilters();
+        }
+    }
+
+    private async Task ApplySelectedFilter()
+    {
+        if (string.IsNullOrWhiteSpace(selectedSavedFilterId)) return;
+        if (!long.TryParse(selectedSavedFilterId, out var id)) return;
+        var item = savedFilters.FirstOrDefault(x => x.Id == id);
+        if (item == null || string.IsNullOrWhiteSpace(item.PayloadJson)) return;
+        var state = JsonSerializer.Deserialize<ArtistsState>(item.PayloadJson);
+        if (state == null) return;
+
+        sortKey = state.sortKey ?? sortKey;
+        sortOrder = state.sortOrder ?? sortOrder;
+        selectedGenre = state.selectedGenre;
+        selectedTagFilter = state.selectedTagFilter;
+        selectedTagSort = state.selectedTagSort;
+        localSearch = state.localSearch;
+        includeMode = state.includeMode ?? includeMode;
+        excludeMode = state.excludeMode ?? excludeMode;
+        includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
+        excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
+        showTagFilters = state.showTagFilters ?? showTagFilters;
+
+        await LoadArtists();
+    }
+
+    private async Task RenameSelectedFilter()
+    {
+        if (string.IsNullOrWhiteSpace(selectedSavedFilterId)) return;
+        if (!long.TryParse(selectedSavedFilterId, out var id)) return;
+        if (string.IsNullOrWhiteSpace(newFilterName)) return;
+        var payloadJson = JsonSerializer.Serialize(BuildCurrentState());
+        var body = new { Scope = "artists", ContextId = (string?)null, Name = newFilterName!, PayloadJson = payloadJson };
+        var res = await Http.PutAsJsonAsync($"api/library/filters/{id}", body);
+        if (res.IsSuccessStatusCode)
+        {
+            await LoadSavedFilters();
+        }
+    }
+
+    private async Task DeleteSelectedFilter()
+    {
+        if (string.IsNullOrWhiteSpace(selectedSavedFilterId)) return;
+        if (!long.TryParse(selectedSavedFilterId, out var id)) return;
+        var res = await Http.DeleteAsync($"api/library/filters/{id}");
+        if (res.IsSuccessStatusCode)
+        {
+            selectedSavedFilterId = null;
+            await LoadSavedFilters();
+        }
     }
 
     private sealed class TopTracksResponse { public List<TopTrackItem> items { get; set; } = new(); }
