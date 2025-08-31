@@ -150,3 +150,41 @@ Uwagi:
 - WebApi czeka 25s po starcie DB (wpis `entrypoint` z `sleep 25`).
 - Ruch do frontu i API idzie przez `edge-proxy` (aliasy: `spotify-frontend`, `spotify-webapi`).
 
+### Kopia bazy danych (produkcja: Debian + Docker)
+
+Poniżej szybkie polecenia do wykonania kopii bazy MySQL działającej w kontenerze Dockera na VPS (Debian). Dane pochodzą z `docker-compose.yml`:
+- kontener bazy: `spotifybasic-db`
+- zmienne w kontenerze: `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`
+
+1) Utwórz katalog na kopie i przejdź do katalogu projektu:
+```bash
+mkdir -p ./backups/mysql
+```
+
+2) Wykonaj dump z poziomu hosta (kompresja gzip, spójny snapshot dla InnoDB):
+```bash
+docker exec -i spotifybasic-db sh -c 'mysqldump --single-transaction --quick --routines --triggers --events -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
+  | gzip > ./backups/mysql/spotifybasic-$(date +%F_%H%M%S).sql.gz
+```
+
+3) (Opcjonalnie) Dump bez kompresji:
+```bash
+docker exec -i spotifybasic-db sh -c 'mysqldump --single-transaction --quick --routines --triggers --events -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
+  > ./backups/mysql/spotifybasic-$(date +%F_%H%M%S).sql
+```
+
+4) Szybka weryfikacja kopii (zobacz kilka pierwszych linii):
+```bash
+zcat ./backups/mysql/spotifybasic-*.sql.gz | head -n 20
+```
+
+5) Pobranie kopii z VPS na lokalny komputer (z poziomu Twojego komputera):
+```bash
+scp <uzytkownik>@<twoj-vps>:/sciezka/do/projektu/backups/mysql/spotifybasic-YYYY-MM-DD_HHMMSS.sql.gz .
+```
+
+Uwagi:
+- Polecenia zakładają, że pracujesz w katalogu projektu (obok pliku `docker-compose.yml`).
+- Jeśli nie pamiętasz nazwy kontenera, sprawdź: `docker ps --format '{{.Names}}' | grep spotifybasic-db`.
+- `--single-transaction` zapewnia spójny zrzut dla tabel InnoDB bez blokad zapisu.
+
