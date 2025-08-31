@@ -59,6 +59,28 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("playlists/{id}/tags/counts")]
+        public async Task<IActionResult> GetPlaylistTrackTagCounts(string id,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null)
+        {
+            try
+            {
+                var result = await libraryService.GetPlaylistTrackTagCountsAsync(id, includeTags, includeMode, excludeTags, excludeMode);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpPut("playlist-folders/{id}/parent")]
         public async Task<IActionResult> UpdateFolderParent(long id, [FromBody] FolderParentModel model)
         {
@@ -255,6 +277,30 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("artists/tags/counts")]
+        public async Task<IActionResult> GetArtistTagCounts(
+            [FromQuery] string? tags = null,
+            [FromQuery] string? genre = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null)
+        {
+            try
+            {
+                var result = await libraryService.GetArtistTagCountsAsync(tags, genre, includeTags, includeMode, excludeTags, excludeMode);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpGet("artists/genres")]
         public async Task<IActionResult> GetArtistsGenres()
         {
@@ -292,6 +338,33 @@ namespace SpotifyBasicApi2025.Controllers
                     sort, order, tags, sortTagId, artistId, albumId, year,
                     includeTags, includeMode, excludeTags, excludeMode,
                     page, pageSize, search);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("tracks/tags/counts")]
+        public async Task<IActionResult> GetTrackTagCounts(
+            [FromQuery] string? tags = null,
+            [FromQuery] string? artistId = null,
+            [FromQuery] string? albumId = null,
+            [FromQuery] int? year = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] string? search = null)
+        {
+            try
+            {
+                var result = await libraryService.GetTrackTagCountsAsync(tags, artistId, albumId, year, includeTags, includeMode, excludeTags, excludeMode, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -357,6 +430,30 @@ namespace SpotifyBasicApi2025.Controllers
             try
             {
                 var result = await libraryService.GetUserAlbumTagsAsync();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpGet("albums/tags/counts")]
+        public async Task<IActionResult> GetAlbumTagCounts(
+            [FromQuery] string? tags = null,
+            [FromQuery] string? artistId = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null)
+        {
+            try
+            {
+                var result = await libraryService.GetAlbumTagCountsAsync(tags, artistId, includeTags, includeMode, excludeTags, excludeMode);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)

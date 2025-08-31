@@ -25,7 +25,7 @@
                     {
                         var state = GetTagState(t.Id);
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
                     }
 
                     <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
@@ -141,6 +141,7 @@
 
     private string clientSortColumn = "name";
     private bool clientSortAsc = true;
+    private Dictionary<long, int> tagCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -184,6 +185,7 @@
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForTrack).ToList();
         trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        await LoadPlaylistTagCounts();
     }
 
     private async Task LoadTracks()
@@ -198,6 +200,7 @@
 
         ApplyLocalFilter();
         ApplyClientSort();
+        await LoadPlaylistTagCounts();
     }
 
     private async Task LoadPlaylistName()
@@ -501,8 +504,8 @@
         }
     }
 
-    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
-    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
+    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
+    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
     private bool showTagFilters = true;
     private void ToggleTagFilters() { showTagFilters = !showTagFilters; }
 
@@ -516,11 +519,12 @@
     private void CycleTagState(long tagId)
     {
         var state = GetTagState(tagId);
-        if (state == 0) { includeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); return; }
-        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); return; }
+        if (state == 0) { includeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); _ = LoadPlaylistTagCounts(); return; }
+        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); _ = LoadPlaylistTagCounts(); return; }
         excludeTagIds.Remove(tagId);
         ApplyLocalFilter();
         ApplyClientSort();
+        _ = LoadPlaylistTagCounts();
     }
 
     private async Task PlayTrack(string? uri)
@@ -590,6 +594,38 @@
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class PlaylistsListResponse { public List<PlaylistSummary> items { get; set; } = new(); }
     private sealed class PlaylistSummary { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+
+    private sealed class TagCountItem { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
+
+    private async Task LoadPlaylistTagCounts()
+    {
+        var query = new List<string>();
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
+
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tags/counts?{string.Join('&', query)}");
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var items = await res.Content.ReadFromJsonAsync<List<TagCountItem>>() ?? new List<TagCountItem>();
+        tagCounts = items.ToDictionary(x => x.id, x => x.count);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private int GetTagCount(long tagId)
+    {
+        return tagCounts.TryGetValue(tagId, out var c) ? c : 0;
+    }
 }
 
 

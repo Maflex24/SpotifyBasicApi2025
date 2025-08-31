@@ -56,7 +56,7 @@
                             {
                                 var state = GetTagState(t.Id);
                                 var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
                             }
 
                             <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
@@ -196,6 +196,7 @@
     private ElementReference sentinelRef;
     private DotNetObjectReference<Tracks>? dotNetRef;
     private List<TagDto> availableTags = new();
+    private Dictionary<long, int> tagCounts = new();
     private List<ArtistOption> availableArtists = new();
     private List<AlbumOption> availableAlbums = new();
     private HashSet<long> includeTagIds = new();
@@ -307,6 +308,7 @@
         }
 
         // sortowanie serwerowe według sort/order, dodatkowe sortowanie klienta na klik kolumny pozostaje
+        await LoadTrackTagCounts();
 
         await SaveToStore();
         await InvokeAsync(StateHasChanged);
@@ -332,6 +334,7 @@
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForTrack).ToList();
         trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        await LoadTrackTagCounts();
     }
 
     private async Task LoadArtistsOptions()
@@ -789,13 +792,14 @@
     private void CycleTagState(long tagId)
     {
         var state = GetTagState(tagId);
-        if (state == 0) { includeTagIds.Add(tagId); return; }
-        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); return; }
+        if (state == 0) { includeTagIds.Add(tagId); _ = LoadTrackTagCounts(); return; }
+        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); _ = LoadTrackTagCounts(); return; }
         excludeTagIds.Remove(tagId);
+        _ = LoadTrackTagCounts();
     }
 
-    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
-    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
+    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; _ = LoadTrackTagCounts(); }
+    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; _ = LoadTrackTagCounts(); }
     private async Task ToggleTagFilters() { showTagFilters = !showTagFilters; await SaveToStore(); }
 
     
@@ -865,6 +869,54 @@
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public bool? showTagFilters { get; set; } }
+
+    private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
+
+    private async Task LoadTrackTagCounts()
+    {
+        var query = new List<string>();
+
+        if (!string.IsNullOrEmpty(selectedTagFilter))
+            query.Add($"tags={selectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(selectedArtistId))
+            query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
+
+        if (!string.IsNullOrEmpty(selectedAlbumId))
+            query.Add($"albumId={Uri.EscapeDataString(selectedAlbumId)}");
+
+        if (selectedYear.HasValue)
+            query.Add($"year={selectedYear.Value}");
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(localSearch))
+            query.Add($"search={Uri.EscapeDataString(localSearch)}");
+
+        var res = await Http.GetAsync($"api/library/tracks/tags/counts?{string.Join('&', query)}");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var list = await res.Content.ReadFromJsonAsync<List<TagCountDto>>() ?? new List<TagCountDto>();
+        tagCounts = list.ToDictionary(x => x.id, x => x.count);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private int GetTagCount(long tagId)
+    {
+        return tagCounts.TryGetValue(tagId, out var c) ? c : 0;
+    }
 }
 
 

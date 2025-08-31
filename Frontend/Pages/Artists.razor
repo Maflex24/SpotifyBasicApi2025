@@ -41,7 +41,7 @@
                             {
                                 var state = GetTagState(t.Id);
                                 var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
                             }
 
                             <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
@@ -164,6 +164,7 @@
     private Dictionary<string, long?> selectedTagByArtist = new();
     private bool showArtistTagging = false;
     private string? taggingArtistId;
+    private Dictionary<long, int> tagCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -217,6 +218,7 @@
         }
 
         ApplyLocalFilter();
+        await LoadArtistTagCounts();
 
         await SaveToStore();
     }
@@ -232,6 +234,7 @@
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForArtist).ToList();
         artistTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        await LoadArtistTagCounts();
     }
 
     private async Task LoadGenres()
@@ -348,7 +351,6 @@
 
         await SetArtistTagStrength(taggingArtistId, tagId.Value, 3.0f);
     }
-
     
     private sealed class ArtistsResponse { public int total { get; set; } public List<Artist> items { get; set; } = new(); }
     private sealed class Artist 
@@ -628,6 +630,8 @@
             includeTagIds.Remove(tagId);
         else
             includeTagIds.Add(tagId);
+
+        _ = LoadArtistTagCounts();
     }
 
     private void ToggleExclude(long tagId)
@@ -636,6 +640,8 @@
             excludeTagIds.Remove(tagId);
         else
             excludeTagIds.Add(tagId);
+
+        _ = LoadArtistTagCounts();
     }
 
     private int GetTagState(long tagId)
@@ -656,7 +662,7 @@
         if (state == 0)
         {
             includeTagIds.Add(tagId);
-            
+            _ = LoadArtistTagCounts();
             return;
         }
 
@@ -664,28 +670,70 @@
         {
             includeTagIds.Remove(tagId);
             excludeTagIds.Add(tagId);
-            
+            _ = LoadArtistTagCounts();
             return;
         }
 
         // state == 2
         excludeTagIds.Remove(tagId);
+        _ = LoadArtistTagCounts();
     }
 
     private void ToggleIncludeMode()
     {
         includeMode = includeMode == "and" ? "or" : "and";
+        _ = LoadArtistTagCounts();
     }
 
     private void ToggleExcludeMode()
     {
         excludeMode = excludeMode == "and" ? "or" : "and";
+        _ = LoadArtistTagCounts();
     }
     private async Task ToggleTagFilters()
     {
         showTagFilters = !showTagFilters;
         await SaveToStore();
     }
+
+    private async Task LoadArtistTagCounts()
+    {
+        var query = new List<string>();
+
+        if (!string.IsNullOrEmpty(selectedTagFilter))
+            query.Add($"tags={selectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(selectedGenre))
+            query.Add($"genre={Uri.EscapeDataString(selectedGenre)}");
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
+
+        var res = await Http.GetAsync($"api/library/artists/tags/counts?{string.Join('&', query)}");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var list = await res.Content.ReadFromJsonAsync<List<TagCountItem>>() ?? new List<TagCountItem>();
+        tagCounts = list.ToDictionary(x => x.id, x => x.count);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private int GetTagCount(long tagId)
+    {
+        return tagCounts.TryGetValue(tagId, out var c) ? c : 0;
+    }
+
+    private sealed class TagCountItem { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 }
 
 

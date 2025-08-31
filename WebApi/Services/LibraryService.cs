@@ -206,6 +206,100 @@ namespace SpotifyBasicApi2025.Services
             return tags;
         }
 
+        public async Task<List<object>> GetArtistTagCountsAsync(
+            string? tags = null,
+            string? genre = null,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.LibArtistUserAssigns
+                .Where(a => a.UserId == userId)
+                .Select(a => a.Artist)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(tags))
+            {
+                var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(long.Parse)
+                    .ToList();
+
+                if (tagIds.Count > 0)
+                    query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+                    if (andMode)
+                    {
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+
+                    if (andMode)
+                        query = query.Where(artist => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && ass.TagId == tid)));
+                    else
+                        query = query.Where(artist => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(genre))
+            {
+                var g = genre.Trim();
+
+                query = query.Where(a => a.Genres != null && (
+                    EF.Functions.Like(a.Genres!, g) ||
+                    EF.Functions.Like(a.Genres!, g + ",%") ||
+                    EF.Functions.Like(a.Genres!, g + ", %") ||
+                    EF.Functions.Like(a.Genres!, "%, " + g + ", %") ||
+                    EF.Functions.Like(a.Genres!, "%," + g + ",%") ||
+                    EF.Functions.Like(a.Genres!, "%, " + g) ||
+                    EF.Functions.Like(a.Genres!, "%," + g)
+                ));
+            }
+
+            var artistIds = await query.Select(a => a.Id).ToListAsync();
+
+            var counts = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "artist" && artistIds.Contains(ass.SpotifyItemId))
+                .GroupBy(ass => new { ass.TagId, ass.Tag.Name })
+                .Select(g => new { id = g.Key.TagId, name = g.Key.Name, count = g.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .ToListAsync();
+
+            return counts.Cast<object>().ToList();
+        }
+
         public async Task<List<string>> GetArtistsLibraryGenres()
         {
             var genresValues = context.SpArtists
@@ -619,6 +713,120 @@ namespace SpotifyBasicApi2025.Services
             return new { total, page, pageSize, items = dtos };
         }
 
+        public async Task<List<object>> GetTrackTagCountsAsync(
+            string? tags = null,
+            string? artistId = null,
+            string? albumId = null,
+            int? year = null,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null,
+            string? search = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.LibTrackUserAssigns
+                .Where(a => a.UserId == userId)
+                .Include(a => a.Track)
+                    .ThenInclude(t => t.Album)
+                .Include(a => a.Track)
+                    .ThenInclude(t => t.TrackArtists)
+                        .ThenInclude(ta => ta.Artist)
+                .Select(a => a.Track)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(artistId))
+            {
+                var aid = artistId.Trim();
+                query = query.Where(track => context.SpTrackArtists.Any(x => x.TrackId == track.Id && x.ArtistId == aid));
+            }
+
+            if (!string.IsNullOrWhiteSpace(albumId))
+                query = query.Where(track => track.AlbumId == albumId);
+
+            if (year.HasValue)
+            {
+                var y = year.Value;
+                query = query.Where(t => t.Album != null && t.Album.ReleaseDate != null && t.Album.ReleaseDate.StartsWith(y.ToString()));
+            }
+
+            if (!string.IsNullOrWhiteSpace(tags))
+            {
+                var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                    query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                    {
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                        query = query.Where(track => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == tid)));
+                    else
+                        query = query.Where(track => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(t => t.ToLower())
+                    .ToList();
+
+                foreach (var term in terms)
+                {
+                    var tlocal = term;
+                    query = query.Where(t =>
+                        (t.Name != null && EF.Functions.Like(t.Name.ToLower(), "%" + tlocal + "%"))
+                        || (t.Album != null && t.Album.Name != null && EF.Functions.Like(t.Album.Name.ToLower(), "%" + tlocal + "%"))
+                        || context.SpTrackArtists.Any(ta => ta.TrackId == t.Id && ta.Artist.Name != null && EF.Functions.Like(ta.Artist.Name.ToLower(), "%" + tlocal + "%"))
+                        || context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && context.LibTags.Any(tag => tag.Id == ass.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + tlocal + "%")))
+                    );
+                }
+            }
+
+            var trackIds = await query.Select(t => t.Id).ToListAsync();
+
+            var counts = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "track" && trackIds.Contains(ass.SpotifyItemId))
+                .GroupBy(ass => new { ass.TagId, ass.Tag.Name })
+                .Select(g => new { id = g.Key.TagId, name = g.Key.Name, count = g.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .ToListAsync();
+
+            return counts.Cast<object>().ToList();
+        }
+
         public async Task<object> GetUserAlbumsAsync(
             string? sort = null,
             string? order = null,
@@ -790,6 +998,84 @@ namespace SpotifyBasicApi2025.Services
             return new { total = albumModels.Count, items = albumModels };
         }
 
+        public async Task<List<object>> GetAlbumTagCountsAsync(
+            string? tags = null,
+            string? artistId = null,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var query = context.LibAlbumUserAssigns
+                .Where(a => a.UserId == userId)
+                .Select(a => a.Album)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(artistId))
+            {
+                var aid = artistId.Trim();
+                query = query.Where(album => context.SpAlbumArtistAssigns.Any(x => x.AlbumId == album.Id && x.ArtistId == aid));
+            }
+
+            if (!string.IsNullOrWhiteSpace(tags))
+            {
+                var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                    query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                    {
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                        query = query.Where(album => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && ass.TagId == tid)));
+                    else
+                        query = query.Where(album => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            var albumIds = await query.Select(a => a.Id).ToListAsync();
+
+            var counts = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "album" && albumIds.Contains(ass.SpotifyItemId))
+                .GroupBy(ass => new { ass.TagId, ass.Tag.Name })
+                .Select(g => new { id = g.Key.TagId, name = g.Key.Name, count = g.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .ToListAsync();
+
+            return counts.Cast<object>().ToList();
+        }
+
         public async Task<object> GetUserAlbumTagsAsync()
         {
             var userId = await userService.GetCurrentUserIdAsync();
@@ -934,6 +1220,77 @@ namespace SpotifyBasicApi2025.Services
             var items = tracks.Select(t => t.MapToTrackModel(tagsByTrack.GetValueOrDefault(t.Id, new List<TrackTagModel>()))).ToList();
 
             return new { total, page, pageSize, items };
+        }
+
+        public async Task<List<object>> GetPlaylistTrackTagCountsAsync(
+            string playlistId,
+            string? includeTags = null,
+            string? includeMode = null,
+            string? excludeTags = null,
+            string? excludeMode = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var playlist = await context.SpPlaylists.AsNoTracking().FirstOrDefaultAsync(p => p.Id == playlistId && p.OwnerId == userId);
+            if (playlist == null)
+                throw new InvalidOperationException("Playlista nie należy do użytkownika lub nie istnieje");
+
+            var q = context.SpPlaylistTracks
+                .Where(pt => pt.PlaylistId == playlistId)
+                .Include(pt => pt.Track)!
+                    .ThenInclude(t => t.TrackArtists)!
+                        .ThenInclude(ta => ta.Artist)
+                .Select(pt => pt.Track!)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(includeTags))
+            {
+                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                    {
+                        foreach (var tid in tagIds)
+                        {
+                            var idLocal = tid;
+                            q = q.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == idLocal));
+                        }
+                    }
+                    else
+                    {
+                        q = q.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeTags))
+            {
+                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
+                if (tagIds.Count > 0)
+                {
+                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+                    if (andMode)
+                        q = q.Where(track => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == tid)));
+                    else
+                        q = q.Where(track => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            var trackIds = await q.Select(t => t.Id).ToListAsync();
+
+            var counts = await context.LibTagAssigns
+                .Where(ass => ass.UserId == userId && ass.ItemType == "track" && trackIds.Contains(ass.SpotifyItemId))
+                .GroupBy(ass => new { ass.TagId, ass.Tag.Name })
+                .Select(g => new { id = g.Key.TagId, name = g.Key.Name, count = g.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .ToListAsync();
+
+            return counts.Cast<object>().ToList();
         }
 
         public async Task<object?> GetSingleTrackAsync(string trackId)

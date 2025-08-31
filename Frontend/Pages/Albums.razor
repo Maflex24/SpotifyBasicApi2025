@@ -43,7 +43,7 @@
                             {
                                 var state = GetTagState(t.Id);
                                 var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name</button>
+                                <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
                             }
 
                             <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
@@ -138,6 +138,7 @@
     private Dictionary<string, long?> selectedTagByAlbum = new();
     private bool showAlbumTagging = false;
     private string? taggingAlbumId;
+    private Dictionary<long, int> tagCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -190,6 +191,7 @@
         }
 
         ApplyLocalFilter();
+        await LoadAlbumTagCounts();
 
         await SaveToStore();
     }
@@ -215,6 +217,7 @@
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         availableTags = allTags.Where(t => t.ForAlbum).ToList();
         albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        await LoadAlbumTagCounts();
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -559,7 +562,7 @@
         if (state == 0)
         {
             includeTagIds.Add(tagId);
-
+            _ = LoadAlbumTagCounts();
             return;
         }
 
@@ -567,21 +570,24 @@
         {
             includeTagIds.Remove(tagId);
             excludeTagIds.Add(tagId);
-
+            _ = LoadAlbumTagCounts();
             return;
         }
 
         excludeTagIds.Remove(tagId);
+        _ = LoadAlbumTagCounts();
     }
 
     private void ToggleIncludeMode()
     {
         includeMode = includeMode == "and" ? "or" : "and";
+        _ = LoadAlbumTagCounts();
     }
 
     private void ToggleExcludeMode()
     {
         excludeMode = excludeMode == "and" ? "or" : "and";
+        _ = LoadAlbumTagCounts();
     }
     private async Task ToggleTagFilters()
     {
@@ -634,6 +640,45 @@
 
             return true;
         }).ToList();
+    }
+
+    private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
+
+    private async Task LoadAlbumTagCounts()
+    {
+        var query = new List<string>();
+
+        if (!string.IsNullOrEmpty(selectedTagFilter))
+            query.Add($"tags={selectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(selectedArtistId))
+            query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
+
+        if (includeTagIds.Count > 0)
+        {
+            query.Add($"includeTags={string.Join(',', includeTagIds)}");
+            query.Add($"includeMode={includeMode}");
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
+            query.Add($"excludeMode={excludeMode}");
+        }
+
+        var res = await Http.GetAsync($"api/library/albums/tags/counts?{string.Join('&', query)}");
+
+        if (!res.IsSuccessStatusCode)
+            return;
+
+        var list = await res.Content.ReadFromJsonAsync<List<TagCountDto>>() ?? new List<TagCountDto>();
+        tagCounts = list.ToDictionary(x => x.id, x => x.count);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private int GetTagCount(long tagId)
+    {
+        return tagCounts.TryGetValue(tagId, out var c) ? c : 0;
     }
 }
 
