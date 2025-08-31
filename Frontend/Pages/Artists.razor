@@ -60,7 +60,14 @@
                     {
                         var state = GetTagState(t.Id);
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name <span class="text-info">(@GetTagCount(t.Id))</span></button>
+                        var count = GetTagCount(t.Id);
+                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name
+
+                        @if (count > 0)
+                        {
+                            <span class="tag-count-info"> (@count)</span>
+                        }
+                        </button>
                     }
 
                     <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
