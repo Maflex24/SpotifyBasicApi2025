@@ -157,6 +157,7 @@
     private ElementReference sentinelRef;
     private bool foldersExpanded = true;
     private long? lastSelectedFolderId;
+    private bool suppressAutoApply = false;
 
     private string sortKeyField = "name";
     private string sortOrderField = "asc";
@@ -172,6 +173,9 @@
 
             sortKeyField = value;
             _ = SaveToStore();
+            
+            if (!suppressAutoApply)
+                _ = ApplyFilters();
         }
     }
 
@@ -185,6 +189,9 @@
 
             sortOrderField = value;
             _ = SaveToStore();
+            
+            if (!suppressAutoApply)
+                _ = ApplyFilters();
         }
     }
 
@@ -198,6 +205,9 @@
 
             searchField = value;
             _ = SaveToStore();
+            
+            if (!suppressAutoApply)
+                _ = ApplyFilters();
         }
     }
     private long? selectedFolderId;
@@ -226,7 +236,9 @@
                 selectedFolderId = null;
         }
         catch { }
+        suppressAutoApply = true;
         await LoadFromStore();
+        suppressAutoApply = false;
         playlists.Clear();
         currentPage = 1;
         hasMore = true;
