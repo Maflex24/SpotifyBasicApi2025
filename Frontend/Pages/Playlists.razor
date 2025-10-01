@@ -21,7 +21,7 @@
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
             </select>
-            <button class="btn btn-sm btn-outline-light" @onclick="LoadPlaylists">Zastosuj</button>
+            <button class="btn btn-sm btn-outline-light" @onclick="ApplyFilters">Zastosuj</button>
         </div>
     </div>
 
@@ -269,6 +269,17 @@
         currentPage++;
 
         isLoading = false;
+    }
+
+    private async Task ApplyFilters()
+    {
+        // Reset pagination and reload with current filters
+        playlists.Clear();
+        currentPage = 1;
+        hasMore = true;
+
+        await LoadPlaylists();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadFolders()
