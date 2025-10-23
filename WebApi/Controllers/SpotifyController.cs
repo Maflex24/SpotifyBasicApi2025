@@ -132,6 +132,21 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpPost("artists/{artistId}/add-albums")]
+        public async Task<ActionResult<object>> AddAllArtistAlbumsToLibrary([FromRoute] string artistId)
+        {
+            try
+            {
+                var result = await _spotifyApiService.AddArtistAlbumsToUserLibraryAsync(artistId);
+
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         #endregion Albums
 
         #region Tracks

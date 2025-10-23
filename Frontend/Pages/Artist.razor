@@ -1,5 +1,7 @@
 @page "/artist/{Id}"
 @inject HttpClient Http
+@inject IJSRuntime JS
+@using System.Text.Json
 
 <div class="container-fluid py-3">
     @if (artist == null)
@@ -12,6 +14,7 @@
             <img src="@GetBestImageUrl(artist.images)" alt="okładka" style="width:160px;height:160px;object-fit:cover;border-radius:8px;" />
             <div class="flex-fill">
                 <h3 class="mb-1">@artist.name</h3>
+                <button class="btn btn-sm btn-outline-light ms-2" @onclick="AddAllAlbumsClicked">Dodaj wszystkie albumy</button>
                 @if (artist.genres != null && artist.genres.Length > 0)
                 {
                     <div class="d-flex flex-wrap gap-1 mt-1">
@@ -148,6 +151,31 @@
     {
         if (images == null || images.Length == 0) return null;
         return images.OrderByDescending(i => i.width ?? 0).First().url;
+    }
+
+    private bool addingAlbums = false;
+
+    private async Task AddAllAlbumsClicked()
+    {
+        if (addingAlbums) return;
+
+        addingAlbums = true;
+
+        var res = await Http.PostAsync($"api/spotify/artists/{Uri.EscapeDataString(Id)}/add-albums", null);
+
+        if (res.IsSuccessStatusCode)
+        {
+            var result = await res.Content.ReadFromJsonAsync<JsonElement>();
+            // prosta informacja użytkownikowi
+            await JS.InvokeVoidAsync("alert", $"Dodano: {result.GetProperty("added").GetInt32()}, już w bibliotece: {result.GetProperty("alreadyInLibrary").GetInt32()}");
+        }
+        else
+        {
+            var txt = await res.Content.ReadAsStringAsync();
+            await JS.InvokeVoidAsync("alert", $"Błąd: {res.StatusCode} - {txt}");
+        }
+
+        addingAlbums = false;
     }
 
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }

@@ -77,11 +77,9 @@ namespace SpotifyBasicApi2025.Services
                 var json = response.ToString() ?? string.Empty;
                 var parsed = JsonSerializer.Deserialize<TopTracksResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                
                 if (parsed?.Tracks?.Count > 0)
                     return parsed.Tracks;
 
-                
                 return new List<SpotifyTrackObject>();
             }
             catch
@@ -631,7 +629,8 @@ namespace SpotifyBasicApi2025.Services
             return all;
         }
 
-        private sealed class AlbumTracksResponse { public List<SpotifyTrackObject> Items { get; set; } = new(); public string? Next { get; set; } }
+        private sealed class AlbumTracksResponse
+        { public List<SpotifyTrackObject> Items { get; set; } = new(); public string? Next { get; set; } }
 
         public async Task<List<SpotifySavedAlbumItem>> GetAllUserSavedAlbums()
         {
@@ -928,6 +927,55 @@ namespace SpotifyBasicApi2025.Services
                 newArtists = artistsCount,
                 newAlbums = albumsCount,
                 newTracks = tracksCount
+            };
+        }
+
+        public async Task<object> AddArtistAlbumsToUserLibraryAsync(string artistId)
+        {
+            var albums = await GetArtistAlbumsAsync(artistId, includeGroups: "album");
+            var distinctIds = albums.Select(a => a.Id).Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+
+            var toAdd = new List<string>();
+
+            for (int i = 0; i < distinctIds.Count; i += 50)
+            {
+                var chunk = distinctIds.Skip(i).Take(50).ToList();
+                var idsCsv = string.Join(",", chunk);
+
+                var containsRespObj = await requestService.MakeSpotifyRequestAsync($"me/albums/contains?ids={idsCsv}");
+
+                if (containsRespObj == null)
+                    throw new InvalidOperationException("Błąd podczas sprawdzania, które albumy są w bibliotece użytkownika.");
+
+                var containsArr = JsonSerializer.Deserialize<bool[]>(containsRespObj.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? Array.Empty<bool>();
+
+                for (int j = 0; j < chunk.Count; j++)
+                {
+                    if (j >= containsArr.Length || !containsArr[j])
+                        toAdd.Add(chunk[j]);
+                }
+            }
+
+            var addedCount = 0;
+
+            for (int i = 0; i < toAdd.Count; i += 50)
+            {
+                var chunk = toAdd.Skip(i).Take(50).ToList();
+                var idsCsv = string.Join(",", chunk);
+
+                var ok = await requestService.SendAsync(HttpMethod.Put, $"me/albums?ids={idsCsv}");
+
+                if (!ok)
+                    throw new InvalidOperationException("Nie udało się dodać niektórych albumów do biblioteki użytkownika.");
+
+                addedCount += chunk.Count;
+            }
+
+            return new
+            {
+                totalFound = distinctIds.Count,
+                alreadyInLibrary = distinctIds.Count - toAdd.Count,
+                added = addedCount
             };
         }
 
