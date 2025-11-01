@@ -127,6 +127,9 @@ namespace SpotifyBasicApi2025.Services
 
         private async Task<T?> SendAsync<T>(HttpMethod method, string path, Dictionary<string, string>? query, object? body)
         {
+            if (tokenManager.IsExpiringSoon(60))
+                await authService.RefreshCurrentTokenAsync();
+
             var accessToken = tokenManager.GetAccessToken();
 
             if (string.IsNullOrEmpty(accessToken))
@@ -199,5 +202,3 @@ namespace SpotifyBasicApi2025.Services
         }
     }
 }
-
-

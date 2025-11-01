@@ -98,8 +98,6 @@ namespace SpotifyBasicApi2025.Services
             return null;
         }
 
-
-
         public async Task<SpotifyTokenResponse?> RefreshTokenAsync(string refreshToken)
         {
             var clientId = _configuration["Spotify:ClientId"];
@@ -131,6 +129,9 @@ namespace SpotifyBasicApi2025.Services
 
                 if (tokenResponse != null)
                 {
+                    if (string.IsNullOrEmpty(tokenResponse.RefreshToken))
+                        tokenResponse.RefreshToken = _tokenManager.GetRefreshToken();
+
                     _tokenManager.SetToken(tokenResponse);
                 }
 

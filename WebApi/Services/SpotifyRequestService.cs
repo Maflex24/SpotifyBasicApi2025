@@ -18,12 +18,15 @@ namespace SpotifyBasicApi2025.Services
 
         public async Task<object?> MakeSpotifyRequestAsync(string endpoint)
         {
+            if (tokenManager.IsExpiringSoon(60))
+            {
+                await authService.RefreshCurrentTokenAsync();
+            }
+
             var accessToken = tokenManager.GetAccessToken();
 
             if (string.IsNullOrEmpty(accessToken))
-            {
                 throw new InvalidOperationException("Brak tokenu dostępu. Najpierw musisz się zalogować.");
-            }
 
             using var httpClient = httpClientFactory.CreateClient("SpotifyApi");
             var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
