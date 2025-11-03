@@ -108,7 +108,7 @@
         <table class="table table-dark table-striped align-middle" style="table-layout: fixed;">
             <thead>
                 <tr>
-                    <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
+                    <th style="width:64px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
                     <th style="width:30%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("name"))'>Nazwa @GetSortArrow("name")</th>
                     <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("artists"))'>Wykonawcy @GetSortArrow("artists")</th>
                     <th style="width:16%; position:sticky; top:0; background-color:#0b0b0f; z-index:1; cursor:pointer; white-space:normal;" @onclick='@(() => OnServerSortClick("album"))'>Album @GetSortArrow("album")</th>
@@ -118,25 +118,25 @@
                     <th style="width:56px; position:sticky; top:0; background-color:#0b0b0f; z-index:1;"></th>
                 </tr>
             </thead>
-            <tbody>
+                        <tbody>
                 @foreach (var t in filteredTracks)
                 {
                     var rowClass = (string.Equals(currentPlayingTrackId, t.Id, StringComparison.OrdinalIgnoreCase)) ? "playing-track" : string.Empty;
                     <tr class="@rowClass">
-                        <td>
+                        <td class="trackTd">
                             <div class="cover-container">
                                 <img class="cover-img-56" src="@(t.AlbumImage64 ?? GetBestImageUrl(t.Images) ?? string.Empty)" alt="okładka" />
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrackAndFollowing(t.Id)">▶</button>
                             </div>
                         </td>
-                        <td>@t.Name</td>
-                        <td>
+                        <td class="trackTd">@t.Name</td>
+                        <td class="trackTd">
                             @foreach (var a in t.Artists)
                             {
                                 <a class="badge bg-outline-light text-light me-1 text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
                             }
                         </td>
-                        <td>
+                        <td class="trackTd">
                             @if (!string.IsNullOrWhiteSpace(t.AlbumId))
                             {
                                 <a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>
@@ -146,8 +146,8 @@
                                 @t.AlbumName
                             }
                         </td>
-                        <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
-                        <td>
+                        <td class="trackTd">@(t.ReleaseYear?.ToString() ?? "—")</td>
+                        <td class="trackTd">
                             @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
                             {
                                 <span class="badge badge-tag me-1">@tag.TagName (@tag.Strength)</span>
@@ -157,12 +157,12 @@
                                 <span class="badge badge-tag bg-outline-primary text-primary">+@((t.Tags?.Count ?? 0) - 3)</span>
                             }
                         </td>
-                        <td style="overflow: visible; white-space: nowrap;">
+                        <td class="trackTd" style="overflow: visible; white-space: nowrap;">
                             <div class="d-flex align-items-center justify-content-center h-100 gap-2" style="min-height:56px;">
                                 <button class="btn btn-sm btn-outline-light" style="display:inline-block;" @onclick="() => OpenTrackTagging(t.Id)">Taguj</button>
                             </div>
                         </td>
-                        <td class="d-flex gap-2">
+                        <td class="d-flex gap-2 trackTd">
                             <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" @onclick="() => ConfirmRemoveTrack(t.Id)">✖</button>
                         </td>
                     </tr>

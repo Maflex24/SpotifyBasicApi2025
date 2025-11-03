@@ -240,6 +240,12 @@ code {
     background: rgba(13,110,253,0.22);
 }
 
+.trackTd
+{
+    padding: 0.25rem;
+    box-sizing: border-box;
+}
+
 /* Dark select style to match the app theme */
 .select-dark,
 .form-select.select-dark {
