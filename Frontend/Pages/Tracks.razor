@@ -150,11 +150,11 @@
                         <td>
                             @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
                             {
-                                <span class="badge bg-primary me-1" style="font-size: 0.7rem;">@tag.TagName (@tag.Strength)</span>
+                                <span class="badge badge-tag me-1">@tag.TagName (@tag.Strength)</span>
                             }
                             @if ((t.Tags?.Count ?? 0) > 3)
                             {
-                                <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@((t.Tags?.Count ?? 0) - 3)</span>
+                                <span class="badge badge-tag bg-outline-primary text-primary">+@((t.Tags?.Count ?? 0) - 3)</span>
                             }
                         </td>
                         <td style="overflow: visible; white-space: nowrap;">

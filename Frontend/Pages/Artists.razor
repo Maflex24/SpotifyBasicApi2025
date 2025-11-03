@@ -118,13 +118,13 @@
                                 <div class="d-flex flex-wrap gap-1 mt-1">
                                     @foreach (var tag in a.Tags.Take(3))
                                     {
-                                        <span class="badge bg-primary" style="font-size: 0.7rem; cursor:pointer;" title="Kliknij, aby edytować" @onclick="() => SelectArtistTag(a.Id, tag.TagId)">
+                                        <span class="badge badge-tag" style="cursor:pointer;" title="Kliknij, aby edytować" @onclick="() => SelectArtistTag(a.Id, tag.TagId)">
                                             @tag.TagName (@tag.Strength)
                                         </span>
                                     }
                                     @if (a.Tags.Count > 3)
                                     {
-                                        <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@(a.Tags.Count - 3)</span>
+                                        <span class="badge bg-outline-primary text-primary badge-tag">+@(a.Tags.Count - 3)</span>
                                     }
                                 </div>
                             </div>

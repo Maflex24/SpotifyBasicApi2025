@@ -99,16 +99,26 @@ a, .btn-link {
     }
 
 /* Custom badge styles for dark theme */
+.badge {
+    font-weight: 400;
+}
+
+.badge-tag {
+    font-size: 0.8rem;
+    color: #FFFFFF;
+    background-color: #0350C4;
+}
+
 .badge.bg-outline-light {
     background-color: transparent !important;
     border: 1px solid #dee2e6;
-    color: #dee2e6 !important;
+    color: #dee2e6;
 }
 
 .badge.bg-outline-primary {
     background-color: transparent !important;
     border: 1px solid #0d6efd;
-    color: #0d6efd !important;
+    color: #5798F8;
 }
 
 code {
@@ -174,6 +184,7 @@ code {
     color: #fff;
     cursor: pointer;
     transition: filter 120ms ease, transform 120ms ease;
+    background: #0350C4;
 }
 
 .tag-chip:hover {
@@ -182,7 +193,7 @@ code {
 }
 
 .tag-none {
-    background: #0d6efd; /* blue */
+    background: #0350C4;
 }
 
 .tag-include {
