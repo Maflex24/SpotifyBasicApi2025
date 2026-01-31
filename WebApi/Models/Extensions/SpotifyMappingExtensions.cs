@@ -42,6 +42,7 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 AvailableMarkets = StringListConverter.ListToString(model.AvailableMarkets),
                 ReleaseDate = model.ReleaseDate,
                 ReleaseDatePrecision = model.ReleaseDatePrecision,
+                Year = model.ReleaseDate.Length == 4 ? int.Parse(model.ReleaseDate) : int.Parse(model.ReleaseDate.Substring(0, 4)),
                 Images = model.Images.ToJsonCompact(),
                 Popularity = model.Popularity,
                 Label = model.Label,

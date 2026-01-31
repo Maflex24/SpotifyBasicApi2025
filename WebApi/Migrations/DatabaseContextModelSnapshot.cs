@@ -411,6 +411,9 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Property<string>("Uri")
                         .HasColumnType("longtext");
 
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Name");

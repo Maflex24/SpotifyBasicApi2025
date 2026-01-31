@@ -23,6 +23,7 @@ namespace SpotifyBasicApi2025.Entities
         public string? AvailableMarkets { get; set; } // Przechowywane jako string z separatorem ","
 
         public string? ReleaseDate { get; set; }
+        public int Year { get; set; } = 0000;
 
         public string? ReleaseDatePrecision { get; set; }
 

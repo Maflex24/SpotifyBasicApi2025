@@ -31,6 +31,9 @@
                 }
             </select>
 
+            <input type="number" class="form-control form-control-sm input-dark" style="width:110px;" placeholder="Rok od" @bind="fromYear" />
+            <input type="number" class="form-control form-control-sm input-dark" style="width:110px; margin-right:6px;" placeholder="Rok do" @bind="toYear" />
+
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadAlbums">Zastosuj</button>
             <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
@@ -168,6 +171,8 @@
     private bool showAlbumTagging = false;
     private string? taggingAlbumId;
     private Dictionary<long, int> tagCounts = new();
+    private int? fromYear = null;
+    private int? toYear = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,8 +192,8 @@
 
     private async Task LoadAlbums()
     {
-        
         var query = new List<string>();
+
         query.Add($"sort={sortKey}");
         query.Add($"order={sortOrder}");
 
@@ -200,6 +205,12 @@
 
         if (!string.IsNullOrEmpty(selectedArtistId))
             query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
+
+        if (fromYear.HasValue)
+            query.Add($"fromYear={fromYear.Value}");
+
+        if (toYear.HasValue)
+            query.Add($"toYear={toYear.Value}");
 
         if (includeTagIds.Count > 0)
         {
@@ -245,7 +256,9 @@
         excludeMode = excludeMode,
         includeTagIds = includeTagIds.ToArray(),
         excludeTagIds = excludeTagIds.ToArray(),
-        showTagFilters = showTagFilters
+        showTagFilters = showTagFilters,
+        fromYear = fromYear,
+        toYear = toYear,
     };
 
     private async Task SaveCurrentFilter()
@@ -281,6 +294,8 @@
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
         showTagFilters = state.showTagFilters ?? showTagFilters;
+        fromYear = state.fromYear;
+        toYear = state.toYear;
 
         await LoadAlbums();
     }
@@ -479,6 +494,8 @@
         excludeTagIds.Clear();
         includeMode = "or";
         excludeMode = "or";
+        fromYear = null;
+        toYear = null;
 
         await LoadAlbums();
         await SaveToStore();
@@ -566,7 +583,9 @@
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
             excludeMode,
-            showTagFilters
+            showTagFilters,
+            fromYear,
+            toYear
         };
 
         await Store.SetItemAsync(StoreKey, state);
@@ -590,7 +609,8 @@
 
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
-
+        fromYear = state.fromYear;
+        toYear = state.toYear;
         showTagFilters = state.showTagFilters ?? showTagFilters;
 
         ApplyLocalFilter();
@@ -609,6 +629,8 @@
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
         public bool? showTagFilters { get; set; }
+        public int? fromYear { get; set; }
+        public int? toYear { get; set; }
     }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
@@ -768,6 +790,12 @@
 
         if (!string.IsNullOrEmpty(selectedArtistId))
             query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
+
+        if (fromYear.HasValue)
+            query.Add($"fromYear={fromYear.Value}");
+
+        if (toYear.HasValue)
+            query.Add($"toYear={toYear.Value}");
 
         if (includeTagIds.Count > 0)
         {

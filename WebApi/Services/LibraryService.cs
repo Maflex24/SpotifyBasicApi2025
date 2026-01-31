@@ -913,6 +913,8 @@ namespace SpotifyBasicApi2025.Services
             string? tags = null,
             long? sortTagId = null,
             string? artistId = null,
+            int? fromYear = null,
+            int? toYear = null,
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
@@ -945,6 +947,12 @@ namespace SpotifyBasicApi2025.Services
                 if (tagIds.Count > 0)
                     query = query.Where(album => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
             }
+
+            if (fromYear.HasValue)
+                query = query.Where(album => album.Year >= fromYear);
+
+            if (toYear.HasValue)
+                query = query.Where(album => album.Year <= toYear);
 
             if (!string.IsNullOrWhiteSpace(includeTags))
             {
