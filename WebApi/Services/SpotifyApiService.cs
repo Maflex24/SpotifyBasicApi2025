@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using System.Net.Http;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
+using System.Collections.Concurrent;
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -671,7 +672,7 @@ namespace SpotifyBasicApi2025.Services
                 throw new InvalidOperationException("Nie można pobrać profilu użytkownika");
 
             var userId = userProfile.Id;
-            var allSavedAlbums = await GetAllUserSavedAlbums();
+            var allSavedAlbums = await GetAllUserSavedAlbumsParallel(pageSize: 50, maxDegreeOfParallelism: 6);
 
             if (allSavedAlbums == null || !allSavedAlbums.Any())
                 return new { message = "Brak zapisanych albumów do synchronizacji", savedCount = 0 };
@@ -928,6 +929,65 @@ namespace SpotifyBasicApi2025.Services
                 newAlbums = albumsCount,
                 newTracks = tracksCount
             };
+        }
+
+        public async Task<List<SpotifySavedAlbumItem>> GetAllUserSavedAlbumsParallel(
+            int pageSize = 50,
+            int maxDegreeOfParallelism = 6,
+            CancellationToken ct = default)
+        {
+            // 1) Pierwsza strona – żeby poznać total
+            var firstPage = await requestService.GetAsync<SpotifySavedAlbumsResponse>($"me/albums?limit={pageSize}&offset=0", ct);
+
+            if (firstPage?.Items == null)
+                return new List<SpotifySavedAlbumItem>();
+
+            var total = firstPage.Total;
+            var totalPages = (int)Math.Ceiling((double)total / pageSize);
+
+            if (totalPages <= 1)
+                return firstPage.Items;
+
+            // 2) Równoległe pobieranie pozostałych stron
+            var pages = new ConcurrentDictionary<int, List<SpotifySavedAlbumItem>>();
+            pages[0] = firstPage.Items;
+
+            var offsets = Enumerable.Range(1, totalPages - 1)
+                .Select(i => (pageIndex: i, offset: i * pageSize))
+                .ToList();
+
+            using var sem = new SemaphoreSlim(maxDegreeOfParallelism);
+
+            var tasks = offsets.Select(async x =>
+            {
+                await sem.WaitAsync(ct);
+                try
+                {
+                    var page = await requestService.GetAsync<SpotifySavedAlbumsResponse>($"me/albums?limit={pageSize}&offset={x.offset}", ct);
+
+                    if (page?.Items != null)
+                    {
+                        pages[x.pageIndex] = page.Items;
+                    }
+                }
+                finally
+                {
+                    sem.Release();
+                }
+            }).ToList();
+
+            await Task.WhenAll(tasks);
+
+            // 3) Sklej w kolejności
+            var result = new List<SpotifySavedAlbumItem>(capacity: total);
+
+            for (int i = 0; i < totalPages; i++)
+            {
+                if (pages.TryGetValue(i, out var items) && items != null)
+                    result.AddRange(items);
+            }
+
+            return result;
         }
 
         public async Task<object> AddArtistAlbumsToUserLibraryAsync(string artistId)

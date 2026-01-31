@@ -1,4 +1,5 @@
-﻿using System.Net.Http;
+﻿using System.Net;
+using System.Net.Http;
 using System.Text.Json;
 
 namespace SpotifyBasicApi2025.Services
@@ -107,6 +108,64 @@ namespace SpotifyBasicApi2025.Services
             }
 
             return true;
+        }
+
+        public async Task<T?> GetAsync<T>(string endpoint, CancellationToken ct = default)
+        {
+            // Eager refresh, gdy token się kończy
+            if (tokenManager.IsExpiringSoon(60))
+            {
+                await authService.RefreshCurrentTokenAsync();
+            }
+
+            var accessToken = tokenManager.GetAccessToken();
+            if (string.IsNullOrEmpty(accessToken))
+                throw new InvalidOperationException("Brak tokenu dostępu. Najpierw musisz się zalogować.");
+
+            using var httpClient = httpClientFactory.CreateClient("SpotifyApi");
+
+            for (int attempts = 0; ; attempts++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await httpClient.SendAsync(request, ct);
+
+                // 401 -> spróbuj 1x odświeżyć token
+                if (response.StatusCode == HttpStatusCode.Unauthorized && attempts < 1)
+                {
+                    var refreshedToken = await authService.RefreshCurrentTokenAsync();
+                    if (refreshedToken != null)
+                    {
+                        accessToken = refreshedToken.AccessToken;
+                        continue; // spróbujemy ponownie z nowym tokenem
+                    }
+                }
+
+                // 429 -> uszanuj Retry-After
+                if ((int)response.StatusCode == 429)
+                {
+                    var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(1);
+                    if (attempts >= 5)
+                        throw new HttpRequestException($"Zbyt wiele prób po 429 dla: {endpoint}");
+                    await Task.Delay(retryAfter + TimeSpan.FromMilliseconds(100), ct);
+                    continue;
+                }
+
+                if (response.IsSuccessStatusCode)
+                {
+                    await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                    return await JsonSerializer.DeserializeAsync<T>(
+                        stream,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                        ct);
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync(ct);
+                throw new HttpRequestException($"Spotify API Error: {response.StatusCode} - {errorContent}");
+            }
         }
     }
 }
