@@ -803,65 +803,92 @@ namespace SpotifyBasicApi2025.Services
             // Zapisz zmiany przed zapisaniem utworów
             await context.SaveChangesAsync();
 
-            // Krok 4: Zapisz utwory
-            var totalTracks = allTracks.Select(t => t.Value).ToList();
-
+            // Krok 4: Zapisz utwory (wersja zoptymalizowana)
+            var totalTracks = allTracks.Values.ToList();
+            var totalTracksCount = totalTracks.Count;
             var index = 1;
-            var totalTracksCount = totalTracks.Count();
 
-            while (totalTracks.Count > 0)
+            // Map trackId -> albumId (jeśli dostępny)
+            var trackAlbumIdMap = totalTracks
+                .Where(t => t.Album != null && !string.IsNullOrEmpty(t.Album.Id))
+                .ToDictionary(t => t.Id, t => t.Album!.Id, StringComparer.Ordinal);
+
+            const int batchSize = 2000;
+
+            // Wyłącz auto-wykrywanie zmian na czas masowych operacji
+            var prevDetect = context.ChangeTracker.AutoDetectChangesEnabled;
+            context.ChangeTracker.AutoDetectChangesEnabled = false;
+
+            try
             {
-                var portionsTracks = totalTracks.Take(5000).ToList();
-                var portionsTracksIds = portionsTracks.Select(t => t.Id).ToList();
-
-                var portionExistingTracks = context.SpTracks
-                    .Where(a => portionsTracksIds.Contains(a.Id))
-                    .ToList();
-
-                foreach (var track in portionsTracks)
+                while (totalTracks.Count > 0)
                 {
-                    if (index % 500 == 0)
-                        Console.WriteLine($"Przeprocesowano {index}/{allTracks.Count} utworów");
+                    var batch = totalTracks.Take(batchSize).ToList();
+                    var batchIds = batch.Select(t => t.Id).ToList();
 
-                    var existingTrack = portionExistingTracks.FirstOrDefault(t => t.Id == track.Id);
+                    // Pobierz istniejące rekordy (tylko to co potrzebne) bez trackowania
+                    var existing = await context.SpTracks
+                        .AsNoTracking()
+                        .Where(t => batchIds.Contains(t.Id))
+                        .Select(t => new { t.Id, t.AlbumId })
+                        .ToListAsync();
 
-                    if (existingTrack == null)
+                    var existingIds = new HashSet<string>(existing.Select(e => e.Id), StringComparer.Ordinal);
+                    var existingMissingAlbum = new HashSet<string>(
+                        existing.Where(e => string.IsNullOrEmpty(e.AlbumId)).Select(e => e.Id),
+                        StringComparer.Ordinal
+                    );
+
+                    // Inserty – tylko brakujące
+                    var toAdd = new List<SpTrack>();
+
+                    foreach (var track in batch)
                     {
-                        var newTrack = track.MapToEntity(true);
+                        if (index % 500 == 0)
+                            Console.WriteLine($"Przeprocesowano {index}/{totalTracksCount} utworów");
 
-                        // Ustaw album dla tego utworu
-                        if (track.Album != null)
-                            newTrack.AlbumId = track.Album.Id;
+                        if (!existingIds.Contains(track.Id))
+                        {
+                            var newTrack = track.MapToEntity(true);
 
-                        context.SpTracks.Add(newTrack);
-                        tracksCount++;
+                            if (track.Album != null)
+                                newTrack.AlbumId = track.Album.Id;
+
+                            toAdd.Add(newTrack);
+                            tracksCount++;
+                        }
+
+                        index++;
                     }
-                    else
+
+                    if (toAdd.Count > 0)
+                        context.SpTracks.AddRange(toAdd);
+
+                    // Aktualizacje – ustaw tylko brakujące AlbumId (jeśli mamy je z API)
+                    if (existingMissingAlbum.Count > 0)
                     {
-                        // Aktualizuj istniejący utwór, szczególnie AlbumId jeśli jest null
-                        var updatedTrack = track.MapToEntity();
-                        updatedTrack.CreatedAt = existingTrack.CreatedAt; // Zachowaj oryginalną datę utworzenia
-
-                        // Jeśli istniejący utwór nie ma AlbumId, ale nowy ma album, ustaw AlbumId
-                        if (string.IsNullOrEmpty(existingTrack.AlbumId) && track.Album != null)
+                        foreach (var id in existingMissingAlbum)
                         {
-                            updatedTrack.AlbumId = track.Album.Id;
+                            if (trackAlbumIdMap.TryGetValue(id, out var albumId) && !string.IsNullOrEmpty(albumId))
+                            {
+                                var stub = new SpTrack { Id = id, AlbumId = albumId };
+                                context.SpTracks.Attach(stub);
+                                context.Entry(stub).Property(x => x.AlbumId).IsModified = true;
+                            }
                         }
-                        else if (!string.IsNullOrEmpty(existingTrack.AlbumId))
-                        {
-                            // Zachowaj istniejący AlbumId jeśli już jest ustawiony
-                            updatedTrack.AlbumId = existingTrack.AlbumId;
-                        }
-
-                        context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
                     }
 
-                    index++;
+                    await context.SaveChangesAsync();
+
+                    // Wyczyść tracker, aby nie puchł
+                    context.ChangeTracker.Clear();
+
+                    totalTracks.RemoveRange(0, Math.Min(batchSize, totalTracks.Count));
                 }
-
-                totalTracks.RemoveRange(0, totalTracks.Count() > 5000 ? 5000 : totalTracks.Count());
-
-                await context.SaveChangesAsync();
+            }
+            finally
+            {
+                context.ChangeTracker.AutoDetectChangesEnabled = prevDetect;
             }
 
             // Krok 4: Zapisz relacje albumów z artystami
