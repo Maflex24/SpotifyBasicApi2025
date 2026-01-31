@@ -1031,6 +1031,9 @@ namespace SpotifyBasicApi2025.Services
                 };
             }
 
+            // Dodatkowe zabezpieczenie przed przeładowaniem
+            query = query.Take(1500);
+
             var albums = new List<SpAlbum>();
 
             try
