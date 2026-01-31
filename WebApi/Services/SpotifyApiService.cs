@@ -744,10 +744,22 @@ namespace SpotifyBasicApi2025.Services
             }
 
             // Krok 2: Zapisz artystów
+            var artistsIds = new List<string>();
+
             foreach (var artist in allArtists.Values)
             {
-                var existingArtist = await context.SpArtists.FirstOrDefaultAsync(a => a.Id == artist.Id);
-                if (existingArtist == null)
+                artistsIds.Add(artist.Id);
+            }
+
+            var existingArtists = context.SpArtists
+                .Where(a => artistsIds.Contains(a.Id))
+                .ToList();
+
+            foreach (var artist in allArtists.Values)
+            {
+                var existingArtist = existingArtists.FirstOrDefault(a => a.Id == artist.Id);
+
+                if (existingArtist is null)
                 {
                     var newArtist = artist.MapToEntity(true);
                     context.SpArtists.Add(newArtist);
@@ -755,10 +767,24 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
+            await context.SaveChangesAsync();
+
             // Krok 3: Zapisz albumy
+            var albumsIds = new List<string>();
+
             foreach (var album in allAlbums.Values)
             {
-                var existingAlbum = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == album.Id);
+                albumsIds.Add(album.Id);
+            }
+
+            var existingAlbums = context.SpAlbums
+                .Where(a => albumsIds.Contains(a.Id))
+                .ToList();
+
+            foreach (var album in allAlbums.Values)
+            {
+                var existingAlbum = existingAlbums.FirstOrDefault(a => a.Id == album.Id);
+
                 if (existingAlbum == null)
                 {
                     var newAlbum = album.MapToEntity(true);
@@ -778,43 +804,65 @@ namespace SpotifyBasicApi2025.Services
             await context.SaveChangesAsync();
 
             // Krok 4: Zapisz utwory
-            foreach (var track in allTracks.Values)
+            var totalTracks = allTracks.Select(t => t.Value).ToList();
+
+            var index = 1;
+            var totalTracksCount = totalTracks.Count();
+
+            while (totalTracks.Count > 0)
             {
-                var existingTrack = await context.SpTracks.FirstOrDefaultAsync(t => t.Id == track.Id);
-                if (existingTrack == null)
-                {
-                    var newTrack = track.MapToEntity(true);
-                    // Ustaw album dla tego utworu
-                    if (track.Album != null)
-                    {
-                        newTrack.AlbumId = track.Album.Id;
-                    }
-                    context.SpTracks.Add(newTrack);
-                    tracksCount++;
-                }
-                else
-                {
-                    // Aktualizuj istniejący utwór, szczególnie AlbumId jeśli jest null
-                    var updatedTrack = track.MapToEntity();
-                    updatedTrack.CreatedAt = existingTrack.CreatedAt; // Zachowaj oryginalną datę utworzenia
+                var portionsTracks = totalTracks.Take(5000).ToList();
+                var portionsTracksIds = portionsTracks.Select(t => t.Id).ToList();
 
-                    // Jeśli istniejący utwór nie ma AlbumId, ale nowy ma album, ustaw AlbumId
-                    if (string.IsNullOrEmpty(existingTrack.AlbumId) && track.Album != null)
+                var portionExistingTracks = context.SpTracks
+                    .Where(a => portionsTracksIds.Contains(a.Id))
+                    .ToList();
+
+                foreach (var track in portionsTracks)
+                {
+                    if (index % 500 == 0)
+                        Console.WriteLine($"Przeprocesowano {index}/{allTracks.Count} utworów");
+
+                    var existingTrack = portionExistingTracks.FirstOrDefault(t => t.Id == track.Id);
+
+                    if (existingTrack == null)
                     {
-                        updatedTrack.AlbumId = track.Album.Id;
+                        var newTrack = track.MapToEntity(true);
+
+                        // Ustaw album dla tego utworu
+                        if (track.Album != null)
+                            newTrack.AlbumId = track.Album.Id;
+
+                        context.SpTracks.Add(newTrack);
+                        tracksCount++;
                     }
-                    else if (!string.IsNullOrEmpty(existingTrack.AlbumId))
+                    else
                     {
-                        // Zachowaj istniejący AlbumId jeśli już jest ustawiony
-                        updatedTrack.AlbumId = existingTrack.AlbumId;
+                        // Aktualizuj istniejący utwór, szczególnie AlbumId jeśli jest null
+                        var updatedTrack = track.MapToEntity();
+                        updatedTrack.CreatedAt = existingTrack.CreatedAt; // Zachowaj oryginalną datę utworzenia
+
+                        // Jeśli istniejący utwór nie ma AlbumId, ale nowy ma album, ustaw AlbumId
+                        if (string.IsNullOrEmpty(existingTrack.AlbumId) && track.Album != null)
+                        {
+                            updatedTrack.AlbumId = track.Album.Id;
+                        }
+                        else if (!string.IsNullOrEmpty(existingTrack.AlbumId))
+                        {
+                            // Zachowaj istniejący AlbumId jeśli już jest ustawiony
+                            updatedTrack.AlbumId = existingTrack.AlbumId;
+                        }
+
+                        context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
                     }
 
-                    context.Entry(existingTrack).CurrentValues.SetValues(updatedTrack);
+                    index++;
                 }
+
+                totalTracks.RemoveRange(0, totalTracks.Count() > 5000 ? 5000 : totalTracks.Count());
+
+                await context.SaveChangesAsync();
             }
-
-            // Zapisz zmiany przed tworzeniem relacji
-            await context.SaveChangesAsync();
 
             // Krok 4: Zapisz relacje albumów z artystami
             var addedAlbumArtists = new HashSet<string>(); // AlbumId + ArtistId
@@ -847,21 +895,48 @@ namespace SpotifyBasicApi2025.Services
 
             // Krok 5: Zapisz relacje artystów do utworów
             var addedTrackArtists = new HashSet<string>(); // TrackId + ArtistId
-            foreach (var (trackId, artist) in allTrackArtists)
-            {
-                var trackArtistKey = $"{trackId}_{artist.Id}";
-                if (!addedTrackArtists.Contains(trackArtistKey))
-                {
-                    var existingTrackArtist = await context.SpTrackArtists
-                        .FirstOrDefaultAsync(ta => ta.TrackId == trackId && ta.ArtistId == artist.Id);
 
-                    if (existingTrackArtist == null)
+            index = 1;
+            var totalRelations = allTrackArtists.Count;
+
+            while (allTrackArtists.Count > 0)
+            {
+                var currentTrackArtistPortion = allTrackArtists.Take(2500).ToList();
+                var currentTrackArtistTracksPortionsIds = currentTrackArtistPortion.Select(t => t.TrackId).ToList();
+
+                var existingCurrentTrackArtistPortion = await context.SpTrackArtists
+                        .Where(ta => currentTrackArtistTracksPortionsIds.Contains(ta.TrackId))
+                        .ToListAsync();
+
+                foreach (var (trackId, artist) in currentTrackArtistPortion)
+                {
+                    var trackArtistKey = $"{trackId}_{artist.Id}";
+
+                    if (index % 500 == 0)
+                        Console.WriteLine($"Przeprocesowano {index}/{totalRelations} relacji utwór-artysta");
+
+                    if (!addedTrackArtists.Contains(trackArtistKey))
                     {
-                        var newTrackArtist = artist.MapToTrackArtistEntity(trackId, true);
-                        context.SpTrackArtists.Add(newTrackArtist);
-                        addedTrackArtists.Add(trackArtistKey);
+                        var existingTrackArtist = existingCurrentTrackArtistPortion
+                            .FirstOrDefault(ta =>
+                                ta.TrackId == trackId &&
+                                ta.ArtistId == artist.Id
+                            );
+
+                        if (existingTrackArtist == null)
+                        {
+                            var newTrackArtist = artist.MapToTrackArtistEntity(trackId, true);
+                            context.SpTrackArtists.Add(newTrackArtist);
+                            addedTrackArtists.Add(trackArtistKey);
+                        }
                     }
+
+                    index++;
                 }
+
+                await context.SaveChangesAsync();
+
+                allTrackArtists.RemoveRange(0, allTrackArtists.Count > 2500 ? 2500 : allTrackArtists.Count);
             }
 
             // Zapisz zmiany przed zapisaniem zapisanych albumów
@@ -884,6 +959,8 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
+            await context.SaveChangesAsync();
+
             // Usuń zapisane albumy, które nie są już w bibliotece użytkownika
             foreach (var existingSavedAlbum in existingSavedAlbums)
             {
@@ -892,6 +969,8 @@ namespace SpotifyBasicApi2025.Services
                 if (!albumStillInLibrary)
                     context.SpSavedAlbums.Remove(existingSavedAlbum);
             }
+
+            await context.SaveChangesAsync();
 
             // Krok 8: Zapisz przypisania albumów do użytkownika
             var existingAssigns = await context.LibAlbumUserAssigns
@@ -909,6 +988,8 @@ namespace SpotifyBasicApi2025.Services
                     context.LibAlbumUserAssigns.Add(newAssign);
                 }
             }
+
+            await context.SaveChangesAsync();
 
             // Usuń przypisania, które nie są już w bibliotece użytkownika
             foreach (var assign in existingAssigns)
