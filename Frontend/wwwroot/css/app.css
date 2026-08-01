@@ -154,7 +154,8 @@ code {
     display: block;
 }
 
-.artist-image-square .artist-play-overlay {
+.artist-image-square .artist-play-overlay,
+.artist-image-square .artist-queue-overlay {
     position: absolute;
     bottom: 0.6rem;
     right: 0.6rem;
@@ -176,6 +177,21 @@ code {
     transform: scale(1.06);
     background: rgba(13,110,253,0.25);
     border-color: rgba(13,110,253,0.6);
+}
+
+.artist-image-square .artist-queue-overlay {
+    right: 4.2rem;
+}
+
+.artist-image-square .artist-queue-overlay:hover:not(:disabled) {
+    transform: scale(1.06);
+    background: rgba(13,110,253,0.25);
+    border-color: rgba(13,110,253,0.6);
+}
+
+.artist-image-square .artist-queue-overlay:disabled {
+    cursor: wait;
+    opacity: 0.55;
 }
 
 /* Tag chips */

@@ -8,24 +8,40 @@ namespace SpotifyBasicApi2025.Controllers
     public class PlayerController : ControllerBase
     {
         private readonly PlayerService playerService;
+        private readonly SpotifyApiService spotifyApiService;
 
-        public PlayerController(PlayerService playerService)
+        public PlayerController(PlayerService playerService, SpotifyApiService spotifyApiService)
         {
             this.playerService = playerService;
+            this.spotifyApiService = spotifyApiService;
         }
 
         [HttpGet("state")]
         public async Task<IActionResult> GetState([FromQuery] string? market = null)
         {
-            var result = await playerService.GetPlaybackStateAsync(market);
-            return Ok(result);
+            try
+            {
+                var result = await playerService.GetPlaybackStateAsync(market);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
         }
 
         [HttpGet("devices")]
         public async Task<IActionResult> GetDevices()
         {
-            var result = await playerService.GetDevicesAsync();
-            return Ok(result);
+            try
+            {
+                var result = await playerService.GetDevicesAsync();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
         }
 
         [HttpPut("play")]
@@ -55,6 +71,21 @@ namespace SpotifyBasicApi2025.Controllers
         {
             await playerService.NextAsync(deviceId);
             return NoContent();
+        }
+
+        [HttpPost("queue/albums/{albumId}")]
+        public async Task<IActionResult> QueueAlbum(string albumId)
+        {
+            try
+            {
+                var tracks = await spotifyApiService.GetAllAlbumTracks(albumId);
+                var result = await playerService.QueueAlbumAsync(albumId, tracks.Select(track => track.Uri));
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(502, ex.Message);
+            }
         }
 
         [HttpPost("previous")]

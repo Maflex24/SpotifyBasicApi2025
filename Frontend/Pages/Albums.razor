@@ -94,6 +94,8 @@
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
                             <button class="artist-play-overlay" title="Odtwórz album"
                                     @onclick="() => PlayAlbum(a.Uri)">▶</button>
+                            <button class="artist-queue-overlay" title="Dodaj album na koniec kolejki"
+                                    disabled="@queuingAlbumIds.Contains(a.Id)" @onclick="() => QueueAlbum(a.Id)">+</button>
                             <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
                                     @onclick="() => ConfirmRemoveAlbum(a.Id)">✖</button>
                         </div>
@@ -159,6 +161,7 @@
     private string? selectedArtistId;
     private List<Album> albums = new();
     private List<Album> filteredAlbums = new();
+    private readonly HashSet<string> queuingAlbumIds = new();
     private List<TagDto> availableTags = new();
     private List<AlbumArtistOption> availableAlbumArtists = new();
     private HashSet<long> includeTagIds = new();
@@ -469,6 +472,21 @@
                 await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
                 await Http.PutAsJsonAsync("api/player/play", body);
             }
+        }
+    }
+
+    private async Task QueueAlbum(string albumId)
+    {
+        if (!queuingAlbumIds.Add(albumId))
+            return;
+
+        try
+        {
+            await Http.PostAsync($"api/player/queue/albums/{Uri.EscapeDataString(albumId)}", null);
+        }
+        finally
+        {
+            queuingAlbumIds.Remove(albumId);
         }
     }
 
@@ -852,4 +870,3 @@
                              OnChanged="LoadAlbums"
                              OnClose="CloseAlbumTagging" />
 }
-

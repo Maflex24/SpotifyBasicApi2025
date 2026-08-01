@@ -83,6 +83,52 @@ namespace SpotifyBasicApi2025.Services
             return true;
         }
 
+        public async Task<object> QueueAlbumAsync(string albumId, IEnumerable<string?> trackUris)
+        {
+            var uris = trackUris
+                .Where(uri => !string.IsNullOrWhiteSpace(uri))
+                .Select(uri => uri!)
+                .ToList();
+
+            if (uris.Count == 0)
+                throw new InvalidOperationException("Album nie zawiera utworów, które można dodać do kolejki.");
+
+            var playbackQueue = await SendAsync<PlaybackQueueResponse>(HttpMethod.Get, "me/player/queue", null, null);
+            var lastQueuedAlbumId = playbackQueue?.Queue.LastOrDefault()?.Album?.Id;
+
+            if (string.Equals(lastQueuedAlbumId, albumId, StringComparison.Ordinal))
+            {
+                return new { added = false, tracksAdded = 0, message = "Album jest już ostatni w kolejce." };
+            }
+
+            var tracksAdded = 0;
+            var skippedTracks = 0;
+
+            foreach (var uri in uris)
+            {
+                try
+                {
+                    var query = new Dictionary<string, string> { ["uri"] = uri };
+                    await SendAsync<object?>(HttpMethod.Post, "me/player/queue", query, null);
+                    tracksAdded++;
+
+                    // Spotify kolejkuje tylko pojedyncze utwory. Krótka przerwa zachowuje
+                    // kolejność poleceń i ogranicza ryzyko natrafienia na rate limit.
+                    await Task.Delay(TimeSpan.FromMilliseconds(75));
+                }
+                catch (InvalidOperationException)
+                {
+                    // Pojedynczy niedostępny utwór nie może zatrzymać dodawania reszty albumu.
+                    skippedTracks++;
+                }
+            }
+
+            if (tracksAdded == 0)
+                throw new InvalidOperationException("Nie udało się dodać żadnego utworu z albumu do kolejki.");
+
+            return new { added = true, tracksAdded, skippedTracks };
+        }
+
         public async Task<bool> PreviousAsync(string? deviceId = null)
         {
             var query = new Dictionary<string, string>();
@@ -123,6 +169,21 @@ namespace SpotifyBasicApi2025.Services
             await SendAsync<object?>(HttpMethod.Put, "me/player/volume", query, null);
 
             return true;
+        }
+
+        private sealed class PlaybackQueueResponse
+        {
+            public List<PlaybackQueueItem> Queue { get; set; } = new();
+        }
+
+        private sealed class PlaybackQueueItem
+        {
+            public PlaybackQueueAlbum? Album { get; set; }
+        }
+
+        private sealed class PlaybackQueueAlbum
+        {
+            public string? Id { get; set; }
         }
 
         private async Task<T?> SendAsync<T>(HttpMethod method, string path, Dictionary<string, string>? query, object? body)
@@ -176,6 +237,23 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
+            for (var retryAttempt = 0; (int)response.StatusCode == 429 && retryAttempt < 5; retryAttempt++)
+            {
+                var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(1);
+                await Task.Delay(retryAfter + TimeSpan.FromMilliseconds(100));
+
+                request = new HttpRequestMessage(method, uriBuilder.ToString());
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenManager.GetAccessToken());
+
+                if (body != null)
+                {
+                    var jsonRetry = JsonSerializer.Serialize(body);
+                    request.Content = new StringContent(jsonRetry, Encoding.UTF8, "application/json");
+                }
+
+                response = await httpClient.SendAsync(request);
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 // 204 no content jest sukcesem dla wielu operacji playera
@@ -189,6 +267,11 @@ namespace SpotifyBasicApi2025.Services
 
                 throw new InvalidOperationException($"Spotify API error: {(int)response.StatusCode} {response.ReasonPhrase} - {errorContent}");
             }
+
+            // Polecenia playera (POST/PUT) nie zwracają danych, z których korzystamy.
+            // Spotify może zwrócić niepustą treść mimo poprawnego statusu, która nie musi być JSON-em.
+            if (method != HttpMethod.Get)
+                return default;
 
             if (response.Content == null)
                 return default;
