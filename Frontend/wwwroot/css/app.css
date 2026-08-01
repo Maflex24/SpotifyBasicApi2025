@@ -224,11 +224,28 @@ code {
     justify-content: center;
 }
 
+.albums-toolbar.sticky-toolbar,
+.albums-tag-filters {
+    padding: 0.75rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 0.5rem;
+    background: rgba(255,255,255,0.025);
+}
+
 .albums-toolbar-heading { grid-area: heading; }
 .albums-search-group { grid-area: search; min-width: 0; }
 .albums-filter-fields { grid-area: filters; }
 .albums-toolbar-actions { grid-area: actions; }
 .albums-playback-actions { grid-area: playback; }
+
+.albums-tag-filters {
+    width: min(100%, 72rem);
+    margin-inline: auto;
+}
+
+.albums-tag-filters .tag-chips-container {
+    margin-bottom: 0;
+}
 
 .albums-search-group .form-control {
     width: 100%;

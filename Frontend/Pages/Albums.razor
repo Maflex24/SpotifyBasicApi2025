@@ -65,6 +65,30 @@
         </div>
     </section>
 
+    @if (showTagFilters)
+    {
+        <section class="albums-tag-filters mb-3" aria-label="Filtry tagów">
+            <div class="tag-chips-container">
+                @foreach (var t in availableTags)
+                {
+                    var state = GetTagState(t.Id);
+                    var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                    var count = GetTagCount(t.Id);
+                    <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name
+
+                    @if (count > 0)
+                    {
+                        <span class="tag-count-info"> (@count)</span>
+                    }
+                    </button>
+                }
+
+                <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
+                <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+            </div>
+        </section>
+    }
+
     <section class="saved-filters-panel mb-3" aria-labelledby="saved-filters-heading">
         <h5 id="saved-filters-heading" class="saved-filters-heading">Zapisane filtry</h5>
         <div class="saved-filters-fields">
@@ -94,32 +118,6 @@
             </button>
         </div>
     </section>
-
-    @if (showTagFilters)
-    {
-        <div class="d-flex align-items-start gap-3 w-100 mt-2">
-            <div class="d-flex flex-column gap-1 flex-fill">
-                <div class="tag-chips-container mt-2">
-                    @foreach (var t in availableTags)
-                    {
-                        var state = GetTagState(t.Id);
-                        var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                        var count = GetTagCount(t.Id);
-                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name
-
-                        @if (count > 0)
-                        {
-                            <span class="tag-count-info"> (@count)</span>
-                        }
-                        </button>
-                    }
-
-                    <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
-                    <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
-                </div>
-            </div>
-        </div>
-    }
 
     <div class="library-card-grid">
         @foreach (var a in filteredAlbums)
