@@ -4,9 +4,31 @@
 @inject IJSRuntime JS
 @inject HttpClient Http
 @using System.Text.Json
+@implements IAsyncDisposable
 
 <div class="container-fluid py-3">
-    <section class="albums-toolbar sticky-toolbar mb-3" aria-label="Filtry i akcje albumów">
+    <div class="albums-controls-sentinel" @ref="controlsSentinel" aria-hidden="true"></div>
+    <div class="albums-controls-dock @(ControlsCollapsed ? "is-collapsed" : string.Empty)">
+    @if (ControlsCollapsed)
+    {
+        <div class="albums-controls-toggle-row">
+            <button type="button" class="albums-controls-toggle" title="Pokaż filtry albumów" aria-label="Pokaż filtry albumów" aria-expanded="false" @onclick="ToggleControlsVisibility">
+                <span aria-hidden="true">▼</span>
+            </button>
+        </div>
+    }
+    else
+    {
+        @if (controlsPastAnchor)
+        {
+            <div class="albums-controls-toggle-row">
+                <button type="button" class="albums-controls-toggle" title="Zwiń filtry albumów" aria-label="Zwiń filtry albumów" aria-expanded="true" @onclick="ToggleControlsVisibility">
+                    <span aria-hidden="true">▲</span>
+                </button>
+            </div>
+        }
+
+    <section class="albums-toolbar mb-3" aria-label="Filtry i akcje albumów">
         <div class="albums-toolbar-heading">
             <h4 class="mb-0">Albumy</h4>
         </div>
@@ -118,6 +140,8 @@
             </button>
         </div>
     </section>
+    }
+    </div>
 
     <div class="library-card-grid">
         @foreach (var a in filteredAlbums)
@@ -208,6 +232,11 @@
     private string includeMode = "or";
     private string excludeMode = "or";
     private bool showTagFilters = true;
+    private ElementReference controlsSentinel;
+    private DotNetObjectReference<Albums>? controlsObserverRef;
+    private bool controlsPastAnchor;
+    private bool controlsManuallyExpanded;
+    private bool ControlsCollapsed => controlsPastAnchor && !controlsManuallyExpanded;
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByAlbum = new();
@@ -224,6 +253,48 @@
         await LoadAlbumArtists();
         await LoadAlbums();
         await LoadSavedFilters();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        controlsObserverRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("albumsControls.observe", controlsSentinel, controlsObserverRef);
+    }
+
+    [JSInvokable]
+    public Task SetControlsPastAnchor(bool isPastAnchor)
+    {
+        if (controlsPastAnchor == isPastAnchor)
+            return Task.CompletedTask;
+
+        controlsPastAnchor = isPastAnchor;
+
+        if (!controlsPastAnchor)
+            controlsManuallyExpanded = false;
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleControlsVisibility()
+    {
+        controlsManuallyExpanded = ControlsCollapsed;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("albumsControls.disconnect");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The browser was already disconnected during component disposal.
+        }
+
+        controlsObserverRef?.Dispose();
     }
 
     private async Task LoadSavedFilters()

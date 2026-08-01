@@ -211,6 +211,59 @@ code {
     stroke: none;
 }
 
+.albums-controls-sentinel {
+    height: 1px;
+}
+
+.albums-controls-dock {
+    --albums-panel-surface: rgba(18, 18, 22, 0.96);
+    --albums-control-surface: rgba(30, 30, 34, 0.96);
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    padding: 0.5rem 0;
+    background: rgba(11, 11, 15, 0.96);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.48);
+}
+
+.albums-controls-dock.is-collapsed {
+    padding: 0.35rem 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.albums-controls-toggle-row {
+    display: flex;
+    justify-content: flex-end;
+    width: min(100%, 72rem);
+    margin-inline: auto;
+}
+
+.albums-controls-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0;
+    color: #fff;
+    background: var(--albums-panel-surface);
+    border: 1px solid rgba(255,255,255,0.38);
+    border-radius: 0.45rem;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+}
+
+.albums-controls-toggle:hover {
+    background: rgba(45, 52, 62, 0.98);
+    border-color: rgba(255,255,255,0.68);
+}
+
+.albums-controls-toggle:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(13,110,253,0.35);
+}
+
 .albums-toolbar {
     display: grid;
     width: min(100%, 72rem);
@@ -224,12 +277,12 @@ code {
     justify-content: center;
 }
 
-.albums-toolbar.sticky-toolbar,
+.albums-toolbar,
 .albums-tag-filters {
     padding: 0.75rem;
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 0.5rem;
-    background: rgba(255,255,255,0.025);
+    background: var(--albums-panel-surface);
 }
 
 .albums-toolbar-heading { grid-area: heading; }
@@ -245,6 +298,12 @@ code {
 
 .albums-tag-filters .tag-chips-container {
     margin-bottom: 0;
+}
+
+.albums-controls-dock .albums-toolbar,
+.albums-controls-dock .albums-tag-filters,
+.albums-controls-dock .saved-filters-panel {
+    margin-bottom: 0.65rem !important;
 }
 
 .albums-search-group .form-control {
@@ -298,6 +357,37 @@ code {
     color: #fff;
     border-color: #0d6efd;
     box-shadow: 0 0 0 0.1rem rgba(255,255,255,0.1), 0 0 0 0.25rem rgba(13,110,253,0.25);
+}
+
+.albums-controls-dock .input-dark,
+.albums-controls-dock .form-control.input-dark,
+.albums-controls-dock .select-dark,
+.albums-controls-dock .form-select.select-dark,
+.albums-controls-dock textarea {
+    background-color: var(--albums-control-surface);
+    border-color: rgba(255,255,255,0.2);
+}
+
+.albums-controls-dock .album-action-muted {
+    background: rgba(255,255,255,0.1);
+}
+
+.albums-controls-dock .album-action-apply,
+.albums-controls-dock .album-action-save {
+    background: rgba(13,110,253,0.94);
+}
+
+.albums-controls-dock .album-action-play-all {
+    background: rgba(29,185,84,0.94);
+}
+
+.albums-controls-dock .album-action-random,
+.albums-controls-dock .album-action-warning {
+    background: rgba(255,193,7,0.16);
+}
+
+.albums-controls-dock .album-action-danger {
+    background: rgba(220,53,69,0.16);
 }
 
 .album-action-button,
@@ -412,7 +502,7 @@ code {
     padding: 0.75rem;
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 0.5rem;
-    background: rgba(255,255,255,0.025);
+    background: var(--albums-panel-surface);
 }
 
 .saved-filters-heading {
