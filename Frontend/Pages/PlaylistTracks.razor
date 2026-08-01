@@ -3,6 +3,7 @@
 @using System.Net.Http.Json
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
+@inject LocalStorageService Store
 @inject HttpClient Http
 
 <div class="container-fluid py-3">
@@ -36,6 +37,34 @@
     {
         <div class="d-flex align-items-start gap-3 w-100 mb-2">
             <div class="d-flex flex-column gap-1 flex-fill">
+                @if (showTagsGrouped)
+                {
+                    <div class="tag-groups-container mt-2">
+                    @foreach (var group in GetGroupedTags())
+                    {
+                        <section class="tag-group" aria-label="Kategoria tagów: @group.Name">
+                            <h6 class="tag-group-heading">@group.Name</h6>
+                            <div class="tag-chips-container">
+                            @foreach (var t in group.Tags)
+                            {
+                                var state = GetTagState(t.Id);
+                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                                var count = GetTagCount(t.Id);
+                                <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
+                                    <span class="tag-chip-label">@t.Name</span>
+                                @if (count > 0)
+                                {
+                                    <span class="tag-count-info">@count</span>
+                                }
+                                </button>
+                            }
+                            </div>
+                        </section>
+                    }
+                    </div>
+                }
+                else
+                {
                 <div class="tag-chips-container mt-2">
                     @foreach (var t in availableTags)
                     {
@@ -50,9 +79,12 @@
                         }
                         </button>
                     }
-
+                </div>
+                }
+                <div class="tag-filter-controls">
                     <button type="button" class="tag-mode-chip tag-include" title="Tryb łączenia włączonych tagów" aria-label="Tryb łączenia włączonych tagów: @((includeMode == "and") ? "AND" : "OR")" @onclick="ToggleIncludeMode"><span>Włączone</span><strong>@((includeMode == "and") ? "AND" : "OR")</strong></button>
                     <button type="button" class="tag-mode-chip tag-exclude" title="Tryb łączenia wykluczonych tagów" aria-label="Tryb łączenia wykluczonych tagów: @((excludeMode == "and") ? "AND" : "OR")" @onclick="ToggleExcludeMode"><span>Wykluczone</span><strong>@((excludeMode == "and") ? "AND" : "OR")</strong></button>
+                    <button type="button" class="tag-layout-toggle" title="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-label="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-pressed="@showTagsGrouped" @onclick="ToggleTagLayout"><span>@(showTagsGrouped ? "Lista tagów" : "Pogrupuj tagi")</span><strong aria-hidden="true">@(showTagsGrouped ? "≡" : "▦")</strong></button>
                 </div>
             </div>
         </div>
@@ -145,6 +177,7 @@
     private List<Track> tracks = new();
     private List<Track> filteredTracks = new();
     private List<TagDto> availableTags = new();
+    private List<TagGroupDto> tagGroups = new();
     private List<TagItem> trackTagItems = new();
     private Dictionary<string, long?> selectedTagByTrack = new();
     private string? localSearch;
@@ -170,10 +203,13 @@
     private string clientSortColumn = "name";
     private bool clientSortAsc = true;
     private bool showTagFilters = true;
+    private bool showTagsGrouped;
+    private const string TagLayoutStoreKey = "tag-layout:grouped";
     private Dictionary<long, int> tagCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadTagLayout();
         await LoadAvailableTags();
         await LoadTracks();
         await LoadPlaylistName();
@@ -216,12 +252,19 @@
 
     private async Task LoadAvailableTags()
     {
-        var res = await Http.GetAsync("api/tags");
+        var tagsRequest = Http.GetAsync("api/tags");
+        var groupsRequest = Http.GetAsync("api/tags-group");
+        await Task.WhenAll(tagsRequest, groupsRequest);
+        var res = await tagsRequest;
         if (!res.IsSuccessStatusCode)
             return;
 
         var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
-        availableTags = allTags.Where(t => t.ForTrack).ToList();
+        var groupsResponse = await groupsRequest;
+        tagGroups = groupsResponse.IsSuccessStatusCode
+            ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
+            : new List<TagGroupDto>();
+        availableTags = allTags.Where(t => t.ForTrack).OrderBy(t => t.Name).ToList();
         trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
         await LoadPlaylistTagCounts();
     }
@@ -546,6 +589,27 @@
     private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
     private void ToggleTagFilters() { showTagFilters = !showTagFilters; }
 
+    private async Task LoadTagLayout()
+    {
+        showTagsGrouped = await Store.GetItemAsync<bool?>(TagLayoutStoreKey) ?? false;
+    }
+
+    private async Task ToggleTagLayout()
+    {
+        showTagsGrouped = !showTagsGrouped;
+        await Store.SetItemAsync(TagLayoutStoreKey, showTagsGrouped);
+    }
+
+    private IEnumerable<TagGroupView> GetGroupedTags()
+    {
+        var groupedTagIds = tagGroups.Select(group => group.Id).ToHashSet();
+        var groups = tagGroups.OrderBy(group => group.Name).Select(group => new TagGroupView { Name = group.Name, Tags = availableTags.Where(tag => tag.TagGroupId == group.Id).OrderBy(tag => tag.Name).ToList() }).Where(group => group.Tags.Count > 0).ToList();
+        var ungroupedTags = availableTags.Where(tag => !groupedTagIds.Contains(tag.TagGroupId)).OrderBy(tag => tag.Name).ToList();
+        if (ungroupedTags.Count > 0)
+            groups.Add(new TagGroupView { Name = "Pozostałe tagi", Tags = ungroupedTags });
+        return groups;
+    }
+
     private sealed class PlaylistState
     {
         public string? localSearch { get; set; }
@@ -707,7 +771,9 @@
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
-    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForTrack { get; set; } }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForTrack { get; set; } public long TagGroupId { get; set; } }
+    private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public List<TagDto> Tags { get; set; } = new(); }
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class PlaylistsListResponse { public List<PlaylistSummary> items { get; set; } = new(); }
     private sealed class PlaylistSummary { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
@@ -744,4 +810,3 @@
         return tagCounts.TryGetValue(tagId, out var c) ? c : 0;
     }
 }
-
