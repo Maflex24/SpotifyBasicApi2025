@@ -125,6 +125,17 @@ code {
     color: #c02d76;
 }
 
+/* Responsive library cards: 280px is the target width used to add another column. */
+.library-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+    gap: 1rem;
+}
+
+.library-card-grid-item {
+    min-width: 0;
+}
+
 /* Square image container for artist cards */
 .artist-image-square {
     position: relative;

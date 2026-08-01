@@ -82,10 +82,10 @@
         </div>
     }
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
+    <div class="library-card-grid">
         @foreach (var a in filteredAlbums)
         {
-            <div class="col">
+            <div class="library-card-grid-item">
                 <div class="card bg-dark text-light h-100">
                     @if (a.Images?.Any() == true)
                     {
@@ -836,6 +836,5 @@
                              OnChanged="LoadAlbums"
                              OnClose="CloseAlbumTagging" />
 }
-
 
 
