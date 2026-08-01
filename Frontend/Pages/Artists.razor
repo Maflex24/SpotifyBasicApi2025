@@ -32,6 +32,7 @@
             <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
             <button class="btn btn-sm btn-outline-light" @onclick="LoadArtists">Zastosuj</button>
             <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
+            <button class="btn btn-sm btn-outline-warning" title="Wylosuj artystę z bieżących wyników" @onclick="PickRandomArtist">Losuj</button>
         </div>
     </div>
 
@@ -703,6 +704,21 @@
 
             return true;
         }).ToList();
+    }
+
+    private void PickRandomArtist()
+    {
+        // Odtwórz pełną listę wyników przed losowaniem, aby kolejne kliknięcie
+        // nie losowało z wcześniej wyświetlonego pojedynczego artysty.
+        ApplyLocalFilter();
+
+        if (filteredArtists.Count == 0)
+            return;
+
+        filteredArtists = new List<Artist>
+        {
+            filteredArtists[Random.Shared.Next(filteredArtists.Count)]
+        };
     }
 
     private void SelectArtistTag(string artistId, long tagId)
