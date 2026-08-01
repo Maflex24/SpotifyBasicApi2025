@@ -88,6 +88,40 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpPost("queue/albums")]
+        public async Task<IActionResult> QueueAlbums([FromBody] QueueAlbumsRequest request)
+        {
+            var albumIds = request.AlbumIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct()
+                .ToList();
+
+            if (albumIds.Count == 0)
+                return Ok(new { albumsProcessed = 0, failedAlbumIds = Array.Empty<string>() });
+
+            var processedAlbums = 0;
+            var failedAlbumIds = new List<string>();
+
+            foreach (var albumId in albumIds)
+            {
+                try
+                {
+                    var tracks = await spotifyApiService.GetAllAlbumTracks(albumId);
+                    await playerService.QueueAlbumAsync(albumId, tracks.Select(track => track.Uri));
+                    processedAlbums++;
+                }
+                catch (InvalidOperationException)
+                {
+                    failedAlbumIds.Add(albumId);
+                }
+            }
+
+            if (processedAlbums == 0)
+                return StatusCode(502, new { message = "Nie udało się dodać żadnego albumu do kolejki.", failedAlbumIds });
+
+            return Ok(new { albumsProcessed = processedAlbums, failedAlbumIds });
+        }
+
         [HttpPost("previous")]
         public async Task<IActionResult> Previous([FromQuery] string? deviceId = null)
         {
@@ -116,6 +150,11 @@ namespace SpotifyBasicApi2025.Controllers
             await playerService.TransferAsync(deviceIds, play);
             return NoContent();
         }
+    }
+
+    public sealed class QueueAlbumsRequest
+    {
+        public List<string> AlbumIds { get; set; } = new();
     }
 }
 

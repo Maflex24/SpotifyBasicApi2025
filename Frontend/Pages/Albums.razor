@@ -38,6 +38,7 @@
             <button class="btn btn-sm btn-outline-light" @onclick="LoadAlbums">Zastosuj</button>
             <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
             <button class="btn btn-sm btn-outline-warning" title="Wylosuj album z bieżących wyników" @onclick="PickRandomAlbum">Losuj</button>
+            <button class="btn btn-sm btn-outline-success" title="Dodaj wszystkie wyświetlone albumy do kolejki" disabled="@(isQueueingAllAlbums || filteredAlbums.Count == 0)" @onclick="PlayAllAlbums">Odtwórz wszystko</button>
         </div>
     </div>
 
@@ -162,6 +163,7 @@
     private List<Album> albums = new();
     private List<Album> filteredAlbums = new();
     private readonly HashSet<string> queuingAlbumIds = new();
+    private bool isQueueingAllAlbums;
     private List<TagDto> availableTags = new();
     private List<AlbumArtistOption> availableAlbumArtists = new();
     private HashSet<long> includeTagIds = new();
@@ -487,6 +489,27 @@
         finally
         {
             queuingAlbumIds.Remove(albumId);
+        }
+    }
+
+    private async Task PlayAllAlbums()
+    {
+        if (isQueueingAllAlbums || filteredAlbums.Count == 0)
+            return;
+
+        isQueueingAllAlbums = true;
+        try
+        {
+            var albumIds = filteredAlbums
+                .Select(album => album.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToList();
+
+            await Http.PostAsJsonAsync("api/player/queue/albums", new { albumIds });
+        }
+        finally
+        {
+            isQueueingAllAlbums = false;
         }
     }
 
