@@ -211,10 +211,21 @@ namespace SpotifyBasicApi2025.Controllers
             if (userId is null)
                 return StatusCode(403);
 
+            var normalizedItemType = itemType.Trim().ToLowerInvariant();
+            if (normalizedItemType is not ("artist" or "album" or "track" or "playlist") || string.IsNullOrWhiteSpace(spotifyItemId))
+                return BadRequest("Nieprawidłowy typ lub identyfikator elementu");
+
             var assigns = await dbContext.LibTagAssigns
-                .Where(a => a.UserId == userId && a.ItemType == itemType && a.SpotifyItemId == spotifyItemId)
-                .OrderByDescending(a => a.UpdatedAt)
-                .Select(a => new { a.TagId, a.Strength })
+                .AsNoTracking()
+                .Where(a => a.UserId == userId && a.ItemType == normalizedItemType && a.SpotifyItemId == spotifyItemId)
+                .OrderBy(a => a.Tag.Name)
+                .Select(a => new TagAssignmentStateModel
+                {
+                    TagId = a.TagId,
+                    TagName = a.Tag.Name,
+                    TagGroupName = a.Tag.TagGroup.Name,
+                    Strength = a.Strength
+                })
                 .ToListAsync();
 
             return Ok(assigns);

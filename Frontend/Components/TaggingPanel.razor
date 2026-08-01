@@ -7,12 +7,12 @@
     <div class="tagging-panel-header">
         <strong>@Title</strong>
         <div class="tagging-panel-header-actions">
-            <button type="button" class="tag-layout-toggle" title="@(showTagsGrouped ? "Pokaż listę tagów" : "Pogrupuj tagi według kategorii")"
+            <button type="button" class="tag-layout-toggle" disabled="@isMutating" title="@(showTagsGrouped ? "Pokaż listę tagów" : "Pogrupuj tagi według kategorii")"
                     aria-label="@(showTagsGrouped ? "Pokaż listę tagów" : "Pogrupuj tagi według kategorii")" aria-pressed="@showTagsGrouped" @onclick="ToggleTagLayout">
                 <span>@(showTagsGrouped ? "Lista tagów" : "Pogrupuj tagi")</span>
                 <strong aria-hidden="true">@(showTagsGrouped ? "≋" : "▦")</strong>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-light" title="Zamknij" aria-label="Zamknij" @onclick="OnClose">✕</button>
+            <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zamknij" aria-label="Zamknij" @onclick="OnClose">✕</button>
         </div>
     </div>
 
@@ -34,9 +34,9 @@
                             <article class="tagging-assignment">
                                 <span class="tagging-assignment-name">@assign.TagName <span class="tagging-assignment-strength">@assign.Strength.ToString("0.0")</span></span>
                                 <div class="tagging-assignment-actions" aria-label="Akcje tagu @assign.TagName">
-                                    <button type="button" class="btn btn-sm btn-outline-light" title="Zmniejsz siłę" aria-label="Zmniejsz siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
-                                    <button type="button" class="btn btn-sm btn-outline-light" title="Zwiększ siłę" aria-label="Zwiększ siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Usuń tag" aria-label="Usuń tag @assign.TagName" @onclick="(() => Remove(assign.TagId))">✕</button>
+                                    <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zmniejsz siłę" aria-label="Zmniejsz siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
+                                    <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zwiększ siłę" aria-label="Zwiększ siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@isMutating" title="Usuń tag" aria-label="Usuń tag @assign.TagName" @onclick="(() => Remove(assign.TagId))">✕</button>
                                 </div>
                             </article>
                         }
@@ -56,13 +56,14 @@
     [Parameter] public List<TagItem> Items { get; set; } = new();
     [Parameter] public List<TagBadge> Tags { get; set; } = new();
     [Parameter] public string Placeholder { get; set; } = "Taguj...";
-    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<TagAssignmentState> OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
     private List<TagBadge> localTags = new();
     private List<TagItem> displayItems = new();
     private List<TagGroupDto> tagGroups = new();
     private bool showTagsGrouped;
+    private bool isMutating;
 
     protected override async Task OnInitializedAsync()
     {
@@ -85,7 +86,7 @@
 
     protected override void OnParametersSet()
     {
-        localTags = Tags?.Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, Strength = tag.Strength }).ToList() ?? new List<TagBadge>();
+        localTags = Tags?.Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList() ?? new List<TagBadge>();
         BuildDisplayItems();
     }
 
@@ -125,61 +126,58 @@
         if (!tagId.HasValue || string.IsNullOrWhiteSpace(ItemType) || string.IsNullOrWhiteSpace(SpotifyItemId))
             return;
 
-        var model = new AssignDto { TagId = tagId.Value, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = 3.0f };
-        var response = await Http.PutAsJsonAsync("api/tags/assign", model);
-        if (!response.IsSuccessStatusCode)
+        await ExecuteMutation(async () =>
         {
-            var createResponse = await Http.PostAsJsonAsync("api/tags/assign", model);
-            if (!createResponse.IsSuccessStatusCode)
-                return;
-        }
-
-        var existing = localTags.FirstOrDefault(tag => tag.TagId == tagId.Value);
-        if (existing != null)
-            existing.Strength = 3.0f;
-        else
-        {
-            var found = displayItems.FirstOrDefault(item => item.Id == tagId.Value);
-            localTags.Add(new TagBadge { TagId = tagId.Value, TagName = found?.Name ?? $"#{tagId.Value}", Strength = 3.0f });
-        }
-
-        await NotifyChanged();
+            var model = new AssignDto { TagId = tagId.Value, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = 3.0f };
+            var response = await Http.PutAsJsonAsync("api/tags/assign", model);
+            return response.IsSuccessStatusCode || (await Http.PostAsJsonAsync("api/tags/assign", model)).IsSuccessStatusCode;
+        });
     }
 
     private async Task Change(long tagId, float strength)
     {
-        var model = new AssignDto { TagId = tagId, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = strength };
-        var response = await Http.PutAsJsonAsync("api/tags/assign", model);
-        if (!response.IsSuccessStatusCode)
-            return;
-
-        var existing = localTags.FirstOrDefault(tag => tag.TagId == tagId);
-        if (existing != null)
-            existing.Strength = strength;
-
-        await NotifyChanged();
+        await ExecuteMutation(async () =>
+        {
+            var model = new AssignDto { TagId = tagId, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = strength };
+            return (await Http.PutAsJsonAsync("api/tags/assign", model)).IsSuccessStatusCode;
+        });
     }
 
     private async Task Remove(long tagId)
     {
-        var model = new AssignDto { TagId = tagId, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = 0 };
-        var request = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign")
+        await ExecuteMutation(async () =>
         {
-            Content = JsonContent.Create(model)
+            var model = new AssignDto { TagId = tagId, ItemType = ItemType, SpotifyItemId = SpotifyItemId, Strength = 0 };
+            var request = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "api/tags/assign") { Content = JsonContent.Create(model) });
+            return request.IsSuccessStatusCode;
         });
-        if (!request.IsSuccessStatusCode)
-            return;
-
-        localTags = localTags.Where(tag => tag.TagId != tagId).ToList();
-        await NotifyChanged();
     }
 
-    private async Task NotifyChanged()
+    private async Task ExecuteMutation(Func<Task<bool>> mutation)
     {
-        StateHasChanged();
-        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", ItemType, SpotifyItemId); } catch { }
-        if (OnChanged.HasDelegate)
-            await OnChanged.InvokeAsync();
+        if (isMutating)
+            return;
+
+        isMutating = true;
+        try
+        {
+            if (!await mutation())
+                return;
+
+            var response = await Http.GetAsync($"api/tags/assign/{Uri.EscapeDataString(ItemType)}/{Uri.EscapeDataString(SpotifyItemId)}");
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            localTags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+            if (OnChanged.HasDelegate)
+                await OnChanged.InvokeAsync(new TagAssignmentState { ItemType = ItemType, SpotifyItemId = SpotifyItemId, Tags = localTags });
+
+            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", ItemType, SpotifyItemId); } catch { }
+        }
+        finally
+        {
+            isMutating = false;
+        }
     }
 
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }

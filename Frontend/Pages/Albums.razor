@@ -567,8 +567,7 @@
                 return;
         }
 
-        await LoadAlbums();
-        await SaveToStore();
+        await RefreshAlbumTags(albumId);
     }
 
     private async Task RemoveAlbumTag(string albumId, long tagId)
@@ -582,8 +581,7 @@
         if (!req.IsSuccessStatusCode)
             return;
 
-        await LoadAlbums();
-        await SaveToStore();
+        await RefreshAlbumTags(albumId);
     }
 
     private void OpenAlbumTagging(string albumId)
@@ -596,6 +594,83 @@
     {
         showAlbumTagging = false;
         taggingAlbumId = null;
+    }
+
+    private async Task RefreshAlbumTags(string albumId)
+    {
+        var response = await Http.GetAsync($"api/tags/assign/album/{Uri.EscapeDataString(albumId)}");
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+        await ApplyTaggedAlbumState(new TagAssignmentState { ItemType = "album", SpotifyItemId = albumId, Tags = tags });
+    }
+
+    private async Task ApplyTaggedAlbumState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "album", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var album = albums.FirstOrDefault(item => item.Id == state.SpotifyItemId);
+        if (album == null)
+            return;
+
+        var previousTagIds = album.Tags.Select(tag => tag.TagId).ToHashSet();
+        album.Tags = state.Tags.Select(tag => new AlbumTag
+        {
+            TagId = tag.TagId,
+            TagName = tag.TagName,
+            TagGroupName = tag.TagGroupName,
+            Strength = tag.Strength
+        }).ToList();
+
+        if (!MatchesAlbumTagFilters(album))
+            albums.Remove(album);
+
+        SortAlbumsByTagStrength();
+        ApplyLocalFilter();
+
+        if (!previousTagIds.SetEquals(album.Tags.Select(tag => tag.TagId)))
+            await LoadAlbumTagCounts();
+    }
+
+    private bool MatchesAlbumTagFilters(Album album)
+    {
+        var tagIds = album.Tags.Select(tag => tag.TagId).ToHashSet();
+        if (long.TryParse(selectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
+            return false;
+
+        if (includeTagIds.Count > 0)
+        {
+            var matchesInclude = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? includeTagIds.All(tagIds.Contains)
+                : includeTagIds.Any(tagIds.Contains);
+            if (!matchesInclude)
+                return false;
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            var matchesExcluded = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? excludeTagIds.All(tagIds.Contains)
+                : excludeTagIds.Any(tagIds.Contains);
+            if (matchesExcluded)
+                return false;
+        }
+
+        return true;
+    }
+
+    private void SortAlbumsByTagStrength()
+    {
+        if (!string.Equals(sortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(selectedTagSort, out var tagId))
+            return;
+
+        albums = (string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase)
+                ? albums.OrderBy(album => album.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0)
+                : albums.OrderByDescending(album => album.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0))
+            .ThenBy(album => album.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private async Task AddAlbumTagFromPanel(long? tagId)
@@ -1069,8 +1144,8 @@
                              ItemType="album"
                              SpotifyItemId="@taggingAlbumId"
                              Items="albumTagItems"
-                             Tags="@(albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                             Tags="@(albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
                              Placeholder="Taguj album..."
-                             OnChanged="LoadAlbums"
+                             OnChanged="ApplyTaggedAlbumState"
                              OnClose="CloseAlbumTagging" />
 }

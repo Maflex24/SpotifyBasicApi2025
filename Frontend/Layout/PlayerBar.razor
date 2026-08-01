@@ -46,7 +46,7 @@
     private bool isCurrentInLibrary = false;
     private bool showTagging = false;
     private List<TagItem> userTrackTags = new();
-    private List<(long TagId, float Strength)> currentTrackAssigns = new();
+    private List<TagBadge> currentTrackAssigns = new();
     private string? lastAssignsTrackId;
 
     private string? GetCurrentTrackId()
@@ -135,8 +135,24 @@
         var tags = await Http.GetFromJsonAsync<List<TagItem>>("api/tags");
         userTrackTags = tags?.Where(t => true).ToList() ?? new List<TagItem>();
 
-        var assigns = await Http.GetFromJsonAsync<List<AssignDto>>($"api/tags/assign/track/{trackId}");
-        currentTrackAssigns = assigns?.Select(a => (a.TagId, a.Strength)).ToList() ?? new List<(long, float)>();
+        var assigns = await Http.GetFromJsonAsync<List<TagBadge>>($"api/tags/assign/track/{trackId}");
+        currentTrackAssigns = assigns ?? new List<TagBadge>();
+    }
+
+    private async Task RefreshCurrentTrackAssigns(string trackId)
+    {
+        var assigns = await Http.GetFromJsonAsync<List<TagBadge>>($"api/tags/assign/track/{Uri.EscapeDataString(trackId)}");
+        currentTrackAssigns = assigns ?? new List<TagBadge>();
+    }
+
+    private Task ApplyCurrentTrackTagState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(state.SpotifyItemId, GetCurrentTrackId(), StringComparison.Ordinal))
+            return Task.CompletedTask;
+
+        currentTrackAssigns = state.Tags;
+        return InvokeAsync(StateHasChanged);
     }
 
     private async Task OnTagSelected(long? tagId)
@@ -151,14 +167,14 @@
 
         if (res.IsSuccessStatusCode)
         {
-            await LoadTagsForTrack();
+            await RefreshCurrentTrackAssigns(trackId);
             try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
         }
     }
 
     private async Task AdjustAssignStrength(long tagId, float delta)
     {
-        var current = currentTrackAssigns.FirstOrDefault(a => a.TagId == tagId).Strength;
+        var current = currentTrackAssigns.FirstOrDefault(a => a.TagId == tagId)?.Strength ?? 0.0f;
         var next = Math.Clamp(current + delta, 0.0f, 6.0f);
 
         if (Math.Abs(next - current) < 0.001f)
@@ -179,7 +195,7 @@
 
         if (res.IsSuccessStatusCode)
         {
-            await LoadTagsForTrack();
+            await RefreshCurrentTrackAssigns(trackId);
             try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
         }
     }
@@ -200,7 +216,7 @@
         if (!req.IsSuccessStatusCode)
             return;
 
-        await LoadTagsForTrack();
+        await RefreshCurrentTrackAssigns(trackId);
         try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
     }
 
@@ -209,7 +225,8 @@
         return currentTrackAssigns.Select(assign => new TagBadge
         {
             TagId = assign.TagId,
-            TagName = userTrackTags.FirstOrDefault(tag => tag.Id == assign.TagId)?.Name ?? $"#{assign.TagId}",
+            TagName = assign.TagName,
+            TagGroupName = assign.TagGroupName,
             Strength = assign.Strength
         }).ToList();
     }
@@ -260,8 +277,7 @@
                     <div class="d-flex flex-wrap gap-1 mt-1">
                         @foreach (var assign in currentTrackAssigns.Take(3))
                         {
-                            var name = userTrackTags.FirstOrDefault(t => t.Id == assign.TagId)?.Name ?? ("#" + assign.TagId);
-                            <span class="badge bg-primary" style="font-size: 0.65rem;">@name (@assign.Strength.ToString("0.0"))</span>
+                            <span class="badge bg-primary" style="font-size: 0.65rem;">@assign.TagName (@assign.Strength.ToString("0.0"))</span>
                         }
                         @if (currentTrackAssigns.Count > 3)
                         {
@@ -302,7 +318,7 @@
                   Items="userTrackTags"
                   Tags="GetCurrentTrackTagBadges()"
                   Placeholder="Taguj utwór..."
-                  OnChanged="LoadTagsForTrack"
+                  OnChanged="ApplyCurrentTrackTagState"
                   OnClose="ToggleTagging" />
 }
 

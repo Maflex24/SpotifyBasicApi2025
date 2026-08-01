@@ -157,9 +157,9 @@
                                  ItemType="track"
                                  SpotifyItemId="@taggingTrackId"
                                  Items="trackTagItems"
-                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
                                  Placeholder="Taguj utwór..."
-                                 OnChanged="() => LoadTracks()"
+                                 OnChanged="ApplyTaggedPlaylistTrackStateFromPanel"
                                  OnClose="CloseTrackTagging" />
     }
 </div>
@@ -302,20 +302,14 @@
 
             return;
 
-        if (tracks.Any(t => t.Id == spotifyItemId))
+        if (string.Equals(lastPanelTagUpdateId, spotifyItemId, StringComparison.Ordinal))
         {
-            var res = await Http.GetAsync($"api/library/tracks/{Uri.EscapeDataString(spotifyItemId)}");
-            if (!res.IsSuccessStatusCode) return;
-            var dto = await res.Content.ReadFromJsonAsync<Track>();
-            if (dto == null) return;
-            var idx = tracks.FindIndex(t => t.Id == dto.Id);
-            if (idx >= 0)
-            {
-                tracks[idx] = dto;
-                filteredTracks = tracks.ToList();
-                await InvokeAsync(StateHasChanged);
-            }
+            lastPanelTagUpdateId = null;
+            return;
         }
+
+        if (tracks.Any(t => t.Id == spotifyItemId))
+            await RefreshPlaylistTrackTags(spotifyItemId);
     }
 
     private void ApplyLocalFilter()
@@ -544,7 +538,7 @@
                 return;
         }
 
-        await LoadTracks();
+        await RefreshPlaylistTrackTags(trackId);
     }
 
     private async Task RemoveTrackTag(string trackId, long tagId)
@@ -558,7 +552,50 @@
         if (!req.IsSuccessStatusCode)
             return;
 
-        await LoadTracks();
+        await RefreshPlaylistTrackTags(trackId);
+    }
+
+    private async Task RefreshPlaylistTrackTags(string trackId)
+    {
+        var response = await Http.GetAsync($"api/tags/assign/track/{Uri.EscapeDataString(trackId)}");
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+        await ApplyTaggedPlaylistTrackState(new TagAssignmentState { ItemType = "track", SpotifyItemId = trackId, Tags = tags });
+    }
+
+    private async Task ApplyTaggedPlaylistTrackState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var track = tracks.FirstOrDefault(item => item.Id == state.SpotifyItemId);
+        if (track == null)
+            return;
+
+        var previousTagIds = track.Tags.Select(tag => tag.TagId).ToHashSet();
+        track.Tags = state.Tags.Select(tag => new TrackTag
+        {
+            TagId = tag.TagId,
+            TagName = tag.TagName,
+            TagGroupName = tag.TagGroupName,
+            Strength = tag.Strength
+        }).ToList();
+
+        ApplyLocalFilter();
+        ApplyClientSort();
+
+        if (!previousTagIds.SetEquals(track.Tags.Select(tag => tag.TagId)))
+            await LoadPlaylistTagCounts();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ApplyTaggedPlaylistTrackStateFromPanel(TagAssignmentState state)
+    {
+        lastPanelTagUpdateId = state.SpotifyItemId;
+        await ApplyTaggedPlaylistTrackState(state);
     }
 
     private void OnTrackTagSelectChanged(string trackId, string? value)
@@ -754,6 +791,7 @@
 
     private bool showTrackTagging = false;
     private string? taggingTrackId;
+    private string? lastPanelTagUpdateId;
     private void OpenTrackTagging(string trackId) { taggingTrackId = trackId; showTrackTagging = true; }
     private void CloseTrackTagging() { showTrackTagging = false; taggingTrackId = null; }
 

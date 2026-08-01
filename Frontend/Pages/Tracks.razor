@@ -129,9 +129,9 @@
                                  ItemType="track"
                                  SpotifyItemId="@taggingTrackId"
                                  Items="trackTagItems"
-                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
                                  Placeholder="Taguj utwór..."
-                                 OnChanged="RefreshSingleTrackFromApi"
+                                 OnChanged="ApplyTaggedTrackStateFromPanel"
                                  OnClose="CloseTrackTagging" />
     }
 
@@ -242,6 +242,7 @@
     private bool showTagFilters = true;
     private bool showTrackTagging = false;
     private string? taggingTrackId;
+    private string? lastPanelTagUpdateId;
     private int page = 1;
     private int pageSize = 100;
     private int total = 0;
@@ -668,28 +669,92 @@
                 return;
         }
 
-        await LoadTracks();
+        await RefreshTrackTags(trackId);
     }
 
-    private async Task RefreshSingleTrackFromApi()
+    private async Task RefreshTrackTags(string trackId)
     {
-        if (string.IsNullOrWhiteSpace(taggingTrackId))
-
+        var response = await Http.GetAsync($"api/tags/assign/track/{Uri.EscapeDataString(trackId)}");
+        if (!response.IsSuccessStatusCode)
             return;
 
-        var dto = await Http.GetFromJsonAsync<Track>($"api/library/tracks/{Uri.EscapeDataString(taggingTrackId)}");
+        var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+        await ApplyTaggedTrackState(new TagAssignmentState { ItemType = "track", SpotifyItemId = trackId, Tags = tags });
+    }
 
-        if (dto == null)
-
+    private async Task ApplyTaggedTrackState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase))
             return;
 
-        var idx = tracks.FindIndex(t => t.Id == dto.Id);
-        if (idx >= 0)
+        var track = tracks.FirstOrDefault(item => item.Id == state.SpotifyItemId);
+        if (track == null)
+            return;
+
+        var previousTagIds = track.Tags.Select(tag => tag.TagId).ToHashSet();
+        track.Tags = state.Tags.Select(tag => new TrackTag
         {
-            tracks[idx] = dto;
-            filteredTracks = tracks.ToList();
-            await InvokeAsync(StateHasChanged);
+            TagId = tag.TagId,
+            TagName = tag.TagName,
+            TagGroupName = tag.TagGroupName,
+            Strength = tag.Strength
+        }).ToList();
+
+        if (!MatchesTrackTagFilters(track))
+            tracks.Remove(track);
+
+        SortTracksByTagStrength();
+        ApplyLocalFilter();
+
+        if (!previousTagIds.SetEquals(track.Tags.Select(tag => tag.TagId)))
+            await LoadTrackTagCounts();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ApplyTaggedTrackStateFromPanel(TagAssignmentState state)
+    {
+        lastPanelTagUpdateId = state.SpotifyItemId;
+        await ApplyTaggedTrackState(state);
+    }
+
+    private bool MatchesTrackTagFilters(Track track)
+    {
+        var tagIds = track.Tags.Select(tag => tag.TagId).ToHashSet();
+        if (long.TryParse(selectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
+            return false;
+
+        if (includeTagIds.Count > 0)
+        {
+            var matchesInclude = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? includeTagIds.All(tagIds.Contains)
+                : includeTagIds.Any(tagIds.Contains);
+            if (!matchesInclude)
+                return false;
         }
+
+        if (excludeTagIds.Count > 0)
+        {
+            var matchesExcluded = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? excludeTagIds.All(tagIds.Contains)
+                : excludeTagIds.Any(tagIds.Contains);
+            if (matchesExcluded)
+                return false;
+        }
+
+        return true;
+    }
+
+    private void SortTracksByTagStrength()
+    {
+        if (!string.Equals(sortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(selectedTagSort, out var tagId))
+            return;
+
+        tracks = (string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase)
+                ? tracks.OrderBy(track => track.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0)
+                : tracks.OrderByDescending(track => track.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0))
+            .ThenBy(track => track.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private void OpenTrackTagging(string trackId)
@@ -715,7 +780,7 @@
         if (!req.IsSuccessStatusCode)
             return;
 
-        await LoadTracks();
+        await RefreshTrackTags(trackId);
     }
 
     private async Task ApplyFilterByTag(long tagId)
@@ -958,11 +1023,14 @@
 
             return;
 
-        if (tracks.Any(t => t.Id == spotifyItemId))
+        if (string.Equals(lastPanelTagUpdateId, spotifyItemId, StringComparison.Ordinal))
         {
-            taggingTrackId = spotifyItemId;
-            await RefreshSingleTrackFromApi();
+            lastPanelTagUpdateId = null;
+            return;
         }
+
+        if (tracks.Any(t => t.Id == spotifyItemId))
+            await RefreshTrackTags(spotifyItemId);
     }
 
     private sealed class PlaybackState { public PlaybackItem? Item { get; set; } }

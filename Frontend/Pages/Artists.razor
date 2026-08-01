@@ -182,7 +182,7 @@
                   Items="artistTagItems"
                   Tags="GetArtistTagBadges()"
                   Placeholder="Taguj artystę..."
-                  OnChanged="LoadArtists"
+                  OnChanged="ApplyTaggedArtistState"
                   OnClose="CloseArtistTagging" />
 }
 
@@ -379,8 +379,7 @@
                 return;
         }
 
-        await LoadArtists();
-        await SaveToStore();
+        await RefreshArtistTags(artistId);
     }
 
     private async Task RemoveArtistTag(string artistId, long tagId)
@@ -394,8 +393,7 @@
         if (!req.IsSuccessStatusCode)
             return;
 
-        await LoadArtists();
-        await SaveToStore();
+        await RefreshArtistTags(artistId);
     }
 
     private void OpenArtistTagging(string artistId)
@@ -413,8 +411,85 @@
     private List<TagBadge> GetArtistTagBadges()
     {
         return artists.FirstOrDefault(artist => artist.Id == taggingArtistId)?.Tags?
-            .Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, Strength = tag.Strength })
+            .Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength })
             .ToList() ?? new List<TagBadge>();
+    }
+
+    private async Task RefreshArtistTags(string artistId)
+    {
+        var response = await Http.GetAsync($"api/tags/assign/artist/{Uri.EscapeDataString(artistId)}");
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+        await ApplyTaggedArtistState(new TagAssignmentState { ItemType = "artist", SpotifyItemId = artistId, Tags = tags });
+    }
+
+    private async Task ApplyTaggedArtistState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var artist = artists.FirstOrDefault(item => item.Id == state.SpotifyItemId);
+        if (artist == null)
+            return;
+
+        var previousTagIds = artist.Tags.Select(tag => tag.TagId).ToHashSet();
+        artist.Tags = state.Tags.Select(tag => new ArtistTag
+        {
+            TagId = tag.TagId,
+            TagName = tag.TagName,
+            TagGroupName = tag.TagGroupName,
+            Strength = tag.Strength
+        }).ToList();
+
+        if (!MatchesArtistTagFilters(artist))
+            artists.Remove(artist);
+
+        SortArtistsByTagStrength();
+        ApplyLocalFilter();
+
+        if (!previousTagIds.SetEquals(artist.Tags.Select(tag => tag.TagId)))
+            await LoadArtistTagCounts();
+    }
+
+    private bool MatchesArtistTagFilters(Artist artist)
+    {
+        var tagIds = artist.Tags.Select(tag => tag.TagId).ToHashSet();
+        if (long.TryParse(selectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
+            return false;
+
+        if (includeTagIds.Count > 0)
+        {
+            var matchesInclude = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? includeTagIds.All(tagIds.Contains)
+                : includeTagIds.Any(tagIds.Contains);
+            if (!matchesInclude)
+                return false;
+        }
+
+        if (excludeTagIds.Count > 0)
+        {
+            var matchesExcluded = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? excludeTagIds.All(tagIds.Contains)
+                : excludeTagIds.Any(tagIds.Contains);
+            if (matchesExcluded)
+                return false;
+        }
+
+        return true;
+    }
+
+    private void SortArtistsByTagStrength()
+    {
+        if (!string.Equals(sortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(selectedTagSort, out var tagId))
+            return;
+
+        artists = (string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase)
+                ? artists.OrderBy(artist => artist.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0)
+                : artists.OrderByDescending(artist => artist.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0))
+            .ThenBy(artist => artist.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private async Task AddArtistTagFromPanel(long? tagId)
