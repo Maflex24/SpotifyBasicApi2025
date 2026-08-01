@@ -443,6 +443,20 @@ code {
     height: 1.1rem;
 }
 
+.artist-image-square .album-card-play,
+.artist-image-square .album-card-queue {
+    color: #fff;
+    background: rgba(38, 43, 50, 0.78);
+    border-color: rgba(255,255,255,0.84);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.72), 0 2px 7px rgba(0,0,0,0.38);
+    backdrop-filter: none;
+}
+
+.artist-image-square .album-card-play .app-icon,
+.artist-image-square .album-card-queue .app-icon {
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.72));
+}
+
 .album-card-delete {
     position: absolute;
     top: 0.5rem;
