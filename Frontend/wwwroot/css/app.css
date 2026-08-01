@@ -194,6 +194,374 @@ code {
     opacity: 0.55;
 }
 
+/* Album filters and actions */
+.app-icon {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.app-icon-fill {
+    fill: currentColor;
+    stroke: none;
+}
+
+.albums-toolbar {
+    display: grid;
+    width: min(100%, 72rem);
+    margin-inline: auto;
+    grid-template-columns: max-content clamp(20rem, 40vw, 42rem) max-content;
+    grid-template-areas:
+        "heading search playback"
+        "filters filters actions";
+    gap: 0.65rem 0.85rem;
+    align-items: center;
+    justify-content: center;
+}
+
+.albums-toolbar-heading { grid-area: heading; }
+.albums-search-group { grid-area: search; min-width: 0; }
+.albums-filter-fields { grid-area: filters; }
+.albums-toolbar-actions { grid-area: actions; }
+.albums-playback-actions { grid-area: playback; }
+
+.albums-search-group .form-control {
+    width: 100%;
+}
+
+.albums-filter-fields,
+.albums-toolbar-actions,
+.albums-playback-actions,
+.saved-filters-fields,
+.saved-filters-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.albums-filter-fields {
+    min-width: 0;
+}
+
+.albums-filter-fields > .form-select {
+    width: auto;
+    min-width: 8.5rem;
+}
+
+.albums-filter-fields .albums-artist-select {
+    min-width: 11.5rem;
+    max-width: 17rem;
+}
+
+.albums-year-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(5.5rem, 6.75rem));
+    gap: 0.5rem;
+}
+
+.input-dark,
+.form-control.input-dark {
+    background-color: #1e1e1e;
+    color: #e5e5e5;
+    border-color: rgba(255,255,255,0.15);
+}
+
+.input-dark::placeholder {
+    color: #9ca3af;
+}
+
+.input-dark:focus {
+    background-color: #222;
+    color: #fff;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.1rem rgba(255,255,255,0.1), 0 0 0 0.25rem rgba(13,110,253,0.25);
+}
+
+.album-action-button,
+.album-card-tag,
+.album-card-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.25rem;
+    border-radius: 0.45rem;
+    transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.album-action-button:hover:not(:disabled),
+.album-card-tag:hover,
+.album-card-delete:hover {
+    transform: translateY(-1px);
+}
+
+.album-action-button:focus-visible,
+.album-card-tag:focus-visible,
+.album-card-delete:focus-visible,
+.artist-image-square .album-card-play:focus-visible,
+.artist-image-square .album-card-queue:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(29,185,84,0.35);
+}
+
+.album-action-muted {
+    color: #e5e7eb;
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.26);
+}
+
+.album-action-muted:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.5);
+}
+
+.album-action-apply,
+.album-action-save {
+    color: #fff;
+    background: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.album-action-apply:hover:not(:disabled),
+.album-action-save:hover:not(:disabled) {
+    background: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.album-action-random {
+    color: #f8d47a;
+    background: rgba(255,193,7,0.08);
+    border-color: rgba(255,193,7,0.55);
+}
+
+.album-action-random:hover:not(:disabled) {
+    color: #fff0c2;
+    background: rgba(255,193,7,0.18);
+}
+
+.album-action-play-all {
+    color: #06150c;
+    background: #1db954;
+    border-color: #1db954;
+    font-weight: 600;
+}
+
+.album-action-play-all:hover:not(:disabled) {
+    color: #021007;
+    background: #1ed760;
+    border-color: #1ed760;
+}
+
+.album-action-play-all:disabled {
+    color: rgba(255,255,255,0.7);
+    background: rgba(29,185,84,0.3);
+    border-color: transparent;
+}
+
+.album-action-warning {
+    color: #f8d47a;
+    border-color: rgba(255,193,7,0.65);
+    background: rgba(255,193,7,0.08);
+}
+
+.album-action-danger {
+    color: #ff9a9a;
+    border-color: rgba(220,53,69,0.68);
+    background: rgba(220,53,69,0.08);
+}
+
+.album-action-warning:hover:not(:disabled),
+.album-action-danger:hover:not(:disabled) {
+    color: #fff;
+}
+
+.saved-filters-panel {
+    display: grid;
+    width: min(100%, 72rem);
+    margin-inline: auto;
+    grid-template-columns: max-content clamp(18rem, 36vw, 36rem) max-content;
+    grid-template-areas: "heading fields actions";
+    gap: 0.65rem 0.85rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 0.5rem;
+    background: rgba(255,255,255,0.025);
+}
+
+.saved-filters-heading {
+    grid-area: heading;
+    margin: 0;
+    font-size: 0.9rem;
+    color: #b7c0cc;
+}
+
+.saved-filters-fields { grid-area: fields; min-width: 0; }
+.saved-filters-actions { grid-area: actions; }
+
+.saved-filters-fields > * {
+    min-width: 0;
+    flex: 1 1 11rem;
+}
+
+.artist-image-square .album-card-play {
+    width: 3.25rem;
+    height: 3.25rem;
+    color: #07160d;
+    background: #1db954;
+    border-color: #1db954;
+}
+
+.artist-image-square .album-card-play .app-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+.artist-image-square .album-card-play:hover {
+    background: #1ed760;
+    border-color: #1ed760;
+}
+
+.artist-image-square .album-card-queue {
+    width: 2.7rem;
+    height: 2.7rem;
+    right: 4.5rem;
+}
+
+.artist-image-square .album-card-queue .app-icon {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.album-card-delete {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 1;
+    width: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0;
+    color: #fff;
+    background: rgba(38,10,14,0.72);
+    border: 1px solid rgba(255,120,132,0.8);
+    backdrop-filter: blur(2px);
+}
+
+.album-card-delete:hover {
+    background: #b4232f;
+    border-color: #ff9eaa;
+}
+
+.album-card-tag {
+    color: #e5e7eb;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.35);
+}
+
+.album-card-tag:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.65);
+}
+
+@media (max-width: 1399.98px) {
+    .albums-toolbar {
+        grid-template-columns: minmax(0, 1fr) max-content;
+        grid-template-areas:
+            "heading playback"
+            "search search"
+            "filters filters"
+            "actions actions";
+    }
+
+    .saved-filters-panel {
+        grid-template-columns: max-content minmax(0, 1fr);
+        grid-template-areas:
+            "heading heading"
+            "fields fields"
+            "actions actions";
+    }
+}
+
+@media (max-width: 767.98px) {
+    .albums-toolbar {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "heading"
+            "search"
+            "filters"
+            "actions"
+            "playback";
+        gap: 0.6rem;
+        padding: 0.65rem 0;
+    }
+
+    .albums-toolbar-actions,
+    .albums-playback-actions,
+    .saved-filters-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(2.5rem, 1fr));
+        width: 100%;
+    }
+
+    .albums-filter-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .albums-filter-fields > .form-select,
+    .albums-filter-fields .albums-artist-select,
+    .albums-year-fields {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .albums-filter-fields .albums-artist-select,
+    .albums-year-fields {
+        grid-column: 1 / -1;
+    }
+
+    .albums-year-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .saved-filters-fields {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+
+    .saved-filters-fields > * {
+        width: 100%;
+    }
+
+    .album-action-button {
+        min-height: 2.5rem;
+        padding-inline: 0.5rem;
+    }
+
+    .album-action-button .app-icon {
+        width: 1.15rem;
+        height: 1.15rem;
+    }
+
+    .album-action-label,
+    .album-action-state {
+        display: none;
+    }
+}
+
 /* Tag chips */
 .tag-chips-container {
     display: flex;

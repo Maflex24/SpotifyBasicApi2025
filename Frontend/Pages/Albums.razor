@@ -6,57 +6,94 @@
 @using System.Text.Json
 
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
-        <h4 class="mb-0">Albumy</h4>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
+    <section class="albums-toolbar sticky-toolbar mb-3" aria-label="Filtry i akcje albumów">
+        <div class="albums-toolbar-heading">
+            <h4 class="mb-0">Albumy</h4>
+        </div>
+
+        <div class="albums-search-group">
+            <label class="visually-hidden" for="albums-search">Szukaj albumu lub wykonawcy</label>
+            <input id="albums-search" class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
+        </div>
+
+        <div class="albums-filter-fields" aria-label="Ustawienia filtrowania">
+            <select class="form-select form-select-sm select-dark" aria-label="Sortuj według" @bind="sortKey">
                 <option value="name">Nazwa</option>
                 <option value="artist">Wykonawca</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
                 <option value="year">Rok</option>
             </select>
-            <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
+            <select class="form-select form-select-sm select-dark" aria-label="Kierunek sortowania" @bind="sortOrder">
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
             </select>
-
-            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
-
-            <select class="form-select form-select-sm w-auto select-dark" @bind="selectedArtistId">
+            <select class="form-select form-select-sm select-dark albums-artist-select" aria-label="Wykonawca" @bind="selectedArtistId">
                 <option value="">Wszyscy wykonawcy</option>
                 @foreach (var ar in availableAlbumArtists)
                 {
                     <option value="@ar.Id">@ar.Name</option>
                 }
             </select>
-
-            <input type="number" class="form-control form-control-sm input-dark" style="width:110px;" placeholder="Rok od" @bind="fromYear" />
-            <input type="number" class="form-control form-control-sm input-dark" style="width:110px; margin-right:6px;" placeholder="Rok do" @bind="toYear" />
-
-            <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Resetuj</button>
-            <button class="btn btn-sm btn-outline-light" @onclick="LoadAlbums">Zastosuj</button>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
-            <button class="btn btn-sm btn-outline-warning" title="Wylosuj album z bieżących wyników" @onclick="PickRandomAlbum">Losuj</button>
-            <button class="btn btn-sm btn-outline-success" title="Dodaj wszystkie wyświetlone albumy do kolejki" disabled="@(isQueueingAllAlbums || filteredAlbums.Count == 0)" @onclick="PlayAllAlbums">Odtwórz wszystko</button>
+            <div class="albums-year-fields">
+                <label class="visually-hidden" for="albums-year-from">Rok od</label>
+                <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" />
+                <label class="visually-hidden" for="albums-year-to">Rok do</label>
+                <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" />
+            </div>
         </div>
-    </div>
 
-    <div class="d-flex justify-content-start align-items-center mb-3 gap-2 flex-wrap">
-        <span class="text-muted me-2">Zapisane filtry:</span>
-        <select class="form-select form-select-sm w-auto select-dark" @bind="selectedSavedFilterId">
-            <option value="">Wybierz filtr...</option>
-            @foreach (var f in savedFilters)
-            {
-                <option value="@f.Id.ToString()">@f.Name</option>
-            }
-        </select>
-        <input class="form-control form-control-sm input-dark" style="width: 160px;" placeholder="Nazwa filtra" @bind="newFilterName" />
-        <button class="btn btn-sm btn-outline-primary" title="Zapisz jako nowy" @onclick="SaveCurrentFilter">Zapisz</button>
-        <button class="btn btn-sm btn-outline-light" title="Zastosuj wybrany" @onclick="ApplySelectedFilter">Wczytaj</button>
-        <button class="btn btn-sm btn-outline-warning" title="Zmień nazwę / nadpisz" @onclick="RenameSelectedFilter">Zmień nazwę</button>
-        <button class="btn btn-sm btn-outline-danger" title="Usuń wybrany" @onclick="DeleteSelectedFilter">Usuń</button>
-    </div>
+        <div class="albums-toolbar-actions" aria-label="Akcje filtrowania">
+            <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść wszystkie filtry" aria-label="Resetuj filtry" @onclick="ResetFilters">
+                <AppIcon Name="reset" /><span class="album-action-label">Resetuj</span>
+            </button>
+            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj wybrane filtry" aria-label="Zastosuj filtry" @onclick="LoadAlbums">
+                <AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span>
+            </button>
+            <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-label="Tagi: @(showTagFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters">
+                <AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span>
+            </button>
+        </div>
+
+        <div class="albums-playback-actions" aria-label="Szybkie akcje wyników">
+            <button class="btn btn-sm album-action-button album-action-random" title="Wylosuj album z bieżących wyników" aria-label="Wylosuj album z bieżących wyników" @onclick="PickRandomAlbum">
+                <AppIcon Name="shuffle" /><span class="album-action-label">Losuj</span>
+            </button>
+            <button class="btn btn-sm album-action-button album-action-play-all" title="Dodaj wszystkie wyświetlone albumy do kolejki" aria-label="Odtwórz wszystkie wyświetlone albumy" disabled="@(isQueueingAllAlbums || filteredAlbums.Count == 0)" @onclick="PlayAllAlbums">
+                <AppIcon Name="play" /><span class="album-action-label">Odtwórz wszystko</span>
+            </button>
+        </div>
+    </section>
+
+    <section class="saved-filters-panel mb-3" aria-labelledby="saved-filters-heading">
+        <h5 id="saved-filters-heading" class="saved-filters-heading">Zapisane filtry</h5>
+        <div class="saved-filters-fields">
+            <label class="visually-hidden" for="saved-filter-select">Wybierz zapisany filtr</label>
+            <select id="saved-filter-select" class="form-select form-select-sm select-dark" @bind="selectedSavedFilterId">
+                <option value="">Wybierz filtr...</option>
+                @foreach (var f in savedFilters)
+                {
+                    <option value="@f.Id.ToString()">@f.Name</option>
+                }
+            </select>
+            <label class="visually-hidden" for="saved-filter-name">Nazwa filtra</label>
+            <input id="saved-filter-name" class="form-control form-control-sm input-dark" placeholder="Nazwa filtra" @bind="newFilterName" />
+        </div>
+        <div class="saved-filters-actions" aria-label="Akcje zapisanych filtrów">
+            <button class="btn btn-sm album-action-button album-action-save" title="Zapisz jako nowy filtr" aria-label="Zapisz jako nowy filtr" @onclick="SaveCurrentFilter">
+                <AppIcon Name="save" /><span class="album-action-label">Zapisz</span>
+            </button>
+            <button class="btn btn-sm album-action-button album-action-muted" title="Wczytaj wybrany filtr" aria-label="Wczytaj wybrany filtr" @onclick="ApplySelectedFilter">
+                <AppIcon Name="load" /><span class="album-action-label">Wczytaj</span>
+            </button>
+            <button class="btn btn-sm album-action-button album-action-warning" title="Zmień nazwę lub nadpisz wybrany filtr" aria-label="Zmień nazwę lub nadpisz wybrany filtr" @onclick="RenameSelectedFilter">
+                <AppIcon Name="edit" /><span class="album-action-label">Zmień nazwę</span>
+            </button>
+            <button class="btn btn-sm album-action-button album-action-danger" title="Usuń wybrany filtr" aria-label="Usuń wybrany filtr" @onclick="DeleteSelectedFilter">
+                <AppIcon Name="delete" /><span class="album-action-label">Usuń</span>
+            </button>
+        </div>
+    </section>
 
     @if (showTagFilters)
     {
@@ -93,12 +130,12 @@
                     {
                         <div class="artist-image-square" style="position:relative;">
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
-                            <button class="artist-play-overlay" title="Odtwórz album"
-                                    @onclick="() => PlayAlbum(a.Uri)">▶</button>
-                            <button class="artist-queue-overlay" title="Dodaj album na koniec kolejki"
-                                    disabled="@queuingAlbumIds.Contains(a.Id)" @onclick="() => QueueAlbum(a.Id)">+</button>
-                            <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
-                                    @onclick="() => ConfirmRemoveAlbum(a.Id)">✖</button>
+                            <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @a.Name"
+                                    @onclick="() => PlayAlbum(a.Uri)"><AppIcon Name="play" /></button>
+                            <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @a.Name"
+                                    disabled="@queuingAlbumIds.Contains(a.Id)" @onclick="() => QueueAlbum(a.Id)"><AppIcon Name="queue" /></button>
+                            <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @a.Name"
+                                    @onclick="() => ConfirmRemoveAlbum(a.Id)"><AppIcon Name="delete" /></button>
                         </div>
                     }
                     <div class="card-body">
@@ -138,7 +175,9 @@
 
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenAlbumTagging(a.Id)">Taguj</button>
+                                <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @a.Name" @onclick="() => OpenAlbumTagging(a.Id)">
+                                    <AppIcon Name="tag" /><span>Taguj</span>
+                                </button>
                                 <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@a.TotalTracks</span>
                             </div>
                         </div>

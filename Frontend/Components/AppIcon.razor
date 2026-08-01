@@ -1,0 +1,49 @@
+@if (Name == "filters")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h10m3 0h3M4 17h3m3 0h10M14 4v6M7 14v6" /></svg>
+}
+else if (Name == "reset")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12a8 8 0 1 0 2.34-5.66M4 4v6h6" /></svg>
+}
+else if (Name == "apply")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4.25 4.25L19 6.5" /></svg>
+}
+else if (Name == "tag")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 13.2 13.2 20a2 2 0 0 1-2.83 0L3 12.63V4h8.63L20 10.37a2 2 0 0 1 0 2.83Z" /><path d="M7.5 8.5h.01" /></svg>
+}
+else if (Name == "shuffle")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 3h5v5M4 20 9 15M14 6l2 2 5 5M21 16v5h-5M4 4l5 5" /></svg>
+}
+else if (Name == "play")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="app-icon-fill" d="M8 5.5v13l10-6.5-10-6.5Z" /></svg>
+}
+else if (Name == "queue")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h9M4 11h9M4 16h6M18 10v8M14 14h8" /></svg>
+}
+else if (Name == "save")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 4h12v16l-6-3-6 3V4Z" /><path d="M12 7v6M9 10h6" /></svg>
+}
+else if (Name == "load")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v12M7 10l5 5 5-5M5 19h14" /></svg>
+}
+else if (Name == "edit")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 20 4.2-1 10-10a2.12 2.12 0 0 0-3-3l-10 10L4 20Z" /><path d="m13.5 7.5 3 3" /></svg>
+}
+else if (Name == "delete")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+    [Parameter] public string? Class { get; set; }
+}
