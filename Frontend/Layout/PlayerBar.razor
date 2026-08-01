@@ -204,6 +204,16 @@
         try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
     }
 
+    private List<TagBadge> GetCurrentTrackTagBadges()
+    {
+        return currentTrackAssigns.Select(assign => new TagBadge
+        {
+            TagId = assign.TagId,
+            TagName = userTrackTags.FirstOrDefault(tag => tag.Id == assign.TagId)?.Name ?? $"#{assign.TagId}",
+            Strength = assign.Strength
+        }).ToList();
+    }
+
     private string? GetItemImageUrl()
     {
         var images = state?.item?.album?.images;
@@ -286,29 +296,14 @@
 
 @if (showTagging && isCurrentInLibrary)
 {
-    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-            <strong>Tagowanie utworu</strong>
-            <button class="btn btn-sm btn-outline-light" @onclick="ToggleTagging">✕</button>
-        </div>
-        
-        <TagSearchSelect Items="userTrackTags" Placeholder="Taguj utwór..." OnSelected="OnTagSelected" ShowClear="false" />
-        @if (currentTrackAssigns.Count > 0)
-        {
-            <div class="d-flex flex-wrap gap-2 mt-2">
-                @foreach (var assign in currentTrackAssigns)
-                {
-                    var name = userTrackTags.FirstOrDefault(t => t.Id == assign.TagId)?.Name ?? ("#" + assign.TagId);
-                    <div class="badge bg-secondary">
-                        @name (@assign.Strength.ToString("0.0"))
-                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => AdjustAssignStrength(assign.TagId, -0.5f))">−</button>
-                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => AdjustAssignStrength(assign.TagId, 0.5f))">+</button>
-                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveAssign(assign.TagId))">✖</button>
-                    </div>
-                }
-            </div>
-        }
-    </div>
+    <TaggingPanel Title="Tagowanie utworu"
+                  ItemType="track"
+                  SpotifyItemId="@(GetCurrentTrackId() ?? string.Empty)"
+                  Items="userTrackTags"
+                  Tags="GetCurrentTrackTagBadges()"
+                  Placeholder="Taguj utwór..."
+                  OnChanged="LoadTagsForTrack"
+                  OnClose="ToggleTagging" />
 }
 
 @code {

@@ -502,7 +502,7 @@
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForAlbum).OrderBy(t => t.Name).ToList();
-        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, TagGroupId = t.TagGroupId }).ToList();
         await LoadAlbumTagCounts();
     }
 

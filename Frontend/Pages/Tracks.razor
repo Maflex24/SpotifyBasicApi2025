@@ -499,7 +499,7 @@
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForTrack).OrderBy(t => t.Name).ToList();
-        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, TagGroupId = t.TagGroupId }).ToList();
         await LoadTrackTagCounts();
     }
 

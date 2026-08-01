@@ -1,97 +1,120 @@
 @using Frontend.Components
 
-<div class="tag-search-select" style="position:relative;" @onkeydown="HandleKeyDown">
-	<input class="form-control form-control-sm input-dark" placeholder="@Placeholder" @bind="search" @bind:event="oninput" @onfocus="OnFocus" />
-	<div class="tag-search-dropdown" style="display:@(isOpen ? "block" : "none"); position:absolute; left:0; right:0; bottom:calc(100% + 4px); z-index:2100; max-height:240px; overflow:auto; background-color:#0f1117; border:1px solid #1f2937; border-radius:4px;">
-		@if (ShowClear)
-		{
-			var clearActive = activeIndex == 0 ? " active" : string.Empty;
-			<button type="button" class="dropdown-item@clearActive" @onclick="Clear">@ClearLabel</button>
-		}
-		@foreach (var (item, idx) in Filtered.Select((x,i)=>(x,i)))
-		{
-			var baseIndex = ShowClear ? 1 : 0;
-			var active = (idx + baseIndex) == activeIndex ? " active" : string.Empty;
-			<button type="button" class="dropdown-item@active" @onclick="() => Select(item)">@item.Name</button>
-		}
-	</div>
+<div class="tag-search-select @(InFlow ? "tag-search-select-flow" : string.Empty)" @onkeydown="HandleKeyDown">
+    <input class="form-control form-control-sm input-dark" placeholder="@Placeholder" @bind="search" @bind:event="oninput" @onfocus="OnFocus" />
+    <div class="tag-search-dropdown" style="display:@(isOpen ? "block" : "none");">
+        @if (ShowClear)
+        {
+            var clearActive = activeIndex == 0 ? " active" : string.Empty;
+            <button type="button" class="dropdown-item@clearActive" @onclick="Clear">@ClearLabel</button>
+        }
+        @{
+            var itemIndex = 0;
+            var baseIndex = ShowClear ? 1 : 0;
+        }
+        @foreach (var group in VisibleGroups)
+        {
+            @if (Grouped)
+            {
+                <div class="tag-search-group-heading">@group.Name</div>
+            }
+            <div class="tag-search-group-items">
+                @foreach (var item in group.Items)
+                {
+                    var active = (itemIndex + baseIndex) == activeIndex ? " active" : string.Empty;
+                    <button type="button" class="tag-chip tag-select-chip@active" @onclick="() => Select(item)">@item.Name</button>
+                    itemIndex++;
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {
-	[Parameter] public List<TagItem> Items { get; set; } = new();
-	[Parameter] public EventCallback<long?> OnSelected { get; set; }
-	[Parameter] public EventCallback OnClearRequested { get; set; }
-	[Parameter] public string Placeholder { get; set; } = "Szukaj tagu...";
-	[Parameter] public bool ShowClear { get; set; } = true;
-	[Parameter] public string ClearLabel { get; set; } = "— usuń przypisanie —";
+    [Parameter] public List<TagItem> Items { get; set; } = new();
+    [Parameter] public EventCallback<long?> OnSelected { get; set; }
+    [Parameter] public EventCallback OnClearRequested { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Szukaj tagu...";
+    [Parameter] public bool ShowClear { get; set; } = true;
+    [Parameter] public string ClearLabel { get; set; } = "— usuń przypisanie —";
+    [Parameter] public bool Grouped { get; set; }
+    [Parameter] public bool InFlow { get; set; }
 
-	private string search = string.Empty;
-	private bool isOpen = false;
-	private int activeIndex = 0;
+    private string search = string.Empty;
+    private bool isOpen;
+    private int activeIndex;
 
-	private List<TagItem> Filtered => string.IsNullOrWhiteSpace(search)
-		? Items
-		: Items.Where(i => i.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+    private List<TagItem> Filtered => string.IsNullOrWhiteSpace(search)
+        ? Items
+        : Items.Where(item => item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
 
-	private void OnFocus(FocusEventArgs _)
-	{
-		isOpen = true;
-		activeIndex = 0;
-	}
+    private List<TagSearchGroup> VisibleGroups => Grouped
+        ? Filtered
+            .GroupBy(item => string.IsNullOrWhiteSpace(item.TagGroupName) ? "Pozostałe tagi" : item.TagGroupName!)
+            .OrderBy(group => group.Key == "Pozostałe tagi" ? 1 : 0)
+            .ThenBy(group => group.Key)
+            .Select(group => new TagSearchGroup(group.Key, group.OrderBy(item => item.Name).ToList()))
+            .ToList()
+        : new List<TagSearchGroup> { new(string.Empty, Filtered.OrderBy(item => item.Name).ToList()) };
 
-	private async Task HandleKeyDown(KeyboardEventArgs e)
-	{
-		if (!isOpen)
-			return;
+    private List<TagItem> SelectableItems => VisibleGroups.SelectMany(group => group.Items).ToList();
 
-		if (e.Key == "ArrowDown")
-		{
-			var maxIndex = (ShowClear ? Filtered.Count : Math.Max(Filtered.Count - 1, 0));
-			activeIndex = Math.Min(activeIndex + 1, Math.Max((ShowClear ? Filtered.Count : Filtered.Count - 1), 0));
-			return;
-		}
+    private void OnFocus(FocusEventArgs _)
+    {
+        isOpen = true;
+        activeIndex = 0;
+    }
 
-		if (e.Key == "ArrowUp")
-		{
-			activeIndex = Math.Max(activeIndex - 1, 0);
-			return;
-		}
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (!isOpen)
+            return;
 
-		if (e.Key == "Enter")
-		{
-			if (ShowClear && activeIndex == 0)
-			{
-				await Clear();
-			}
-			else
-			{
-				var baseIndex = ShowClear ? 1 : 0;
-				var chosen = Filtered.ElementAtOrDefault(activeIndex - baseIndex);
-				if (chosen != null)
-					await Select(chosen);
-			}
-			return;
-		}
+        if (e.Key == "ArrowDown")
+        {
+            var maxIndex = Math.Max(SelectableItems.Count - 1 + (ShowClear ? 1 : 0), 0);
+            activeIndex = Math.Min(activeIndex + 1, maxIndex);
+            return;
+        }
 
-		if (e.Key == "Escape")
-		{
-			isOpen = false;
-			return;
-		}
-	}
+        if (e.Key == "ArrowUp")
+        {
+            activeIndex = Math.Max(activeIndex - 1, 0);
+            return;
+        }
 
-	private async Task Select(TagItem item)
-	{
-		search = item.Name;
-		isOpen = false;
-		await OnSelected.InvokeAsync(item.Id);
-	}
+        if (e.Key == "Enter")
+        {
+            if (ShowClear && activeIndex == 0)
+            {
+                await Clear();
+            }
+            else
+            {
+                var baseIndex = ShowClear ? 1 : 0;
+                var chosen = SelectableItems.ElementAtOrDefault(activeIndex - baseIndex);
+                if (chosen != null)
+                    await Select(chosen);
+            }
+            return;
+        }
 
-	private async Task Clear()
-	{
-		isOpen = false;
-		await OnClearRequested.InvokeAsync();
-	}
+        if (e.Key == "Escape")
+            isOpen = false;
+    }
+
+    private async Task Select(TagItem item)
+    {
+        search = item.Name;
+        isOpen = false;
+        await OnSelected.InvokeAsync(item.Id);
+    }
+
+    private async Task Clear()
+    {
+        isOpen = false;
+        await OnClearRequested.InvokeAsync();
+    }
+
+    private sealed record TagSearchGroup(string Name, List<TagItem> Items);
 }
-
-

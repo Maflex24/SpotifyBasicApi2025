@@ -176,28 +176,14 @@
 
 @if (showArtistTagging && taggingArtistId != null)
 {
-    <div class="shadow" style="position:fixed; left:50%; transform:translateX(-50%); bottom:64px; z-index:2000; background-color:#0f1117; border:1px solid #1f2937; border-radius:8px; padding:10px; width:min(640px, 92vw)">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-            <strong>Tagowanie artysty</strong>
-            <button class="btn btn-sm btn-outline-light" @onclick="CloseArtistTagging">✕</button>
-        </div>
-        <TagSearchSelect Items="artistTagItems" Placeholder="Taguj artystę..." OnSelected="AddArtistTagFromPanel" ShowClear="false" />
-        @if (artists.FirstOrDefault(x => x.Id == taggingArtistId)?.Tags?.Count > 0)
-        {
-            var a = artists.First(x => x.Id == taggingArtistId);
-            <div class="d-flex flex-wrap gap-2 mt-2">
-                @foreach (var assign in a.Tags)
-                {
-                    <div class="badge bg-secondary">
-                        @assign.TagName (@assign.Strength.ToString("0.0"))
-                        <button class="btn btn-sm btn-outline-light ms-1" title="Zmniejsz" @onclick="(() => SetArtistTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
-                        <button class="btn btn-sm btn-outline-light ms-1" title="Zwiększ" @onclick="(() => SetArtistTagStrength(a.Id, assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
-                        <button class="btn btn-sm btn-outline-danger ms-1" title="Usuń" @onclick="(() => RemoveArtistTag(a.Id, assign.TagId))">✖</button>
-                    </div>
-                }
-            </div>
-        }
-    </div>
+    <TaggingPanel Title="Tagowanie artysty"
+                  ItemType="artist"
+                  SpotifyItemId="@taggingArtistId"
+                  Items="artistTagItems"
+                  Tags="GetArtistTagBadges()"
+                  Placeholder="Taguj artystę..."
+                  OnChanged="LoadArtists"
+                  OnClose="CloseArtistTagging" />
 }
 
 @code {
@@ -313,7 +299,7 @@
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForArtist).OrderBy(t => t.Name).ToList();
-        artistTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name }).ToList();
+        artistTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, TagGroupId = t.TagGroupId }).ToList();
         await LoadArtistTagCounts();
     }
 
@@ -422,6 +408,13 @@
     {
         showArtistTagging = false;
         taggingArtistId = null;
+    }
+
+    private List<TagBadge> GetArtistTagBadges()
+    {
+        return artists.FirstOrDefault(artist => artist.Id == taggingArtistId)?.Tags?
+            .Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, Strength = tag.Strength })
+            .ToList() ?? new List<TagBadge>();
     }
 
     private async Task AddArtistTagFromPanel(long? tagId)
