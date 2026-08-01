@@ -7,12 +7,12 @@
 @implements IAsyncDisposable
 
 <div class="container-fluid py-3">
-    <div class="albums-controls-sentinel" @ref="controlsSentinel" aria-hidden="true"></div>
-    <div class="albums-controls-dock @(ControlsCollapsed ? "is-collapsed" : string.Empty)">
+    <div class="library-controls-sentinel" @ref="controlsSentinel" aria-hidden="true"></div>
+    <div class="library-controls-dock @(ControlsCollapsed ? "is-collapsed" : string.Empty)">
     @if (ControlsCollapsed)
     {
-        <div class="albums-controls-toggle-row">
-            <button type="button" class="albums-controls-toggle" title="Pokaż filtry albumów" aria-label="Pokaż filtry albumów" aria-expanded="false" @onclick="ToggleControlsVisibility">
+        <div class="library-controls-toggle-row">
+            <button type="button" class="library-controls-toggle" title="Pokaż filtry albumów" aria-label="Pokaż filtry albumów" aria-expanded="false" @onclick="ToggleControlsVisibility">
                 <span aria-hidden="true">▼</span>
             </button>
         </div>
@@ -21,8 +21,8 @@
     {
         @if (controlsPastAnchor)
         {
-            <div class="albums-controls-toggle-row">
-                <button type="button" class="albums-controls-toggle" title="Zwiń filtry albumów" aria-label="Zwiń filtry albumów" aria-expanded="true" @onclick="ToggleControlsVisibility">
+            <div class="library-controls-toggle-row">
+                <button type="button" class="library-controls-toggle" title="Zwiń filtry albumów" aria-label="Zwiń filtry albumów" aria-expanded="true" @onclick="ToggleControlsVisibility">
                     <span aria-hidden="true">▲</span>
                 </button>
             </div>
@@ -296,7 +296,7 @@
             return;
 
         controlsObserverRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("albumsControls.observe", controlsSentinel, controlsObserverRef);
+        await JS.InvokeVoidAsync("libraryControls.observe", controlsSentinel, controlsObserverRef);
     }
 
     [JSInvokable]
@@ -322,7 +322,7 @@
     {
         try
         {
-            await JS.InvokeVoidAsync("albumsControls.disconnect");
+            await JS.InvokeVoidAsync("libraryControls.disconnect");
         }
         catch (JSDisconnectedException)
         {

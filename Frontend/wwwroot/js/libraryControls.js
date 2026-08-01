@@ -1,4 +1,4 @@
-window.albumsControls = (() => {
+window.libraryControls = (() => {
     let observer = null;
 
     function observe(sentinel, dotNetRef) {

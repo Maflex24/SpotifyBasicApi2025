@@ -5,20 +5,35 @@
 @inject IJSRuntime JS
 @inject LocalStorageService Store
 @inject HttpClient Http
+@implements IAsyncDisposable
 
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
-        <h4 class="mb-0">Utwory playlisty: @playlistName</h4>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" />
-            <button class="btn btn-sm btn-outline-light" @onclick="Reload">Zastosuj</button>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTagFilters">Tagi @(showTagFilters ? "▼" : "▲")</button>
-            <button class="btn btn-sm btn-outline-success" @onclick="PlayFiltered">Odtwórz</button>
-        </div>
-    </div>
+    <div class="library-controls-sentinel" @ref="controlsSentinel" aria-hidden="true"></div>
+    <div class="library-controls-dock @(ControlsCollapsed ? "is-collapsed" : string.Empty)">
+    @if (ControlsCollapsed)
+    {
+        <div class="library-controls-toggle-row"><button type="button" class="library-controls-toggle" title="Pokaż filtry playlisty" aria-label="Pokaż filtry playlisty" aria-expanded="false" @onclick="ToggleControlsVisibility"><span aria-hidden="true">▼</span></button></div>
+    }
+    else
+    {
+        @if (controlsPastAnchor)
+        {
+            <div class="library-controls-toggle-row"><button type="button" class="library-controls-toggle" title="Zwiń filtry playlisty" aria-label="Zwiń filtry playlisty" aria-expanded="true" @onclick="ToggleControlsVisibility"><span aria-hidden="true">▲</span></button></div>
+        }
 
-    <div class="d-flex justify-content-start align-items-center mb-3 gap-2 flex-wrap">
-        <span class="text-muted me-2">Zapisane filtry:</span>
+    <section class="library-toolbar library-toolbar--simple" aria-label="Filtry i akcje playlisty">
+        <div class="library-toolbar-heading"><h4 class="mb-0">Utwory playlisty: @playlistName</h4></div>
+        <div class="library-search-group"><input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" /></div>
+        <div class="library-toolbar-actions">
+            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj filtry" @onclick="Reload"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters"><AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span></button>
+        </div>
+        <div class="library-playback-actions"><button class="btn btn-sm album-action-button album-action-play-all" title="Odtwórz bieżące wyniki" @onclick="PlayFiltered"><AppIcon Name="play" /><span class="album-action-label">Odtwórz</span></button></div>
+    </section>
+
+    <section class="saved-filters-panel" aria-labelledby="playlist-saved-filters-heading">
+        <h5 id="playlist-saved-filters-heading" class="saved-filters-heading">Zapisane filtry</h5>
+        <div class="saved-filters-fields">
         <select class="form-select form-select-sm w-auto select-dark" @bind="selectedSavedFilterId">
             <option value="">Wybierz filtr...</option>
             @foreach (var f in savedFilters)
@@ -26,16 +41,19 @@
                 <option value="@f.Id.ToString()">@f.Name</option>
             }
         </select>
-        <input class="form-control form-control-sm input-dark" style="width: 160px;" placeholder="Nazwa filtra" @bind="newFilterName" />
-        <button class="btn btn-sm btn-outline-primary" title="Zapisz jako nowy" @onclick="SaveCurrentFilter">Zapisz</button>
-        <button class="btn btn-sm btn-outline-light" title="Zastosuj wybrany" @onclick="ApplySelectedFilter">Wczytaj</button>
-        <button class="btn btn-sm btn-outline-warning" title="Zmień nazwę / nadpisz" @onclick="RenameSelectedFilter">Zmień nazwę</button>
-        <button class="btn btn-sm btn-outline-danger" title="Usuń wybrany" @onclick="DeleteSelectedFilter">Usuń</button>
-    </div>
+        <input class="form-control form-control-sm input-dark" placeholder="Nazwa filtra" @bind="newFilterName" />
+        </div>
+        <div class="saved-filters-actions">
+        <button class="btn btn-sm album-action-button album-action-save" title="Zapisz jako nowy" @onclick="SaveCurrentFilter"><AppIcon Name="save" /><span class="album-action-label">Zapisz</span></button>
+        <button class="btn btn-sm album-action-button album-action-muted" title="Zastosuj wybrany" @onclick="ApplySelectedFilter"><AppIcon Name="load" /><span class="album-action-label">Wczytaj</span></button>
+        <button class="btn btn-sm album-action-button album-action-warning" title="Zmień nazwę / nadpisz" @onclick="RenameSelectedFilter"><AppIcon Name="edit" /><span class="album-action-label">Zmień nazwę</span></button>
+        <button class="btn btn-sm album-action-button album-action-danger" title="Usuń wybrany" @onclick="DeleteSelectedFilter"><AppIcon Name="delete" /><span class="album-action-label">Usuń</span></button>
+        </div>
+    </section>
 
     @if (showTagFilters)
     {
-        <div class="d-flex align-items-start gap-3 w-100 mb-2">
+        <section class="library-tag-filters" aria-label="Filtry tagów">
             <div class="d-flex flex-column gap-1 flex-fill">
                 @if (showTagsGrouped)
                 {
@@ -87,8 +105,10 @@
                     <button type="button" class="tag-layout-toggle" title="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-label="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-pressed="@showTagsGrouped" @onclick="ToggleTagLayout"><span>@(showTagsGrouped ? "Lista tagów" : "Pogrupuj tagi")</span><strong aria-hidden="true">@(showTagsGrouped ? "≡" : "▦")</strong></button>
                 </div>
             </div>
-        </div>
+        </section>
     }
+    }
+    </div>
 
     <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;">
         <table class="table table-dark table-striped align-middle">
@@ -173,6 +193,11 @@
     [Parameter] public string PlaylistId { get; set; } = string.Empty;
     private string? lastPlaylistId;
     private string? playlistName;
+    private ElementReference controlsSentinel;
+    private DotNetObjectReference<PlaylistTracks>? controlsObserverRef;
+    private bool controlsPastAnchor;
+    private bool controlsManuallyExpanded;
+    private bool ControlsCollapsed => controlsPastAnchor && !controlsManuallyExpanded;
 
     private List<Track> tracks = new();
     private List<Track> filteredTracks = new();
@@ -232,8 +257,9 @@
         if (!firstRender) return;
         try
         {
-            var selfRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("tagSync.register", selfRef, nameof(OnTagsEvent));
+            controlsObserverRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("tagSync.register", controlsObserverRef, nameof(OnTagsEvent));
+            await JS.InvokeVoidAsync("libraryControls.observe", controlsSentinel, controlsObserverRef);
         }
         catch { }
     }
@@ -241,6 +267,28 @@
     private async Task Reload()
     {
         await LoadTracks();
+    }
+
+    [JSInvokable]
+    public Task SetControlsPastAnchor(bool isPastAnchor)
+    {
+        if (controlsPastAnchor == isPastAnchor)
+            return Task.CompletedTask;
+
+        controlsPastAnchor = isPastAnchor;
+        if (!controlsPastAnchor)
+            controlsManuallyExpanded = false;
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleControlsVisibility() => controlsManuallyExpanded = ControlsCollapsed;
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("tagSync.unregister", controlsObserverRef); } catch (JSDisconnectedException) { }
+        try { await JS.InvokeVoidAsync("libraryControls.disconnect"); } catch (JSDisconnectedException) { }
+        controlsObserverRef?.Dispose();
     }
 
     private async Task LoadSavedFilters()
