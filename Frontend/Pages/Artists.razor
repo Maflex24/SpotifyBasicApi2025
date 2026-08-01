@@ -62,17 +62,17 @@
                         var state = GetTagState(t.Id);
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                         var count = GetTagCount(t.Id);
-                        <button type="button" class="tag-chip @css" @onclick="() => CycleTagState(t.Id)">@t.Name
-
+                        <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
+                            <span class="tag-chip-label">@t.Name</span>
                         @if (count > 0)
                         {
-                            <span class="tag-count-info"> (@count)</span>
+                            <span class="tag-count-info">@count</span>
                         }
                         </button>
                     }
 
-                    <button type="button" class="tag-chip tag-include" title="Tryb łączenia włączonych" @onclick="ToggleIncludeMode">@((includeMode == "and") ? "AND" : "OR")</button>
-                    <button type="button" class="tag-chip tag-exclude" title="Tryb łączenia wykluczonych" @onclick="ToggleExcludeMode">@((excludeMode == "and") ? "AND" : "OR")</button>
+                    <button type="button" class="tag-mode-chip tag-include" title="Tryb łączenia włączonych tagów" aria-label="Tryb łączenia włączonych tagów: @((includeMode == "and") ? "AND" : "OR")" @onclick="ToggleIncludeMode"><span>Włączone</span><strong>@((includeMode == "and") ? "AND" : "OR")</strong></button>
+                    <button type="button" class="tag-mode-chip tag-exclude" title="Tryb łączenia wykluczonych tagów" aria-label="Tryb łączenia wykluczonych tagów: @((excludeMode == "and") ? "AND" : "OR")" @onclick="ToggleExcludeMode"><span>Wykluczone</span><strong>@((excludeMode == "and") ? "AND" : "OR")</strong></button>
                 </div>
             </div>
         </div>

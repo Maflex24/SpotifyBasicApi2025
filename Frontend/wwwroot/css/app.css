@@ -688,42 +688,101 @@ code {
 .tag-chips-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.5rem;
     margin-bottom: 20px;
 }
 
 .tag-chip {
-    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.125rem;
     border-radius: 999px;
-    padding: 0.25rem 0.6rem;
-    font-size: 0.85rem;
-    line-height: 1rem;
-    color: #fff;
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    padding: 0.35rem 0.7rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.15;
+    color: #f8fafc;
     cursor: pointer;
-    transition: filter 120ms ease, transform 120ms ease;
-    background: #0350C4;
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
-.tag-chip:hover {
-    filter: brightness(1.08);
+.tag-chip:hover,
+.tag-mode-chip:hover {
+    border-color: rgba(255,255,255,0.9);
+    box-shadow: 0 2px 7px rgba(0,0,0,0.32);
     transform: translateY(-1px);
 }
 
+.tag-chip:focus-visible,
+.tag-mode-chip:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(13,110,253,0.4);
+}
+
+.tag-chip:disabled,
+.tag-mode-chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
+}
+
 .tag-none {
-    background: #0350C4;
+    background: #2a3442;
 }
 
 .tag-include {
-    background: #198754; /* green */
+    background: #087a4a;
 }
 
 .tag-exclude {
-    background: #dc3545; /* red */
+    background: #b42333;
 }
 
 .tag-count-info {
-    color: #30fd63;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.24);
+    color: #fff;
+    font-size: 0.75rem;
     font-weight: bold;
+}
+
+.tag-mode-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.125rem;
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    color: #f8fafc;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.15;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.tag-mode-chip strong {
+    padding-left: 0.45rem;
+    border-left: 1px solid rgba(255,255,255,0.46);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 767.98px) {
+    .tag-chip,
+    .tag-mode-chip {
+        min-height: 2.5rem;
+    }
 }
 
 /* Tag search select */
