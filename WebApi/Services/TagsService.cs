@@ -115,12 +115,22 @@ namespace SpotifyBasicApi2025.Services
             if (categoriesIds.Any())
                 query = query.Where(t => categoriesIds.Contains(t.TagGroupId));
 
-            var entities = await query
+            return await query
+                .AsNoTracking()
                 .Where(t => t.TagGroup.UserId == userId)
                 .OrderBy(t => t.Name)
+                .Select(t => new TagModel
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    ForAlbum = t.ForAlbum,
+                    ForArtist = t.ForArtist,
+                    ForTrack = t.ForTrack,
+                    ForPlaylist = t.ForPlaylist,
+                    TagGroupId = t.TagGroupId,
+                    AssignmentCount = context.LibTagAssigns.Count(assign => assign.UserId == userId && assign.TagId == t.Id)
+                })
                 .ToListAsync();
-
-            return entities.Select(e => e.MapToTagModel()).ToList();
         }
 
         public async Task<TagModel?> GetTagByIdAsync(int id)

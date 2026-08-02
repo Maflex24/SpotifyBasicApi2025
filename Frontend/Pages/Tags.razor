@@ -108,7 +108,7 @@
                         @foreach (var t in tagsOfGroup)
                         {
                             <li class="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center">
-                                <span>@t.Name</span>
+                                <span class="d-inline-flex align-items-center gap-2"><span>@t.Name</span>@if (t.AssignmentCount > 0) { <span class="tag-count-info" title="Łączna liczba przypisań">@t.AssignmentCount</span> }</span>
                                 <span class="d-flex gap-2">
                                     <button class="btn btn-outline-light btn-sm" title="Edytuj tag" @onclick="() => EditTag(t)">Edytuj</button>
                                     <button class="btn btn-outline-danger btn-sm" title="Usuń tag" @onclick="() => DeleteTag(t)">Usuń</button>
@@ -321,7 +321,7 @@
     
 
     private sealed class TagGroup { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
-    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
+    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } public int AssignmentCount { get; set; } }
 }
 
 
