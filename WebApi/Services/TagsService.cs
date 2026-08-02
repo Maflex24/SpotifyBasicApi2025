@@ -131,15 +131,27 @@ namespace SpotifyBasicApi2025.Services
             return entity?.MapToTagModel();
         }
 
-        public async Task<TagModel?> UpdateTagAsync(int id, TagModel model)
+        public async Task<bool> UserOwnsTagGroupAsync(long tagGroupId, string userId)
+        {
+            return await context.LibTagGroups
+                .AnyAsync(group => group.Id == tagGroupId && group.UserId == userId);
+        }
+
+        public async Task<TagModel?> UpdateTagAsync(int id, TagModel model, string userId)
         {
             var entity = await context.LibTags
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .Include(t => t.TagGroup)
+                .FirstOrDefaultAsync(t => t.Id == id && t.TagGroup.UserId == userId);
 
             if (entity == null)
                 return null;
 
             entity.Name = model.Name;
+            entity.TagGroupId = model.TagGroupId;
+            entity.ForAlbum = model.ForAlbum;
+            entity.ForArtist = model.ForArtist;
+            entity.ForTrack = model.ForTrack;
+            entity.ForPlaylist = model.ForPlaylist;
 
             await context.SaveChangesAsync();
 

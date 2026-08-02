@@ -73,12 +73,21 @@
                     <button class="btn btn-sm btn-primary" @onclick="() => ShowCreateTag(g)">Dodaj tag</button>
                 </div>
 
-                @if (editingTag is not null && editingTag.TagGroupId == g.Id)
+                @if (editingTag is not null && editingTagHostGroupId == g.Id)
                 {
                     <div class="card bg-secondary text-light mb-2 p-3">
                         <div class="mb-2">
                             <label class="form-label">Nazwa</label>
                             <input class="form-control" @bind="editingTag.Name" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Grupa</label>
+                            <select class="form-select" @bind="editingTag.TagGroupId">
+                                @foreach (var group in groups)
+                                {
+                                    <option value="@group.Id">@group.Name</option>
+                                }
+                            </select>
                         </div>
                         <div class="row g-2">
                             <div class="col"><input type="checkbox" class="form-check-input" id="ta_@g.Id" @bind="editingTag.ForAlbum" /> <label class="form-check-label" for="ta_@g.Id">Album</label></div>
@@ -125,6 +134,7 @@
     private TagGroup? creatingGroup;
     private TagGroup? editingGroup;
     private Tag? editingTag;
+    private long? editingTagHostGroupId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -239,6 +249,7 @@
 
     private void ShowCreateTag(TagGroup group)
     {
+        editingTagHostGroupId = group.Id;
         editingTag = new Tag
         {
             TagGroupId = group.Id,
@@ -251,6 +262,7 @@
 
     private void EditTag(Tag tag)
     {
+        editingTagHostGroupId = tag.TagGroupId;
         editingTag = new Tag
         {
             Id = tag.Id,
@@ -266,6 +278,7 @@
     private void CancelTag()
     {
         editingTag = null;
+        editingTagHostGroupId = null;
     }
 
     private async Task SaveTag()
@@ -280,6 +293,7 @@
             if (resC.IsSuccessStatusCode)
             {
                 editingTag = null;
+                editingTagHostGroupId = null;
                 await LoadAllTags();
             }
         }
@@ -290,6 +304,7 @@
             if (resU.IsSuccessStatusCode)
             {
                 editingTag = null;
+                editingTagHostGroupId = null;
                 await LoadAllTags();
             }
         }

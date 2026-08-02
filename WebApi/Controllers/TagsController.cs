@@ -239,7 +239,14 @@ namespace SpotifyBasicApi2025.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var updatedTag = await tagsService.UpdateTagAsync(id, tagModel);
+                var userId = await userService.GetCurrentUserIdAsync();
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Użytkownik nie jest zalogowany");
+
+                if (!await tagsService.UserOwnsTagGroupAsync(tagModel.TagGroupId, userId))
+                    return BadRequest("Wybrana grupa tagów nie istnieje lub nie należy do użytkownika");
+
+                var updatedTag = await tagsService.UpdateTagAsync(id, tagModel, userId);
 
                 if (updatedTag == null)
                     return NotFound($"Tag o ID {id} nie został znaleziony");
