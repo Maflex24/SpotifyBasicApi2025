@@ -6,6 +6,7 @@ using SpotifyBasicApi2025.Entities;
 
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
+using System.Text.RegularExpressions;
 
 namespace SpotifyBasicApi2025.Services
 {
@@ -17,6 +18,13 @@ namespace SpotifyBasicApi2025.Services
         private readonly SpotifyApiService spotifyApiService;
 
         public DbSet<LibSavedFilter> SavedFilters => context.Set<LibSavedFilter>();
+
+        private static List<string> GetSearchTerms(string? search) =>
+            string.IsNullOrWhiteSpace(search)
+                ? new List<string>()
+                : Regex.Matches(search, @"[\p{L}\p{N}]+")
+                    .Select(match => match.Value.ToLowerInvariant())
+                    .ToList();
 
         // Saved filters API
         public async Task<List<object>> GetSavedFiltersAsync(string scope, string? contextId = null)
@@ -935,7 +943,8 @@ namespace SpotifyBasicApi2025.Services
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
-            string? excludeMode = null)
+            string? excludeMode = null,
+            string? search = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -1011,6 +1020,17 @@ namespace SpotifyBasicApi2025.Services
                         query = query.Where(album => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
                     }
                 }
+            }
+
+            foreach (var term in GetSearchTerms(search))
+            {
+                var termLocal = term;
+                query = query.Where(album =>
+                    (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
+                    || context.SpAlbumArtistAssigns.Any(assign =>
+                        assign.AlbumId == album.Id
+                        && assign.Artist.Name != null
+                        && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
             }
 
             var sortKey = (sort ?? "name").ToLowerInvariant();
@@ -1180,20 +1200,15 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(search))
+            foreach (var term in GetSearchTerms(search))
             {
-                var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(term => term.ToLower())
-                    .ToList();
-
-                foreach (var term in terms)
-                {
-                    var termLocal = term;
-                    query = query.Where(album =>
-                        (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
-                        || context.SpAlbumArtistAssigns.Any(assign => assign.AlbumId == album.Id && assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
-                        || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "album" && assign.SpotifyItemId == album.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%"))));
-                }
+                var termLocal = term;
+                query = query.Where(album =>
+                    (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
+                    || context.SpAlbumArtistAssigns.Any(assign =>
+                        assign.AlbumId == album.Id
+                        && assign.Artist.Name != null
+                        && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
             }
 
             var albumIds = await query.Select(a => a.Id).ToListAsync();

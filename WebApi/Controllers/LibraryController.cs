@@ -462,11 +462,12 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
             [FromQuery] string? excludeTags = null,
-            [FromQuery] string? excludeMode = null)
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] string? search = null)
         {
             try
             {
-                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode);
+                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search);
 
                 return Ok(result);
             }
