@@ -25,7 +25,8 @@
         <div class="library-toolbar-heading"><h4 class="mb-0">Utwory playlisty: @playlistName</h4></div>
         <div class="library-search-group"><input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" /></div>
         <div class="library-toolbar-actions">
-            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj filtry" @onclick="Reload"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść filtry" @onclick="ResetFilters"><AppIcon Name="reset" /><span class="album-action-label">Resetuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters"><AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span></button>
         </div>
         <div class="library-playback-actions"><button class="btn btn-sm album-action-button album-action-play-all" title="Odtwórz bieżące wyniki" @onclick="PlayFiltered"><AppIcon Name="play" /><span class="album-action-label">Odtwórz</span></button></div>
@@ -110,6 +111,26 @@
     }
     }
     </div>
+
+    @{
+        var activeFilterChips = GetActiveFilterChips();
+    }
+    @if (activeFilterChips.Count > 0 || FiltersPending)
+    {
+        <section class="active-library-filters mb-3" aria-label="Aktywne filtry playlisty">
+            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
+            <div class="active-library-filter-chips">
+                @foreach (var chip in activeFilterChips)
+                {
+                    <button type="button" class="@chip.CssClass" title="Usuń filtr: @chip.Label" @onclick="chip.ClearAsync"><span>@chip.Label</span><span class="active-library-filter-chip-remove" aria-hidden="true">×</span></button>
+                }
+            </div>
+            @if (FiltersPending)
+            {
+                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>Filtruj</span></button>
+            }
+        </section>
+    }
 
     <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;">
         <table class="table table-dark table-striped align-middle">
@@ -216,9 +237,6 @@
                 return;
 
             localSearch = value;
-            ApplyLocalFilter();
-            ApplyClientSort();
-            _ = LoadPlaylistTagCounts();
         }
     }
 
@@ -235,12 +253,15 @@
     private const string TagVisibilityStoreKey = "tag-visibility:show-unassigned";
     private bool showUnassignedTags;
     private Dictionary<long, int> tagCounts = new();
+    private PlaylistFilterSnapshot? appliedFilters;
+    private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
 
     protected override async Task OnInitializedAsync()
     {
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadAvailableTags();
+        appliedFilters = CaptureCurrentFilters();
         await LoadTracks();
         await LoadPlaylistName();
         await LoadSavedFilters();
@@ -272,6 +293,29 @@
     private async Task Reload()
     {
         await LoadTracks();
+    }
+
+    private PlaylistFilterSnapshot CaptureCurrentFilters() => new(localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), clientSortColumn, clientSortAsc);
+
+    private async Task ApplyFiltersAsync()
+    {
+        var filters = CaptureCurrentFilters();
+        appliedFilters = filters;
+        ApplyLocalFilter(filters);
+        ApplyClientSort(filters);
+        await LoadPlaylistTagCounts(filters);
+    }
+
+    private Task ResetFilters()
+    {
+        localSearch = null;
+        includeTagIds.Clear();
+        excludeTagIds.Clear();
+        includeMode = "or";
+        excludeMode = "or";
+        clientSortColumn = "name";
+        clientSortAsc = true;
+        return Task.CompletedTask;
     }
 
     [JSInvokable]
@@ -332,9 +376,10 @@
         tracks = payload?.items ?? new List<Track>();
         filteredTracks = tracks.ToList();
 
-        ApplyLocalFilter();
-        ApplyClientSort();
-        await LoadPlaylistTagCounts();
+        var filters = appliedFilters ?? CaptureCurrentFilters();
+        ApplyLocalFilter(filters);
+        ApplyClientSort(filters);
+        await LoadPlaylistTagCounts(filters);
     }
 
     private async Task LoadPlaylistName()
@@ -365,14 +410,15 @@
             await RefreshPlaylistTrackTags(spotifyItemId);
     }
 
-    private void ApplyLocalFilter()
+    private void ApplyLocalFilter(PlaylistFilterSnapshot? requestedFilters = null)
     {
+        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
         var source = tracks;
 
         // search AND
-        if (!string.IsNullOrWhiteSpace(localSearch))
+        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
         {
-            var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            var terms = filters.LocalSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(t => t.ToLowerInvariant()).ToList();
 
             source = source.Where(tr =>
@@ -398,10 +444,10 @@
         }
 
         // include/exclude by tag ids
-        if (includeTagIds.Count > 0)
+        if (filters.IncludeTagIds.Length > 0)
         {
-            var list = includeTagIds.ToList();
-            var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
+            var list = filters.IncludeTagIds.ToList();
+            var andMode = string.Equals(filters.IncludeMode, "and", StringComparison.OrdinalIgnoreCase);
 
             if (andMode)
             {
@@ -417,10 +463,10 @@
             }
         }
 
-        if (excludeTagIds.Count > 0)
+        if (filters.ExcludeTagIds.Length > 0)
         {
-            var list = excludeTagIds.ToList();
-            var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
+            var list = filters.ExcludeTagIds.ToList();
+            var andMode = string.Equals(filters.ExcludeMode, "and", StringComparison.OrdinalIgnoreCase);
 
             if (andMode)
                 source = source.Where(t => !list.All(tid => t.Tags?.Any(x => x.TagId == tid) ?? false)).ToList();
@@ -442,19 +488,17 @@
         {
             clientSortAsc = !clientSortAsc;
 
-            ApplyClientSort();
-
             return;
         }
 
         clientSortColumn = column;
         clientSortAsc = true;
 
-        ApplyClientSort();
     }
 
-    private void ApplyClientSort()
+    private void ApplyClientSort(PlaylistFilterSnapshot? requestedFilters = null)
     {
+        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
         if (filteredTracks == null || filteredTracks.Count == 0)
             return;
 
@@ -463,9 +507,9 @@
         string NameKey(Track t) => (t.Name ?? string.Empty).ToLowerInvariant();
         int YearKey(Track t) => t.ReleaseYear ?? -1;
         IOrderedEnumerable<Track> ordered;
-        if (clientSortColumn == "artists")
+        if (filters.SortColumn == "artists")
         {
-            ordered = clientSortAsc
+            ordered = filters.SortAsc
                 ? filteredTracks.OrderBy(ArtistsKey)
                 : filteredTracks.OrderByDescending(ArtistsKey);
 
@@ -478,9 +522,9 @@
             return;
         }
 
-        if (clientSortColumn == "year")
+        if (filters.SortColumn == "year")
         {
-            ordered = clientSortAsc
+            ordered = filters.SortAsc
                 ? filteredTracks.OrderBy(YearKey)
                 : filteredTracks.OrderByDescending(YearKey);
 
@@ -493,9 +537,9 @@
             return;
         }
 
-        if (clientSortColumn == "album")
+        if (filters.SortColumn == "album")
         {
-            ordered = clientSortAsc
+            ordered = filters.SortAsc
                 ? filteredTracks.OrderBy(AlbumKey)
                 : filteredTracks.OrderByDescending(AlbumKey);
 
@@ -509,7 +553,7 @@
         }
 
         // default: name
-        ordered = clientSortAsc
+        ordered = filters.SortAsc
             ? filteredTracks.OrderBy(NameKey)
             : filteredTracks.OrderByDescending(NameKey);
 
@@ -675,8 +719,8 @@
         }
     }
 
-    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
-    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; _ = LoadPlaylistTagCounts(); }
+    private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
+    private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
     private void ToggleTagFilters() { showTagFilters = !showTagFilters; }
 
     private async Task LoadTagLayout()
@@ -719,6 +763,8 @@
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
+        public string? clientSortColumn { get; set; }
+        public bool? clientSortAsc { get; set; }
         public bool? showTagFilters { get; set; }
     }
 
@@ -729,8 +775,26 @@
         excludeMode = excludeMode,
         includeTagIds = includeTagIds.ToArray(),
         excludeTagIds = excludeTagIds.ToArray(),
+        clientSortColumn = clientSortColumn,
+        clientSortAsc = clientSortAsc,
         showTagFilters = showTagFilters
     };
+
+    private List<ActiveFilterChip> GetActiveFilterChips()
+    {
+        var chips = new List<ActiveFilterChip>();
+        if (!string.IsNullOrWhiteSpace(localSearch)) chips.Add(new($"Szukaj: {localSearch}", "active-library-filter-chip", () => { localSearch = null; return Task.CompletedTask; }));
+        if (clientSortColumn != "name" || !clientSortAsc) chips.Add(new($"Sortowanie: {clientSortColumn} ({(clientSortAsc ? "asc" : "desc")})", "active-library-filter-chip", () => { clientSortColumn = "name"; clientSortAsc = true; return Task.CompletedTask; }));
+        foreach (var id in includeTagIds) { var name = availableTags.FirstOrDefault(t => t.Id == id)?.Name ?? id.ToString(); chips.Add(new($"Włącz: {name} ({includeMode.ToUpperInvariant()})", "active-library-filter-chip active-library-filter-chip-include", () => { includeTagIds.Remove(id); return Task.CompletedTask; })); }
+        foreach (var id in excludeTagIds) { var name = availableTags.FirstOrDefault(t => t.Id == id)?.Name ?? id.ToString(); chips.Add(new($"Wyklucz: {name} ({excludeMode.ToUpperInvariant()})", "active-library-filter-chip active-library-filter-chip-exclude", () => { excludeTagIds.Remove(id); return Task.CompletedTask; })); }
+        return chips;
+    }
+
+    private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
+    private sealed record PlaylistFilterSnapshot(string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, string SortColumn, bool SortAsc)
+    {
+        public bool Matches(PlaylistFilterSnapshot? other) => other is not null && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && SortColumn == other.SortColumn && SortAsc == other.SortAsc && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds);
+    }
 
     private async Task SaveCurrentFilter()
     {
@@ -759,11 +823,11 @@
         excludeMode = state.excludeMode ?? excludeMode;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
+        clientSortColumn = state.clientSortColumn ?? clientSortColumn;
+        clientSortAsc = state.clientSortAsc ?? clientSortAsc;
         showTagFilters = state.showTagFilters ?? showTagFilters;
 
-        ApplyLocalFilter();
-        ApplyClientSort();
-        await LoadPlaylistTagCounts();
+        await ApplyFiltersAsync();
     }
 
     private async Task RenameSelectedFilter()
@@ -802,12 +866,9 @@
     private void CycleTagState(long tagId)
     {
         var state = GetTagState(tagId);
-        if (state == 0) { includeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); _ = LoadPlaylistTagCounts(); return; }
-        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); ApplyLocalFilter(); ApplyClientSort(); _ = LoadPlaylistTagCounts(); return; }
+        if (state == 0) { includeTagIds.Add(tagId); return; }
+        if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); return; }
         excludeTagIds.Remove(tagId);
-        ApplyLocalFilter();
-        ApplyClientSort();
-        _ = LoadPlaylistTagCounts();
     }
 
     private async Task PlayTrack(string? uri)
@@ -883,24 +944,25 @@
 
     private sealed class TagCountItem { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 
-    private async Task LoadPlaylistTagCounts()
+    private async Task LoadPlaylistTagCounts(PlaylistFilterSnapshot? requestedFilters = null)
     {
+        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
         var query = new List<string>();
 
-        if (includeTagIds.Count > 0)
+        if (filters.IncludeTagIds.Length > 0)
         {
-            query.Add($"includeTags={string.Join(',', includeTagIds)}");
-            query.Add($"includeMode={includeMode}");
+            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
+            query.Add($"includeMode={filters.IncludeMode}");
         }
 
-        if (excludeTagIds.Count > 0)
+        if (filters.ExcludeTagIds.Length > 0)
         {
-            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
-            query.Add($"excludeMode={excludeMode}");
+            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+            query.Add($"excludeMode={filters.ExcludeMode}");
         }
 
-        if (!string.IsNullOrWhiteSpace(localSearch))
-            query.Add($"search={Uri.EscapeDataString(localSearch)}");
+        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
+            query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
 
         var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tags/counts?{string.Join('&', query)}");
         if (!res.IsSuccessStatusCode)

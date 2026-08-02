@@ -436,7 +436,7 @@ code {
     margin-inline: auto;
 }
 
-.active-album-filters {
+.active-library-filters {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -449,13 +449,13 @@ code {
     background: rgba(18, 18, 22, 0.82);
 }
 
-.active-album-filters-label {
+.active-library-filters-label {
     color: #cbd5e1;
     font-size: 0.8rem;
     font-weight: 700;
 }
 
-.active-album-filter-chips {
+.active-library-filter-chips {
     display: flex;
     flex: 1 1 0;
     flex-wrap: wrap;
@@ -463,7 +463,7 @@ code {
     min-width: 0;
 }
 
-.active-album-filter-chip {
+.active-library-filter-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -479,34 +479,34 @@ code {
     transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
-.active-album-filter-chip:hover {
+.active-library-filter-chip:hover {
     background: #364457;
     border-color: rgba(248, 250, 252, 0.85);
     transform: translateY(-1px);
 }
 
-.active-album-filter-chip:focus-visible {
+.active-library-filter-chip:focus-visible {
     outline: 2px solid #f8fafc;
     outline-offset: 2px;
 }
 
-.active-album-filter-chip-include {
+.active-library-filter-chip-include {
     background: #087a4a;
 }
 
-.active-album-filter-chip-include:hover {
+.active-library-filter-chip-include:hover {
     background: #0b9660;
 }
 
-.active-album-filter-chip-exclude {
+.active-library-filter-chip-exclude {
     background: #b42333;
 }
 
-.active-album-filter-chip-exclude:hover {
+.active-library-filter-chip-exclude:hover {
     background: #cf3044;
 }
 
-.active-album-filter-chip-remove {
+.active-library-filter-chip-remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -520,7 +520,7 @@ code {
     line-height: 1;
 }
 
-.active-album-filters .album-action-apply {
+.active-library-filters .album-action-apply {
     background: rgba(13, 110, 253, 0.94);
 }
 
@@ -892,7 +892,8 @@ code {
         width: 100%;
     }
 
-    .library-filter-fields > .form-select {
+    .library-filter-fields > .form-select,
+    .library-filter-fields > .form-control {
         width: 100% !important;
         min-width: 0;
     }

@@ -180,19 +180,19 @@
     }
     @if (activeFilterChips.Count > 0 || FiltersPending)
     {
-        <section class="active-album-filters mb-3" aria-label="Aktywne filtry albumów">
-            <span class="active-album-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
-            <div class="active-album-filter-chips">
+        <section class="active-library-filters mb-3" aria-label="Aktywne filtry albumów">
+            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
+            <div class="active-library-filter-chips">
                 @foreach (var chip in activeFilterChips)
                 {
                     <button type="button" class="@chip.CssClass" title="Usuń filtr: @chip.Label" aria-label="Usuń filtr: @chip.Label" @onclick="chip.ClearAsync">
-                        <span>@chip.Label</span><span class="active-album-filter-chip-remove" aria-hidden="true">×</span>
+                        <span>@chip.Label</span><span class="active-library-filter-chip-remove" aria-hidden="true">×</span>
                     </button>
                 }
             </div>
             @if (FiltersPending)
             {
-                <button type="button" class="btn btn-sm album-action-button album-action-apply active-album-filters-apply" @onclick="ApplyFiltersAsync">
+                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync">
                     <AppIcon Name="apply" /><span>Filtruj</span>
                 </button>
             }
@@ -838,30 +838,30 @@
         var chips = new List<ActiveFilterChip>();
 
         if (!string.IsNullOrWhiteSpace(localSearch))
-            chips.Add(new ActiveFilterChip($"Szukaj: {localSearch}", "active-album-filter-chip", ClearSearchFilterAsync));
+            chips.Add(new ActiveFilterChip($"Szukaj: {localSearch}", "active-library-filter-chip", ClearSearchFilterAsync));
 
         if (!string.IsNullOrWhiteSpace(selectedArtistId))
         {
             var artistName = availableAlbumArtists.FirstOrDefault(artist => artist.Id == selectedArtistId)?.Name ?? selectedArtistId;
-            chips.Add(new ActiveFilterChip($"Wykonawca: {artistName}", "active-album-filter-chip", ClearArtistFilterAsync));
+            chips.Add(new ActiveFilterChip($"Wykonawca: {artistName}", "active-library-filter-chip", ClearArtistFilterAsync));
         }
 
         if (fromYear.HasValue)
-            chips.Add(new ActiveFilterChip($"Rok od: {fromYear.Value}", "active-album-filter-chip", ClearFromYearFilterAsync));
+            chips.Add(new ActiveFilterChip($"Rok od: {fromYear.Value}", "active-library-filter-chip", ClearFromYearFilterAsync));
 
         if (toYear.HasValue)
-            chips.Add(new ActiveFilterChip($"Rok do: {toYear.Value}", "active-album-filter-chip", ClearToYearFilterAsync));
+            chips.Add(new ActiveFilterChip($"Rok do: {toYear.Value}", "active-library-filter-chip", ClearToYearFilterAsync));
 
         if (long.TryParse(selectedTagFilter, out var selectedTagId))
-            chips.Add(new ActiveFilterChip($"Tag: {GetTagName(selectedTagId)}", "active-album-filter-chip active-album-filter-chip-include", ClearSelectedTagFilterAsync));
+            chips.Add(new ActiveFilterChip($"Tag: {GetTagName(selectedTagId)}", "active-library-filter-chip active-library-filter-chip-include", ClearSelectedTagFilterAsync));
 
         var includeModeLabel = includeMode.Equals("and", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
         foreach (var tagId in includeTagIds.OrderBy(id => GetTagName(id), StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"+ {GetTagName(tagId)} · {includeModeLabel}", "active-album-filter-chip active-album-filter-chip-include", () => ClearIncludedTagAsync(tagId)));
+            chips.Add(new ActiveFilterChip($"+ {GetTagName(tagId)} · {includeModeLabel}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedTagAsync(tagId)));
 
         var excludeModeLabel = excludeMode.Equals("and", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
         foreach (var tagId in excludeTagIds.OrderBy(id => GetTagName(id), StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"− {GetTagName(tagId)} · {excludeModeLabel}", "active-album-filter-chip active-album-filter-chip-exclude", () => ClearExcludedTagAsync(tagId)));
+            chips.Add(new ActiveFilterChip($"− {GetTagName(tagId)} · {excludeModeLabel}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedTagAsync(tagId)));
 
         return chips;
     }
