@@ -1,4 +1,5 @@
 @page "/tags"
+@inject IJSRuntime JS
 
 <div class="container py-3 tags-management-page">
     <h4>Tagi i grupy</h4>
@@ -312,6 +313,9 @@
 
     private async Task DeleteTag(Tag tag)
     {
+        if (tag.AssignmentCount > 0 && !await JS.InvokeAsync<bool>("confirm", $"Tag '{tag.Name}' ma {tag.AssignmentCount} przypisań. Usunięcie tagu usunie również te przypisania. Kontynuować?"))
+            return;
+
         var res = await Http.DeleteAsync($"api/tags/{tag.Id}");
 
         if (res.IsSuccessStatusCode)
