@@ -2,10 +2,18 @@
 @inject IJSRuntime JS
 
 <div class="container py-3 tags-management-page">
-    <h4>Tagi i grupy</h4>
-
-    <div class="d-flex justify-content-end mb-2">
+    <div class="tags-management-toolbar mb-3">
+        <h4 class="mb-0">Tagi i grupy</h4>
+        <div class="tags-management-toolbar-actions">
+            <div class="input-group input-group-sm tags-management-search">
+                <input class="form-control input-dark" type="search" placeholder="Szukaj tagu lub grupy" aria-label="Szukaj tagu lub grupy" @bind="searchText" @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie" aria-label="Wyczyść wyszukiwanie" @onclick="ClearSearch">×</button>
+                }
+            </div>
         <button class="btn btn-sm btn-primary" @onclick="ShowCreateGroup">Dodaj grupę</button>
+        </div>
     </div>
 
     @if (creatingGroup is not null)
@@ -29,7 +37,18 @@
         </div>
     }
 
-    @foreach (var g in groups)
+    @{
+        var visibleGroups = GetVisibleGroups().ToList();
+    }
+    @if (groups.Count > 0 && visibleGroups.Count == 0)
+    {
+        <div class="library-empty-results" role="status">
+            <p>Nie znaleziono tagów ani grup pasujących do wyszukiwania.</p>
+            <button type="button" class="btn btn-sm btn-outline-light" @onclick="ClearSearch">Wyczyść</button>
+        </div>
+    }
+
+    @foreach (var g in visibleGroups)
     {
         <div class="card bg-dark text-light mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -103,8 +122,11 @@
                     </div>
                 }
 
+                @{
+                    var tagsOfGroup = GetVisibleTags(g).ToList();
+                }
                 <ul class="list-group">
-                    @if (groupIdToTags.TryGetValue(g.Id, out var tagsOfGroup) && tagsOfGroup.Count > 0)
+                    @if (tagsOfGroup.Count > 0)
                     {
                         @foreach (var t in tagsOfGroup)
                         {
@@ -131,11 +153,31 @@
 @code {
     private List<TagGroup> groups = new();
     private Dictionary<long, List<Tag>> groupIdToTags = new();
+    private string? searchText;
 
     private TagGroup? creatingGroup;
     private TagGroup? editingGroup;
     private Tag? editingTag;
     private long? editingTagHostGroupId;
+
+    private IEnumerable<TagGroup> GetVisibleGroups() => groups.Where(group =>
+        GroupMatchesSearch(group) || GetTagsForGroup(group.Id).Any(TagMatchesSearch));
+
+    private IEnumerable<Tag> GetVisibleTags(TagGroup group) => GroupMatchesSearch(group)
+        ? GetTagsForGroup(group.Id)
+        : GetTagsForGroup(group.Id).Where(TagMatchesSearch);
+
+    private IEnumerable<Tag> GetTagsForGroup(long groupId) => groupIdToTags.TryGetValue(groupId, out var tags)
+        ? tags
+        : Enumerable.Empty<Tag>();
+
+    private bool GroupMatchesSearch(TagGroup group) => string.IsNullOrWhiteSpace(searchText)
+        || group.Name.Contains(searchText.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private bool TagMatchesSearch(Tag tag) => string.IsNullOrWhiteSpace(searchText)
+        || tag.Name.Contains(searchText.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private void ClearSearch() => searchText = null;
 
     protected override async Task OnInitializedAsync()
     {
