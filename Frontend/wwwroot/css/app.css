@@ -952,6 +952,21 @@ code {
     font-weight: 800;
 }
 
+.tags-management-page {
+    width: 100%;
+    max-inline-size: 50rem;
+    margin-inline: 0;
+}
+
+.tags-management-page .list-group-item:hover .tag-management-tag-name,
+.tags-management-page .list-group-item:focus-within .tag-management-tag-name {
+    color: #93c5fd;
+}
+
+.tag-management-tag-name {
+    transition: color 120ms ease;
+}
+
 .tag-mode-chip {
     display: inline-flex;
     align-items: center;
