@@ -55,6 +55,13 @@
     @if (showTagFilters)
     {
         <section class="library-tag-filters" aria-label="Filtry tagów">
+            <div class="input-group input-group-sm tag-filter-search">
+                <input class="form-control input-dark" type="search" placeholder="Szukaj tagu" aria-label="Szukaj w filtrach tagów" @bind="tagSearch" @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(tagSearch))
+                {
+                    <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie tagów" aria-label="Wyczyść wyszukiwanie tagów" @onclick="ClearTagSearch">×</button>
+                }
+            </div>
             <div class="d-flex flex-column gap-1 flex-fill">
                 @if (showTagsGrouped)
                 {
@@ -260,6 +267,7 @@
     private const string TagLayoutStoreKey = "tag-layout:grouped";
     private const string TagVisibilityStoreKey = "tag-visibility:show-unassigned";
     private bool showUnassignedTags;
+    private string? tagSearch;
     private Dictionary<long, int> tagCounts = new();
     private PlaylistFilterSnapshot? appliedFilters;
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
@@ -763,9 +771,12 @@
 
     private Task SaveTagVisibility() => Store.SetItemAsync(TagVisibilityStoreKey, showUnassignedTags);
 
-    private IEnumerable<TagDto> GetVisibleTags() => showUnassignedTags
+    private IEnumerable<TagDto> GetVisibleTags() => (showUnassignedTags
         ? availableTags
-        : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id));
+        : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id)))
+        .Where(tag => string.IsNullOrWhiteSpace(tagSearch) || tag.Name.Contains(tagSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private void ClearTagSearch() => tagSearch = null;
 
     private IEnumerable<TagGroupView> GetGroupedTags()
     {

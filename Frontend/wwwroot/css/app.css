@@ -351,6 +351,11 @@ code {
 .tags-management-search {
     width: min(22rem, 50vw);
 }
+
+.tag-filter-search {
+    width: min(20rem, 100%);
+    margin-bottom: 0.65rem;
+}
 .library-search-group { grid-area: search; min-width: 0; }
 .library-filter-fields { grid-area: filters; min-width: 0; }
 .library-toolbar-actions { grid-area: actions; min-width: 0; }
@@ -908,6 +913,10 @@ code {
     }
 
     .tags-management-search {
+        width: 100%;
+    }
+
+    .tag-filter-search {
         width: 100%;
     }
 

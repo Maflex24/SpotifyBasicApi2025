@@ -90,6 +90,13 @@
     @if (showTagFilters)
     {
         <section class="albums-tag-filters mb-3" aria-label="Filtry tagów">
+            <div class="input-group input-group-sm tag-filter-search">
+                <input class="form-control input-dark" type="search" placeholder="Szukaj tagu" aria-label="Szukaj w filtrach tagów" @bind="tagSearch" @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(tagSearch))
+                {
+                    <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie tagów" aria-label="Wyczyść wyszukiwanie tagów" @onclick="ClearTagSearch">×</button>
+                }
+            </div>
             @if (showTagsGrouped)
             {
                 <div class="tag-groups-container">
@@ -303,6 +310,7 @@
     private const string TagLayoutStoreKey = "tag-layout:grouped";
     private const string TagVisibilityStoreKey = "tag-visibility:show-unassigned";
     private bool showUnassignedTags;
+    private string? tagSearch;
     private ElementReference controlsSentinel;
     private DotNetObjectReference<Albums>? controlsObserverRef;
     private bool controlsPastAnchor;
@@ -1223,9 +1231,12 @@
 
     private Task SaveTagVisibility() => Store.SetItemAsync(TagVisibilityStoreKey, showUnassignedTags);
 
-    private IEnumerable<TagDto> GetVisibleTags() => showUnassignedTags
+    private IEnumerable<TagDto> GetVisibleTags() => (showUnassignedTags
         ? availableTags
-        : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id));
+        : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id)))
+        .Where(tag => string.IsNullOrWhiteSpace(tagSearch) || tag.Name.Contains(tagSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private void ClearTagSearch() => tagSearch = null;
 
     private IEnumerable<TagGroupView> GetGroupedTags()
     {
