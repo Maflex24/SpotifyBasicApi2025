@@ -1,7 +1,13 @@
 @using Frontend.Components
 
 <div class="tag-search-select @(InFlow ? "tag-search-select-flow" : string.Empty)" @onkeydown="HandleKeyDown">
-    <input class="form-control form-control-sm input-dark" placeholder="@Placeholder" @bind="search" @bind:event="oninput" @onfocus="OnFocus" />
+    <div class="tag-search-input-row">
+        @if (ShowSearchClear)
+        {
+            <button type="button" class="btn btn-sm btn-outline-danger tag-search-clear" disabled="@string.IsNullOrWhiteSpace(search)" title="Wyczyść wyszukiwanie" aria-label="Wyczyść wyszukiwanie" @onclick="ClearSearch">×</button>
+        }
+        <input class="form-control form-control-sm input-dark" placeholder="@Placeholder" @bind="search" @bind:event="oninput" @onfocus="OnFocus" />
+    </div>
     <div class="tag-search-dropdown" style="display:@(isOpen ? "block" : "none");">
         @if (ShowClear)
         {
@@ -36,6 +42,7 @@
     [Parameter] public EventCallback OnClearRequested { get; set; }
     [Parameter] public string Placeholder { get; set; } = "Szukaj tagu...";
     [Parameter] public bool ShowClear { get; set; } = true;
+    [Parameter] public bool ShowSearchClear { get; set; }
     [Parameter] public string ClearLabel { get; set; } = "— usuń przypisanie —";
     [Parameter] public bool Grouped { get; set; }
     [Parameter] public bool InFlow { get; set; }
@@ -108,6 +115,13 @@
         search = item.Name;
         isOpen = false;
         await OnSelected.InvokeAsync(item.Id);
+    }
+
+    private void ClearSearch()
+    {
+        search = string.Empty;
+        isOpen = true;
+        activeIndex = ShowClear ? 1 : 0;
     }
 
     private async Task Clear()

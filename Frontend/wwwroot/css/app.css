@@ -1236,6 +1236,22 @@ code {
     position: relative;
 }
 
+.tag-search-input-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
+}
+
+.tag-search-input-row .form-control {
+    min-width: 0;
+}
+
+.tag-search-clear {
+    flex: 0 0 auto;
+    width: 2.25rem;
+    padding: 0;
+}
+
 .tag-search-select .tag-search-dropdown {
     position: absolute;
     z-index: 1100;
