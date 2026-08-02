@@ -116,11 +116,12 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
             [FromQuery] string? excludeTags = null,
-            [FromQuery] string? excludeMode = null)
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] string? search = null)
         {
             try
             {
-                var result = await libraryService.GetPlaylistTrackTagCountsAsync(id, includeTags, includeMode, excludeTags, excludeMode);
+                var result = await libraryService.GetPlaylistTrackTagCountsAsync(id, includeTags, includeMode, excludeTags, excludeMode, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -336,11 +337,12 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
             [FromQuery] string? excludeTags = null,
-            [FromQuery] string? excludeMode = null)
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] string? search = null)
         {
             try
             {
-                var result = await libraryService.GetArtistTagCountsAsync(tags, genre, includeTags, includeMode, excludeTags, excludeMode);
+                var result = await libraryService.GetArtistTagCountsAsync(tags, genre, includeTags, includeMode, excludeTags, excludeMode, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -500,14 +502,17 @@ namespace SpotifyBasicApi2025.Controllers
         public async Task<IActionResult> GetAlbumTagCounts(
             [FromQuery] string? tags = null,
             [FromQuery] string? artistId = null,
+            [FromQuery] int? fromYear = null,
+            [FromQuery] int? toYear = null,
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
             [FromQuery] string? excludeTags = null,
-            [FromQuery] string? excludeMode = null)
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] string? search = null)
         {
             try
             {
-                var result = await libraryService.GetAlbumTagCountsAsync(tags, artistId, includeTags, includeMode, excludeTags, excludeMode);
+                var result = await libraryService.GetAlbumTagCountsAsync(tags, artistId, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)

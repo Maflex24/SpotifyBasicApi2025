@@ -84,7 +84,7 @@
                 else
                 {
                 <div class="tag-chips-container mt-2">
-                    @foreach (var t in availableTags)
+                @foreach (var t in GetVisibleTags())
                     {
                         var state = GetTagState(t.Id);
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
@@ -102,7 +102,8 @@
                 <div class="tag-filter-controls">
                     <button type="button" class="tag-mode-chip tag-include" title="Tryb łączenia włączonych tagów" aria-label="Tryb łączenia włączonych tagów: @((includeMode == "and") ? "AND" : "OR")" @onclick="ToggleIncludeMode"><span>Włączone</span><strong>@((includeMode == "and") ? "AND" : "OR")</strong></button>
                     <button type="button" class="tag-mode-chip tag-exclude" title="Tryb łączenia wykluczonych tagów" aria-label="Tryb łączenia wykluczonych tagów: @((excludeMode == "and") ? "AND" : "OR")" @onclick="ToggleExcludeMode"><span>Wykluczone</span><strong>@((excludeMode == "and") ? "AND" : "OR")</strong></button>
-                    <button type="button" class="tag-layout-toggle" title="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-label="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-pressed="@showTagsGrouped" @onclick="ToggleTagLayout"><span>@(showTagsGrouped ? "Lista tagów" : "Pogrupuj tagi")</span><strong aria-hidden="true">@(showTagsGrouped ? "≡" : "▦")</strong></button>
+                <button type="button" class="tag-layout-toggle" title="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-label="@(showTagsGrouped ? "Pokaż płaską listę tagów" : "Pogrupuj tagi według kategorii")" aria-pressed="@showTagsGrouped" @onclick="ToggleTagLayout"><span>@(showTagsGrouped ? "Lista tagów" : "Pogrupuj tagi")</span><strong aria-hidden="true">@(showTagsGrouped ? "≡" : "▦")</strong></button>
+                <label class="tag-visibility-toggle"><input type="checkbox" @bind="showUnassignedTags" @bind:after="SaveTagVisibility" /> <span>Pokaż nieprzypisane tagi</span></label>
                 </div>
             </div>
         </section>
@@ -217,6 +218,7 @@
             localSearch = value;
             ApplyLocalFilter();
             ApplyClientSort();
+            _ = LoadPlaylistTagCounts();
         }
     }
 
@@ -230,11 +232,14 @@
     private bool showTagFilters = true;
     private bool showTagsGrouped;
     private const string TagLayoutStoreKey = "tag-layout:grouped";
+    private const string TagVisibilityStoreKey = "tag-visibility:show-unassigned";
+    private bool showUnassignedTags;
     private Dictionary<long, int> tagCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadTagLayout();
+        await LoadTagVisibility();
         await LoadAvailableTags();
         await LoadTracks();
         await LoadPlaylistName();
@@ -685,11 +690,23 @@
         await Store.SetItemAsync(TagLayoutStoreKey, showTagsGrouped);
     }
 
+    private async Task LoadTagVisibility()
+    {
+        showUnassignedTags = await Store.GetItemAsync<bool?>(TagVisibilityStoreKey) ?? false;
+    }
+
+    private Task SaveTagVisibility() => Store.SetItemAsync(TagVisibilityStoreKey, showUnassignedTags);
+
+    private IEnumerable<TagDto> GetVisibleTags() => showUnassignedTags
+        ? availableTags
+        : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id));
+
     private IEnumerable<TagGroupView> GetGroupedTags()
     {
         var groupedTagIds = tagGroups.Select(group => group.Id).ToHashSet();
-        var groups = tagGroups.OrderBy(group => group.Name).Select(group => new TagGroupView { Name = group.Name, Tags = availableTags.Where(tag => tag.TagGroupId == group.Id).OrderBy(tag => tag.Name).ToList() }).Where(group => group.Tags.Count > 0).ToList();
-        var ungroupedTags = availableTags.Where(tag => !groupedTagIds.Contains(tag.TagGroupId)).OrderBy(tag => tag.Name).ToList();
+        var visibleTags = GetVisibleTags().ToList();
+        var groups = tagGroups.OrderBy(group => group.Name).Select(group => new TagGroupView { Name = group.Name, Tags = visibleTags.Where(tag => tag.TagGroupId == group.Id).OrderBy(tag => tag.Name).ToList() }).Where(group => group.Tags.Count > 0).ToList();
+        var ungroupedTags = visibleTags.Where(tag => !groupedTagIds.Contains(tag.TagGroupId)).OrderBy(tag => tag.Name).ToList();
         if (ungroupedTags.Count > 0)
             groups.Add(new TagGroupView { Name = "Pozostałe tagi", Tags = ungroupedTags });
         return groups;
@@ -881,6 +898,9 @@
             query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
             query.Add($"excludeMode={excludeMode}");
         }
+
+        if (!string.IsNullOrWhiteSpace(localSearch))
+            query.Add($"search={Uri.EscapeDataString(localSearch)}");
 
         var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tags/counts?{string.Join('&', query)}");
         if (!res.IsSuccessStatusCode)

@@ -292,7 +292,8 @@ namespace SpotifyBasicApi2025.Services
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
-            string? excludeMode = null)
+            string? excludeMode = null,
+            string? search = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -365,6 +366,22 @@ namespace SpotifyBasicApi2025.Services
                     EF.Functions.Like(a.Genres!, "%, " + g) ||
                     EF.Functions.Like(a.Genres!, "%," + g)
                 ));
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(term => term.ToLower())
+                    .ToList();
+
+                foreach (var term in terms)
+                {
+                    var termLocal = term;
+                    query = query.Where(artist =>
+                        (artist.Name != null && EF.Functions.Like(artist.Name.ToLower(), "%" + termLocal + "%"))
+                        || (artist.Genres != null && EF.Functions.Like(artist.Genres.ToLower(), "%" + termLocal + "%"))
+                        || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%"))));
+                }
             }
 
             var artistIds = await query.Select(a => a.Id).ToListAsync();
@@ -1092,10 +1109,13 @@ namespace SpotifyBasicApi2025.Services
         public async Task<List<object>> GetAlbumTagCountsAsync(
             string? tags = null,
             string? artistId = null,
+            int? fromYear = null,
+            int? toYear = null,
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
-            string? excludeMode = null)
+            string? excludeMode = null,
+            string? search = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -1112,6 +1132,12 @@ namespace SpotifyBasicApi2025.Services
                 var aid = artistId.Trim();
                 query = query.Where(album => context.SpAlbumArtistAssigns.Any(x => x.AlbumId == album.Id && x.ArtistId == aid));
             }
+
+            if (fromYear.HasValue)
+                query = query.Where(album => album.Year >= fromYear.Value);
+
+            if (toYear.HasValue)
+                query = query.Where(album => album.Year <= toYear.Value);
 
             if (!string.IsNullOrWhiteSpace(tags))
             {
@@ -1151,6 +1177,22 @@ namespace SpotifyBasicApi2025.Services
                         query = query.Where(album => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && ass.TagId == tid)));
                     else
                         query = query.Where(album => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == album.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(term => term.ToLower())
+                    .ToList();
+
+                foreach (var term in terms)
+                {
+                    var termLocal = term;
+                    query = query.Where(album =>
+                        (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
+                        || context.SpAlbumArtistAssigns.Any(assign => assign.AlbumId == album.Id && assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
+                        || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "album" && assign.SpotifyItemId == album.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%"))));
                 }
             }
 
@@ -1318,7 +1360,8 @@ namespace SpotifyBasicApi2025.Services
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
-            string? excludeMode = null)
+            string? excludeMode = null,
+            string? search = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -1368,6 +1411,23 @@ namespace SpotifyBasicApi2025.Services
                         q = q.Where(track => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == tid)));
                     else
                         q = q.Where(track => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(term => term.ToLower())
+                    .ToList();
+
+                foreach (var term in terms)
+                {
+                    var termLocal = term;
+                    q = q.Where(track =>
+                        (track.Name != null && EF.Functions.Like(track.Name.ToLower(), "%" + termLocal + "%"))
+                        || (track.Album != null && track.Album.Name != null && EF.Functions.Like(track.Album.Name.ToLower(), "%" + termLocal + "%"))
+                        || context.SpTrackArtists.Any(assign => assign.TrackId == track.Id && assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
+                        || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "track" && assign.SpotifyItemId == track.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%"))));
                 }
             }
 
