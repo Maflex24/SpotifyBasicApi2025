@@ -269,8 +269,8 @@
     private ElementReference controlsSentinel;
     private DotNetObjectReference<Albums>? controlsObserverRef;
     private bool controlsPastAnchor;
-    private bool controlsManuallyExpanded;
-    private bool ControlsCollapsed => controlsPastAnchor && !controlsManuallyExpanded;
+    private bool controlsManuallyCollapsed;
+    private bool ControlsCollapsed => controlsPastAnchor && controlsManuallyCollapsed;
 
     private Dictionary<string, float?> hoverByKey = new();
     private Dictionary<string, long?> selectedTagByAlbum = new();
@@ -308,14 +308,14 @@
         controlsPastAnchor = isPastAnchor;
 
         if (!controlsPastAnchor)
-            controlsManuallyExpanded = false;
+            controlsManuallyCollapsed = false;
 
         return InvokeAsync(StateHasChanged);
     }
 
     private void ToggleControlsVisibility()
     {
-        controlsManuallyExpanded = ControlsCollapsed;
+        controlsManuallyCollapsed = !ControlsCollapsed;
     }
 
     public async ValueTask DisposeAsync()

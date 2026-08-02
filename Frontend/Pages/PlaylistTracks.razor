@@ -196,8 +196,8 @@
     private ElementReference controlsSentinel;
     private DotNetObjectReference<PlaylistTracks>? controlsObserverRef;
     private bool controlsPastAnchor;
-    private bool controlsManuallyExpanded;
-    private bool ControlsCollapsed => controlsPastAnchor && !controlsManuallyExpanded;
+    private bool controlsManuallyCollapsed;
+    private bool ControlsCollapsed => controlsPastAnchor && controlsManuallyCollapsed;
 
     private List<Track> tracks = new();
     private List<Track> filteredTracks = new();
@@ -277,12 +277,12 @@
 
         controlsPastAnchor = isPastAnchor;
         if (!controlsPastAnchor)
-            controlsManuallyExpanded = false;
+            controlsManuallyCollapsed = false;
 
         return InvokeAsync(StateHasChanged);
     }
 
-    private void ToggleControlsVisibility() => controlsManuallyExpanded = ControlsCollapsed;
+    private void ToggleControlsVisibility() => controlsManuallyCollapsed = !ControlsCollapsed;
 
     public async ValueTask DisposeAsync()
     {
