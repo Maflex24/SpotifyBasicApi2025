@@ -22,7 +22,7 @@
         }
 
     <section class="library-toolbar" aria-label="Filtry i akcje utworów">
-        <div class="library-toolbar-heading"><h4 class="mb-0">Utwory</h4></div>
+        <div class="library-toolbar-heading"><h4 class="mb-0">Utwory <span class="library-results-count">@GetResultCountText(total, "utwór", "utwory", "utworów")</span></h4></div>
         <div class="library-search-group"><input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" /></div>
         <div class="library-filter-fields">
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
@@ -175,6 +175,14 @@
                                  Placeholder="Taguj utwór..."
                                  OnChanged="ApplyTaggedTrackStateFromPanel"
                                  OnClose="CloseTrackTagging" />
+    }
+
+    @if (!isLoading && total == 0)
+    {
+        <section class="library-empty-results" role="status">
+            <p>Żaden utwór nie spełnia zastosowanych filtrów.</p>
+            <button type="button" class="btn btn-sm album-action-button album-action-muted" @onclick="ResetAndApplyFiltersAsync"><AppIcon Name="reset" /><span>Resetuj filtry</span></button>
+        </section>
     }
 
     <div class="table-responsive" style="max-height: calc(100vh - 240px); overflow-y: auto; position: relative;" @ref="containerRef">
@@ -611,6 +619,20 @@
 
         // Reset przygotowuje jedynie pusty stan roboczy.
         return Task.CompletedTask;
+    }
+
+    private async Task ResetAndApplyFiltersAsync()
+    {
+        await ResetFilters();
+        await ApplyFiltersAsync();
+    }
+
+    private static string GetResultCountText(int count, string singular, string few, string many)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        var noun = count == 1 ? singular : mod10 is >= 2 and <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
+        return $"{count} {noun}";
     }
 
     private void OnLocalSearchChanged(string? value)

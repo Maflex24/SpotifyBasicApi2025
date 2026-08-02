@@ -289,7 +289,7 @@ code {
 
 .library-toolbar {
     display: grid;
-    grid-template-columns: max-content clamp(20rem, 40vw, 42rem) max-content;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
     grid-template-areas:
         "heading search playback"
         "filters filters actions";
@@ -305,14 +305,41 @@ code {
         "actions actions";
 }
 
-.library-toolbar-heading { grid-area: heading; }
+.library-toolbar-heading { grid-area: heading; min-width: 0; }
 .library-toolbar-heading h4 {
     overflow-wrap: anywhere;
 }
+
+.library-results-count {
+    display: inline-block;
+    margin-left: 0.35rem;
+    color: #94a3b8;
+    font-size: 0.62em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.library-empty-results {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: min(100%, 72rem);
+    margin: 0 auto 1rem;
+    padding: 0.85rem 1rem;
+    color: #cbd5e1;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    border-radius: 0.5rem;
+    background: rgba(18, 18, 22, 0.62);
+}
+
+.library-empty-results p {
+    margin: 0;
+}
 .library-search-group { grid-area: search; min-width: 0; }
 .library-filter-fields { grid-area: filters; min-width: 0; }
-.library-toolbar-actions { grid-area: actions; }
-.library-playback-actions { grid-area: playback; }
+.library-toolbar-actions { grid-area: actions; min-width: 0; }
+.library-playback-actions { grid-area: playback; min-width: 0; }
 
 .library-search-group .form-control { width: 100%; }
 
@@ -408,7 +435,7 @@ code {
     display: grid;
     width: min(100%, 72rem);
     margin-inline: auto;
-    grid-template-columns: max-content clamp(20rem, 40vw, 42rem) max-content;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
     grid-template-areas:
         "heading search playback"
         "filters filters actions";
@@ -859,6 +886,15 @@ code {
 }
 
 @media (max-width: 767.98px) {
+    .library-empty-results {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .library-empty-results .btn {
+        width: 100%;
+    }
+
     .library-toolbar,
     .library-toolbar--simple {
         grid-template-columns: minmax(0, 1fr);

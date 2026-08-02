@@ -24,7 +24,7 @@
         }
 
     <section class="library-toolbar" aria-label="Filtry i akcje artystów">
-        <div class="library-toolbar-heading"><h4 class="mb-0">Artyści</h4></div>
+        <div class="library-toolbar-heading"><h4 class="mb-0">Artyści <span class="library-results-count">@GetResultCountText(filteredArtists.Count, "artysta", "artystów", "artystów")</span></h4></div>
         <div class="library-search-group">
             <input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj artysty (AND)" @bind="LocalSearch" @bind:event="oninput" />
         </div>
@@ -155,6 +155,14 @@
             {
                 <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>Filtruj</span></button>
             }
+        </section>
+    }
+
+    @if (filteredArtists.Count == 0)
+    {
+        <section class="library-empty-results" role="status">
+            <p>Żaden artysta nie spełnia zastosowanych filtrów.</p>
+            <button type="button" class="btn btn-sm album-action-button album-action-muted" @onclick="ResetAndApplyFiltersAsync"><AppIcon Name="reset" /><span>Resetuj filtry</span></button>
         </section>
     }
 
@@ -755,6 +763,20 @@
 
         // Reset przygotowuje jedynie pusty stan roboczy.
         return Task.CompletedTask;
+    }
+
+    private async Task ResetAndApplyFiltersAsync()
+    {
+        await ResetFilters();
+        await ApplyFiltersAsync();
+    }
+
+    private static string GetResultCountText(int count, string singular, string few, string many)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        var noun = count == 1 ? singular : mod10 is >= 2 and <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
+        return $"{count} {noun}";
     }
 
     private ArtistsState BuildCurrentState() => new ArtistsState

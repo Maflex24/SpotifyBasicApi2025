@@ -30,7 +30,7 @@
 
     <section class="albums-toolbar mb-3" aria-label="Filtry i akcje albumów">
         <div class="albums-toolbar-heading">
-            <h4 class="mb-0">Albumy</h4>
+            <h4 class="mb-0">Albumy <span class="library-results-count">@GetResultCountText(filteredAlbums.Count, "album", "albumy", "albumów")</span></h4>
         </div>
 
         <div class="albums-search-group">
@@ -196,6 +196,14 @@
                     <AppIcon Name="apply" /><span>Filtruj</span>
                 </button>
             }
+        </section>
+    }
+
+    @if (filteredAlbums.Count == 0)
+    {
+        <section class="library-empty-results" role="status">
+            <p>Żaden album nie spełnia zastosowanych filtrów.</p>
+            <button type="button" class="btn btn-sm album-action-button album-action-muted" @onclick="ResetAndApplyFiltersAsync"><AppIcon Name="reset" /><span>Resetuj filtry</span></button>
         </section>
     }
 
@@ -829,6 +837,20 @@
         toYear = null;
 
         await SaveToStore();
+    }
+
+    private async Task ResetAndApplyFiltersAsync()
+    {
+        await ResetFilters();
+        await ApplyFiltersAsync();
+    }
+
+    private static string GetResultCountText(int count, string singular, string few, string many)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        var noun = count == 1 ? singular : mod10 is >= 2 and <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
+        return $"{count} {noun}";
     }
 
     private Task MarkFiltersDirtyAsync() => SaveToStore();

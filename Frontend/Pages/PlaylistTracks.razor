@@ -22,7 +22,7 @@
         }
 
     <section class="library-toolbar library-toolbar--simple" aria-label="Filtry i akcje playlisty">
-        <div class="library-toolbar-heading"><h4 class="mb-0">Utwory playlisty: @playlistName</h4></div>
+        <div class="library-toolbar-heading"><h4 class="mb-0">Utwory playlisty: @playlistName <span class="library-results-count">@GetResultCountText(filteredTracks.Count, "utwór", "utwory", "utworów")</span></h4></div>
         <div class="library-search-group"><input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" /></div>
         <div class="library-toolbar-actions">
             <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść filtry" @onclick="ResetFilters"><AppIcon Name="reset" /><span class="album-action-label">Resetuj</span></button>
@@ -129,6 +129,14 @@
             {
                 <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>Filtruj</span></button>
             }
+        </section>
+    }
+
+    @if (tracks.Count > 0 && filteredTracks.Count == 0)
+    {
+        <section class="library-empty-results" role="status">
+            <p>Żaden utwór z tej playlisty nie spełnia zastosowanych filtrów.</p>
+            <button type="button" class="btn btn-sm album-action-button album-action-muted" @onclick="ResetAndApplyFiltersAsync"><AppIcon Name="reset" /><span>Resetuj filtry</span></button>
         </section>
     }
 
@@ -316,6 +324,20 @@
         clientSortColumn = "name";
         clientSortAsc = true;
         return Task.CompletedTask;
+    }
+
+    private async Task ResetAndApplyFiltersAsync()
+    {
+        await ResetFilters();
+        await ApplyFiltersAsync();
+    }
+
+    private static string GetResultCountText(int count, string singular, string few, string many)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        var noun = count == 1 ? singular : mod10 is >= 2 and <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
+        return $"{count} {noun}";
     }
 
     [JSInvokable]

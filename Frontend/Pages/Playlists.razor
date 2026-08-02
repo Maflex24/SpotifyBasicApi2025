@@ -10,7 +10,7 @@
 
 <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-center mb-3 sticky-toolbar">
-        <h4 class="mb-0">Playlisty</h4>
+        <h4 class="mb-0">Playlisty <span class="library-results-count">@GetResultCountText(total, "playlista", "playlisty", "playlist")</span></h4>
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <input class="form-control form-control-sm input-dark" style="width: 220px;" type="text" placeholder="Szukaj (AND)" @bind="search" @bind:event="oninput" />
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
@@ -24,6 +24,14 @@
             <button class="btn btn-sm btn-outline-light" @onclick="ApplyFilters">Zastosuj</button>
         </div>
     </div>
+
+    @if (!isLoading && playlists.Count == 0)
+    {
+        <section class="library-empty-results" role="status">
+            <p>Żadna playlista nie spełnia zastosowanych filtrów.</p>
+            <button type="button" class="btn btn-sm btn-outline-light" @onclick="ResetAndApplyFiltersAsync">Resetuj filtry</button>
+        </section>
+    }
 
     <div class="mt-4">
         <div class="d-flex justify-content-between align-items-center mb-2" @onclick="ToggleFoldersSection" style="cursor:pointer;">
@@ -153,6 +161,7 @@
     private const int PageSize = 200;
     private bool isLoading = false;
     private bool hasMore = true;
+    private int total;
     private DotNetObjectReference<Playlists>? dotNetRef;
     private ElementReference sentinelRef;
     private bool foldersExpanded = true;
@@ -272,6 +281,7 @@
         
         if (!res.IsSuccessStatusCode) { isLoading = false; return; }
         var payload = await res.Content.ReadFromJsonAsync<PlaylistsResponse>();
+        total = payload?.total ?? 0;
         var items = payload?.items ?? new List<PlaylistItem>();
 
         if (items.Count < PageSize)
@@ -292,6 +302,25 @@
 
         await LoadPlaylists();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ResetAndApplyFiltersAsync()
+    {
+        suppressAutoApply = true;
+        sortKeyField = "name";
+        sortOrderField = "asc";
+        searchField = null;
+        suppressAutoApply = false;
+        await SaveToStore();
+        await ApplyFilters();
+    }
+
+    private static string GetResultCountText(int count, string singular, string few, string many)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        var noun = count == 1 ? singular : mod10 is >= 2 and <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
+        return $"{count} {noun}";
     }
 
     private async Task LoadFolders()
