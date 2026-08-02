@@ -436,6 +436,94 @@ code {
     margin-inline: auto;
 }
 
+.active-album-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.65rem;
+    width: min(100%, 72rem);
+    margin-inline: auto;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 0.5rem;
+    background: rgba(18, 18, 22, 0.82);
+}
+
+.active-album-filters-label {
+    color: #cbd5e1;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.active-album-filter-chips {
+    display: flex;
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.active-album-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 1.9rem;
+    padding: 0.2rem 0.4rem 0.2rem 0.6rem;
+    color: #e2e8f0;
+    background: #2a3442;
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.15;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.active-album-filter-chip:hover {
+    background: #364457;
+    border-color: rgba(248, 250, 252, 0.85);
+    transform: translateY(-1px);
+}
+
+.active-album-filter-chip:focus-visible {
+    outline: 2px solid #f8fafc;
+    outline-offset: 2px;
+}
+
+.active-album-filter-chip-include {
+    background: #087a4a;
+}
+
+.active-album-filter-chip-include:hover {
+    background: #0b9660;
+}
+
+.active-album-filter-chip-exclude {
+    background: #b42333;
+}
+
+.active-album-filter-chip-exclude:hover {
+    background: #cf3044;
+}
+
+.active-album-filter-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 999px;
+    color: #172033;
+    background: #f8fafc;
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.active-album-filters .album-action-apply {
+    background: rgba(13, 110, 253, 0.94);
+}
+
 .albums-tag-filters .tag-chips-container {
     margin-bottom: 0;
 }

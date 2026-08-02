@@ -39,18 +39,18 @@
         </div>
 
         <div class="albums-filter-fields" aria-label="Ustawienia filtrowania">
-            <select class="form-select form-select-sm select-dark" aria-label="Sortuj według" @bind="sortKey">
+            <select class="form-select form-select-sm select-dark" aria-label="Sortuj według" @bind="sortKey" @bind:after="MarkFiltersDirtyAsync">
                 <option value="name">Nazwa</option>
                 <option value="artist">Wykonawca</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
                 <option value="year">Rok</option>
             </select>
-            <select class="form-select form-select-sm select-dark" aria-label="Kierunek sortowania" @bind="sortOrder">
+            <select class="form-select form-select-sm select-dark" aria-label="Kierunek sortowania" @bind="sortOrder" @bind:after="MarkFiltersDirtyAsync">
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
             </select>
-            <select class="form-select form-select-sm select-dark albums-artist-select" aria-label="Wykonawca" @bind="selectedArtistId">
+            <select class="form-select form-select-sm select-dark albums-artist-select" aria-label="Wykonawca" @bind="selectedArtistId" @bind:after="MarkFiltersDirtyAsync">
                 <option value="">Wszyscy wykonawcy</option>
                 @foreach (var ar in availableAlbumArtists)
                 {
@@ -59,9 +59,9 @@
             </select>
             <div class="albums-year-fields">
                 <label class="visually-hidden" for="albums-year-from">Rok od</label>
-                <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" />
+                <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" @bind:after="MarkFiltersDirtyAsync" />
                 <label class="visually-hidden" for="albums-year-to">Rok do</label>
-                <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" />
+                <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" @bind:after="MarkFiltersDirtyAsync" />
             </div>
         </div>
 
@@ -69,7 +69,7 @@
             <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść wszystkie filtry" aria-label="Resetuj filtry" @onclick="ResetFilters">
                 <AppIcon Name="reset" /><span class="album-action-label">Resetuj</span>
             </button>
-            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj wybrane filtry" aria-label="Zastosuj filtry" @onclick="LoadAlbums">
+            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj wybrane filtry" aria-label="Zastosuj filtry" @onclick="ApplyFiltersAsync">
                 <AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span>
             </button>
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-label="Tagi: @(showTagFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters">
@@ -175,6 +175,30 @@
     }
     </div>
 
+    @{
+        var activeFilterChips = GetActiveFilterChips();
+    }
+    @if (activeFilterChips.Count > 0 || FiltersPending)
+    {
+        <section class="active-album-filters mb-3" aria-label="Aktywne filtry albumów">
+            <span class="active-album-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
+            <div class="active-album-filter-chips">
+                @foreach (var chip in activeFilterChips)
+                {
+                    <button type="button" class="@chip.CssClass" title="Usuń filtr: @chip.Label" aria-label="Usuń filtr: @chip.Label" @onclick="chip.ClearAsync">
+                        <span>@chip.Label</span><span class="active-album-filter-chip-remove" aria-hidden="true">×</span>
+                    </button>
+                }
+            </div>
+            @if (FiltersPending)
+            {
+                <button type="button" class="btn btn-sm album-action-button album-action-apply active-album-filters-apply" @onclick="ApplyFiltersAsync">
+                    <AppIcon Name="apply" /><span>Filtruj</span>
+                </button>
+            }
+        </section>
+    }
+
     <div class="library-card-grid">
         @foreach (var a in filteredAlbums)
         {
@@ -257,6 +281,8 @@
     private List<Album> filteredAlbums = new();
     private readonly HashSet<string> queuingAlbumIds = new();
     private bool isQueueingAllAlbums;
+    private AlbumFilterSnapshot? appliedFilters;
+    private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
     private List<TagDto> availableTags = new();
     private List<TagGroupDto> tagGroups = new();
     private List<AlbumArtistOption> availableAlbumArtists = new();
@@ -290,7 +316,7 @@
         await LoadFromStore();
         await LoadAvailableTags();
         await LoadAlbumArtists();
-        await LoadAlbums();
+        await ApplyFiltersAsync();
         await LoadSavedFilters();
     }
 
@@ -343,47 +369,75 @@
         savedFilters = await res.Content.ReadFromJsonAsync<List<SavedFilterItem>>() ?? new List<SavedFilterItem>();
     }
 
-    private async Task LoadAlbums()
+    private AlbumFilterSnapshot CaptureCurrentFilters() => new(
+        sortKey,
+        sortOrder,
+        selectedTagFilter,
+        selectedTagSort,
+        selectedArtistId,
+        localSearch,
+        includeMode,
+        excludeMode,
+        includeTagIds.OrderBy(id => id).ToArray(),
+        excludeTagIds.OrderBy(id => id).ToArray(),
+        fromYear,
+        toYear);
+
+    private async Task ApplyFiltersAsync()
+    {
+        var filters = CaptureCurrentFilters();
+        if (await LoadAlbumsAsync(filters))
+            appliedFilters = filters;
+    }
+
+    private async Task ReloadAppliedAlbumsAsync()
+    {
+        var filters = appliedFilters ?? CaptureCurrentFilters();
+        if (await LoadAlbumsAsync(filters) && appliedFilters is null)
+            appliedFilters = filters;
+    }
+
+    private async Task<bool> LoadAlbumsAsync(AlbumFilterSnapshot filters)
     {
         var query = new List<string>();
 
-        query.Add($"sort={sortKey}");
-        query.Add($"order={sortOrder}");
+        query.Add($"sort={filters.SortKey}");
+        query.Add($"order={filters.SortOrder}");
 
-        if (!string.IsNullOrEmpty(selectedTagFilter))
-            query.Add($"tags={selectedTagFilter}");
+        if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
+            query.Add($"tags={filters.SelectedTagFilter}");
 
-        if (!string.IsNullOrEmpty(selectedTagSort))
-            query.Add($"sortTagId={selectedTagSort}");
+        if (!string.IsNullOrEmpty(filters.SelectedTagSort))
+            query.Add($"sortTagId={filters.SelectedTagSort}");
 
-        if (!string.IsNullOrEmpty(selectedArtistId))
-            query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
+        if (!string.IsNullOrEmpty(filters.SelectedArtistId))
+            query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
 
-        if (fromYear.HasValue)
-            query.Add($"fromYear={fromYear.Value}");
+        if (filters.FromYear.HasValue)
+            query.Add($"fromYear={filters.FromYear.Value}");
 
-        if (toYear.HasValue)
-            query.Add($"toYear={toYear.Value}");
+        if (filters.ToYear.HasValue)
+            query.Add($"toYear={filters.ToYear.Value}");
 
-        if (!string.IsNullOrWhiteSpace(localSearch))
-            query.Add($"search={Uri.EscapeDataString(localSearch)}");
+        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
+            query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
 
-        if (includeTagIds.Count > 0)
+        if (filters.IncludeTagIds.Length > 0)
         {
-            query.Add($"includeTags={string.Join(',', includeTagIds)}");
-            query.Add($"includeMode={includeMode}");
+            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
+            query.Add($"includeMode={filters.IncludeMode}");
         }
 
-        if (excludeTagIds.Count > 0)
+        if (filters.ExcludeTagIds.Length > 0)
         {
-            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
-            query.Add($"excludeMode={excludeMode}");
+            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+            query.Add($"excludeMode={filters.ExcludeMode}");
         }
 
         var res = await Http.GetAsync($"api/library/albums?{string.Join('&', query)}");
 
         if (!res.IsSuccessStatusCode)
-            return;
+            return false;
 
         var payload = await res.Content.ReadFromJsonAsync<AlbumsResponse>();
         albums = payload?.items ?? new List<Album>();
@@ -394,10 +448,11 @@
                 selectedTagByAlbum[a.Id] = null;
         }
 
-        ApplyLocalFilter();
-        await LoadAlbumTagCounts();
+        ApplyLocalFilter(filters.LocalSearch);
+        await LoadAlbumTagCounts(filters);
 
         await SaveToStore();
+        return true;
     }
 
     private AlbumsState BuildCurrentState() => new AlbumsState
@@ -453,7 +508,7 @@
         fromYear = state.fromYear;
         toYear = state.toYear;
 
-        await LoadAlbums();
+        await ApplyFiltersAsync();
     }
 
     private async Task RenameSelectedFilter()
@@ -510,7 +565,8 @@
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForAlbum).OrderBy(t => t.Name).ToList();
         albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, TagGroupId = t.TagGroupId }).ToList();
-        await LoadAlbumTagCounts();
+        if (appliedFilters is not null)
+            await LoadAlbumTagCounts(appliedFilters);
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -631,36 +687,37 @@
             Strength = tag.Strength
         }).ToList();
 
-        if (!MatchesAlbumTagFilters(album))
+        var filters = appliedFilters ?? CaptureCurrentFilters();
+        if (!MatchesAlbumTagFilters(album, filters))
             albums.Remove(album);
 
-        SortAlbumsByTagStrength();
-        ApplyLocalFilter();
+        SortAlbumsByTagStrength(filters);
+        ApplyLocalFilter(filters.LocalSearch);
 
         if (!previousTagIds.SetEquals(album.Tags.Select(tag => tag.TagId)))
-            await LoadAlbumTagCounts();
+            await LoadAlbumTagCounts(filters);
     }
 
-    private bool MatchesAlbumTagFilters(Album album)
+    private static bool MatchesAlbumTagFilters(Album album, AlbumFilterSnapshot filters)
     {
         var tagIds = album.Tags.Select(tag => tag.TagId).ToHashSet();
-        if (long.TryParse(selectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
+        if (long.TryParse(filters.SelectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
             return false;
 
-        if (includeTagIds.Count > 0)
+        if (filters.IncludeTagIds.Length > 0)
         {
-            var matchesInclude = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase)
-                ? includeTagIds.All(tagIds.Contains)
-                : includeTagIds.Any(tagIds.Contains);
+            var matchesInclude = string.Equals(filters.IncludeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? filters.IncludeTagIds.All(tagIds.Contains)
+                : filters.IncludeTagIds.Any(tagIds.Contains);
             if (!matchesInclude)
                 return false;
         }
 
-        if (excludeTagIds.Count > 0)
+        if (filters.ExcludeTagIds.Length > 0)
         {
-            var matchesExcluded = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase)
-                ? excludeTagIds.All(tagIds.Contains)
-                : excludeTagIds.Any(tagIds.Contains);
+            var matchesExcluded = string.Equals(filters.ExcludeMode, "and", StringComparison.OrdinalIgnoreCase)
+                ? filters.ExcludeTagIds.All(tagIds.Contains)
+                : filters.ExcludeTagIds.Any(tagIds.Contains);
             if (matchesExcluded)
                 return false;
         }
@@ -668,12 +725,12 @@
         return true;
     }
 
-    private void SortAlbumsByTagStrength()
+    private void SortAlbumsByTagStrength(AlbumFilterSnapshot filters)
     {
-        if (!string.Equals(sortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(selectedTagSort, out var tagId))
+        if (!string.Equals(filters.SortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(filters.SelectedTagSort, out var tagId))
             return;
 
-        albums = (string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase)
+        albums = (string.Equals(filters.SortOrder, "asc", StringComparison.OrdinalIgnoreCase)
                 ? albums.OrderBy(album => album.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0)
                 : albums.OrderByDescending(album => album.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0))
             .ThenBy(album => album.Name, StringComparer.OrdinalIgnoreCase)
@@ -754,7 +811,7 @@
         if (!res.IsSuccessStatusCode)
             return;
 
-        await LoadAlbums();
+        await ReloadAppliedAlbumsAsync();
     }
 
     private async Task ResetFilters()
@@ -763,7 +820,7 @@
         sortOrder = "asc";
         selectedTagFilter = null;
         selectedTagSort = null;
-        LocalSearch = null;
+        localSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
         includeMode = "or";
@@ -771,8 +828,98 @@
         fromYear = null;
         toYear = null;
 
-        await LoadAlbums();
         await SaveToStore();
+    }
+
+    private Task MarkFiltersDirtyAsync() => SaveToStore();
+
+    private List<ActiveFilterChip> GetActiveFilterChips()
+    {
+        var chips = new List<ActiveFilterChip>();
+
+        if (!string.IsNullOrWhiteSpace(localSearch))
+            chips.Add(new ActiveFilterChip($"Szukaj: {localSearch}", "active-album-filter-chip", ClearSearchFilterAsync));
+
+        if (!string.IsNullOrWhiteSpace(selectedArtistId))
+        {
+            var artistName = availableAlbumArtists.FirstOrDefault(artist => artist.Id == selectedArtistId)?.Name ?? selectedArtistId;
+            chips.Add(new ActiveFilterChip($"Wykonawca: {artistName}", "active-album-filter-chip", ClearArtistFilterAsync));
+        }
+
+        if (fromYear.HasValue)
+            chips.Add(new ActiveFilterChip($"Rok od: {fromYear.Value}", "active-album-filter-chip", ClearFromYearFilterAsync));
+
+        if (toYear.HasValue)
+            chips.Add(new ActiveFilterChip($"Rok do: {toYear.Value}", "active-album-filter-chip", ClearToYearFilterAsync));
+
+        if (long.TryParse(selectedTagFilter, out var selectedTagId))
+            chips.Add(new ActiveFilterChip($"Tag: {GetTagName(selectedTagId)}", "active-album-filter-chip active-album-filter-chip-include", ClearSelectedTagFilterAsync));
+
+        var includeModeLabel = includeMode.Equals("and", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
+        foreach (var tagId in includeTagIds.OrderBy(id => GetTagName(id), StringComparer.OrdinalIgnoreCase))
+            chips.Add(new ActiveFilterChip($"+ {GetTagName(tagId)} · {includeModeLabel}", "active-album-filter-chip active-album-filter-chip-include", () => ClearIncludedTagAsync(tagId)));
+
+        var excludeModeLabel = excludeMode.Equals("and", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
+        foreach (var tagId in excludeTagIds.OrderBy(id => GetTagName(id), StringComparer.OrdinalIgnoreCase))
+            chips.Add(new ActiveFilterChip($"− {GetTagName(tagId)} · {excludeModeLabel}", "active-album-filter-chip active-album-filter-chip-exclude", () => ClearExcludedTagAsync(tagId)));
+
+        return chips;
+    }
+
+    private string GetTagName(long tagId) => availableTags.FirstOrDefault(tag => tag.Id == tagId)?.Name ?? $"Tag {tagId}";
+
+    private async Task ClearSearchFilterAsync()
+    {
+        localSearch = null;
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearArtistFilterAsync()
+    {
+        selectedArtistId = null;
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearFromYearFilterAsync()
+    {
+        fromYear = null;
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearToYearFilterAsync()
+    {
+        toYear = null;
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearSelectedTagFilterAsync()
+    {
+        var tagFilter = selectedTagFilter;
+        selectedTagFilter = null;
+
+        if (selectedTagSort == tagFilter)
+        {
+            selectedTagSort = null;
+            if (string.Equals(sortKey, "weight", StringComparison.OrdinalIgnoreCase))
+            {
+                sortKey = "name";
+                sortOrder = "asc";
+            }
+        }
+
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearIncludedTagAsync(long tagId)
+    {
+        includeTagIds.Remove(tagId);
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearExcludedTagAsync(long tagId)
+    {
+        excludeTagIds.Remove(tagId);
+        await MarkFiltersDirtyAsync();
     }
 
     private async Task ApplyFilterByTag(long tagId)
@@ -783,7 +930,7 @@
         {
             selectedTagFilter = null;
 
-            await LoadAlbums();
+            await ApplyFiltersAsync();
 
             return;
         }
@@ -793,10 +940,39 @@
         sortKey = "weight";
         sortOrder = "desc";
 
-        await LoadAlbums();
+        await ApplyFiltersAsync();
     }
 
     private sealed class AlbumsResponse { public int total { get; set; } public List<Album> items { get; set; } = new(); }
+    private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
+    private sealed record AlbumFilterSnapshot(
+        string SortKey,
+        string SortOrder,
+        string? SelectedTagFilter,
+        string? SelectedTagSort,
+        string? SelectedArtistId,
+        string? LocalSearch,
+        string IncludeMode,
+        string ExcludeMode,
+        long[] IncludeTagIds,
+        long[] ExcludeTagIds,
+        int? FromYear,
+        int? ToYear)
+    {
+        public bool Matches(AlbumFilterSnapshot? other) => other is not null
+            && string.Equals(SortKey, other.SortKey, StringComparison.Ordinal)
+            && string.Equals(SortOrder, other.SortOrder, StringComparison.Ordinal)
+            && string.Equals(SelectedTagFilter, other.SelectedTagFilter, StringComparison.Ordinal)
+            && string.Equals(SelectedTagSort, other.SelectedTagSort, StringComparison.Ordinal)
+            && string.Equals(SelectedArtistId, other.SelectedArtistId, StringComparison.Ordinal)
+            && string.Equals(LocalSearch, other.LocalSearch, StringComparison.Ordinal)
+            && string.Equals(IncludeMode, other.IncludeMode, StringComparison.Ordinal)
+            && string.Equals(ExcludeMode, other.ExcludeMode, StringComparison.Ordinal)
+            && IncludeTagIds.SequenceEqual(other.IncludeTagIds)
+            && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds)
+            && FromYear == other.FromYear
+            && ToYear == other.ToYear;
+    }
     private sealed class Album 
     { 
         public string Id { get; set; } = string.Empty; 
@@ -889,7 +1065,6 @@
         toYear = state.toYear;
         showTagFilters = state.showTagFilters ?? showTagFilters;
 
-        ApplyLocalFilter();
     }
 
     private sealed class AlbumsState
@@ -968,14 +1143,14 @@
         return 0;
     }
 
-    private void CycleTagState(long tagId)
+    private async Task CycleTagState(long tagId)
     {
         var state = GetTagState(tagId);
 
         if (state == 0)
         {
             includeTagIds.Add(tagId);
-            _ = LoadAlbumTagCounts();
+            await MarkFiltersDirtyAsync();
             return;
         }
 
@@ -983,24 +1158,24 @@
         {
             includeTagIds.Remove(tagId);
             excludeTagIds.Add(tagId);
-            _ = LoadAlbumTagCounts();
+            await MarkFiltersDirtyAsync();
             return;
         }
 
         excludeTagIds.Remove(tagId);
-        _ = LoadAlbumTagCounts();
+        await MarkFiltersDirtyAsync();
     }
 
-    private void ToggleIncludeMode()
+    private async Task ToggleIncludeMode()
     {
         includeMode = includeMode == "and" ? "or" : "and";
-        _ = LoadAlbumTagCounts();
+        await MarkFiltersDirtyAsync();
     }
 
-    private void ToggleExcludeMode()
+    private async Task ToggleExcludeMode()
     {
         excludeMode = excludeMode == "and" ? "or" : "and";
-        _ = LoadAlbumTagCounts();
+        await MarkFiltersDirtyAsync();
     }
     private async Task ToggleTagFilters()
     {
@@ -1059,21 +1234,20 @@
                 return;
 
             localSearch = value;
-            ApplyLocalFilter();
-            _ = LoadAlbumTagCounts();
+            _ = MarkFiltersDirtyAsync();
         }
     }
 
-    private void ApplyLocalFilter()
+    private void ApplyLocalFilter(string? search)
     {
-        if (string.IsNullOrWhiteSpace(localSearch))
+        if (string.IsNullOrWhiteSpace(search))
         {
             filteredAlbums = albums.ToList();
 
             return;
         }
 
-        var terms = localSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var terms = search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(t => t.ToLowerInvariant())
             .ToList();
 
@@ -1101,7 +1275,7 @@
     {
         // Odtwórz pełną listę wyników przed losowaniem, aby kolejne kliknięcie
         // nie losowało z wcześniej wyświetlonego pojedynczego albumu.
-        ApplyLocalFilter();
+        ApplyLocalFilter((appliedFilters ?? CaptureCurrentFilters()).LocalSearch);
 
         if (filteredAlbums.Count == 0)
             return;
@@ -1114,32 +1288,35 @@
 
     private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 
-    private async Task LoadAlbumTagCounts()
+    private async Task LoadAlbumTagCounts(AlbumFilterSnapshot filters)
     {
         var query = new List<string>();
 
-        if (!string.IsNullOrEmpty(selectedTagFilter))
-            query.Add($"tags={selectedTagFilter}");
+        if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
+            query.Add($"tags={filters.SelectedTagFilter}");
 
-        if (!string.IsNullOrEmpty(selectedArtistId))
-            query.Add($"artistId={Uri.EscapeDataString(selectedArtistId)}");
+        if (!string.IsNullOrEmpty(filters.SelectedArtistId))
+            query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
 
-        if (fromYear.HasValue)
-            query.Add($"fromYear={fromYear.Value}");
+        if (filters.FromYear.HasValue)
+            query.Add($"fromYear={filters.FromYear.Value}");
 
-        if (toYear.HasValue)
-            query.Add($"toYear={toYear.Value}");
+        if (filters.ToYear.HasValue)
+            query.Add($"toYear={filters.ToYear.Value}");
 
-        if (includeTagIds.Count > 0)
+        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
+            query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
+
+        if (filters.IncludeTagIds.Length > 0)
         {
-            query.Add($"includeTags={string.Join(',', includeTagIds)}");
-            query.Add($"includeMode={includeMode}");
+            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
+            query.Add($"includeMode={filters.IncludeMode}");
         }
 
-        if (excludeTagIds.Count > 0)
+        if (filters.ExcludeTagIds.Length > 0)
         {
-            query.Add($"excludeTags={string.Join(',', excludeTagIds)}");
-            query.Add($"excludeMode={excludeMode}");
+            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+            query.Add($"excludeMode={filters.ExcludeMode}");
         }
 
         var res = await Http.GetAsync($"api/library/albums/tags/counts?{string.Join('&', query)}");
