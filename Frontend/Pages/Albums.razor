@@ -30,7 +30,7 @@
 
     <section class="albums-toolbar mb-3" aria-label="Filtry i akcje albumów">
         <div class="albums-toolbar-heading">
-            <h4 class="mb-0">Albumy <span class="library-results-count">@GetResultCountText(filteredAlbums.Count, "album", "albumy", "albumów")</span></h4>
+            <h4 class="mb-0 albums-results-heading"><span>Albumy</span><span class="library-results-count">@($"{filteredAlbums.Count}/{totalRows} albumów")</span></h4>
         </div>
 
         <div class="albums-search-group">
@@ -279,6 +279,11 @@
             </div>
         }
     </div>
+    @if (isLoadingAlbums && filteredAlbums.Count > 0)
+    {
+        <div class="album-infinite-scroll-status" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Wczytywanie kolejnych albumów...</span></div>
+    }
+    <div class="album-infinite-scroll-sentinel" @ref="albumsSentinel" aria-hidden="true"></div>
 </div>
 
 @code {
@@ -294,6 +299,11 @@
     private string? selectedArtistId;
     private List<Album> albums = new();
     private List<Album> filteredAlbums = new();
+    private const int AlbumPageSize = 100;
+    private int currentPage;
+    private int totalRows;
+    private bool isLoadingAlbums;
+    private bool HasMoreAlbums => albums.Count < totalRows;
     private readonly HashSet<string> queuingAlbumIds = new();
     private bool isQueueingAllAlbums;
     private AlbumFilterSnapshot? appliedFilters;
@@ -312,6 +322,7 @@
     private bool showUnassignedTags;
     private string? tagSearch;
     private ElementReference controlsSentinel;
+    private ElementReference albumsSentinel;
     private DotNetObjectReference<Albums>? controlsObserverRef;
     private bool controlsPastAnchor;
     private bool controlsManuallyCollapsed;
@@ -343,6 +354,7 @@
 
         controlsObserverRef = DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("libraryControls.observe", controlsSentinel, controlsObserverRef);
+        await JS.InvokeVoidAsync("infiniteScroll.observeWindow", albumsSentinel, controlsObserverRef);
     }
 
     [JSInvokable]
@@ -369,6 +381,7 @@
         try
         {
             await JS.InvokeVoidAsync("libraryControls.disconnect");
+            await JS.InvokeVoidAsync("infiniteScroll.disconnect");
         }
         catch (JSDisconnectedException)
         {
@@ -413,8 +426,17 @@
             appliedFilters = filters;
     }
 
-    private async Task<bool> LoadAlbumsAsync(AlbumFilterSnapshot filters)
+    private async Task<bool> LoadAlbumsAsync(AlbumFilterSnapshot filters, bool reset = true)
     {
+        if (isLoadingAlbums || (!reset && !HasMoreAlbums))
+            return false;
+
+        var requestedPage = reset ? 1 : currentPage + 1;
+        isLoadingAlbums = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
         var query = new List<string>();
 
         query.Add($"sort={filters.SortKey}");
@@ -450,13 +472,29 @@
             query.Add($"excludeMode={filters.ExcludeMode}");
         }
 
+        query.Add($"page={requestedPage}");
+        query.Add($"pageSize={AlbumPageSize}");
+
         var res = await Http.GetAsync($"api/library/albums?{string.Join('&', query)}");
 
         if (!res.IsSuccessStatusCode)
             return false;
 
         var payload = await res.Content.ReadFromJsonAsync<AlbumsResponse>();
-        albums = payload?.items ?? new List<Album>();
+        var received = payload?.items ?? new List<Album>();
+
+        if (reset)
+        {
+            albums = received;
+        }
+        else
+        {
+            var existingIds = albums.Select(album => album.Id).ToHashSet();
+            albums.AddRange(received.Where(album => existingIds.Add(album.Id)));
+        }
+
+        currentPage = payload?.page > 0 ? payload.page : requestedPage;
+        totalRows = payload?.TotalRows ?? payload?.total ?? albums.Count;
 
         foreach (var a in albums)
         {
@@ -465,10 +503,26 @@
         }
 
         filteredAlbums = albums.ToList();
-        await LoadAlbumTagCounts(filters);
+        if (reset)
+        {
+            await LoadAlbumTagCounts(filters);
+            await SaveToStore();
+        }
 
-        await SaveToStore();
         return true;
+        }
+        finally
+        {
+            isLoadingAlbums = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnBottomReached()
+    {
+        if (!isLoadingAlbums && HasMoreAlbums)
+            await LoadAlbumsAsync(appliedFilters ?? CaptureCurrentFilters(), reset: false);
     }
 
     private AlbumsState BuildCurrentState() => new AlbumsState
@@ -973,7 +1027,14 @@
         await ApplyFiltersAsync();
     }
 
-    private sealed class AlbumsResponse { public int total { get; set; } public List<Album> items { get; set; } = new(); }
+    private sealed class AlbumsResponse
+    {
+        public int TotalRows { get; set; }
+        public int total { get; set; }
+        public int page { get; set; }
+        public int pageSize { get; set; }
+        public List<Album> items { get; set; } = new();
+    }
     private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
     private sealed record AlbumFilterSnapshot(
         string SortKey,

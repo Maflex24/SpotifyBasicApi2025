@@ -944,7 +944,9 @@ namespace SpotifyBasicApi2025.Services
             string? includeMode = null,
             string? excludeTags = null,
             string? excludeMode = null,
-            string? search = null)
+            string? search = null,
+            int page = 1,
+            int pageSize = 100)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -1036,46 +1038,56 @@ namespace SpotifyBasicApi2025.Services
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortOrderDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
+            var weightTagId = sortTagId;
+            if (!weightTagId.HasValue && !string.IsNullOrWhiteSpace(includeTags))
             {
                 var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
 
                 if (tagIds.Count > 0)
-                {
-                    var firstTagId = tagIds.First();
+                    weightTagId = tagIds.First();
+            }
 
-                    query = sortOrderDesc
-                    ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault())
-                    : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault());
-                }
+            if (sortKey == "weight" && weightTagId.HasValue)
+            {
+                var tagId = weightTagId.Value;
+                query = sortOrderDesc
+                    ? query.OrderByDescending(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == tagId).Select(ass => ass.Strength).FirstOrDefault()).ThenBy(a => a.Id)
+                    : query.OrderBy(a => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "album" && ass.SpotifyItemId == a.Id && ass.TagId == tagId).Select(ass => ass.Strength).FirstOrDefault()).ThenBy(a => a.Id);
             }
             else
             {
                 query = sortKey switch
                 {
-                    "year" => sortOrderDesc ? query.OrderByDescending(x => x.ReleaseDate) : query.OrderBy(x => x.ReleaseDate),
-                    "popularity" => sortOrderDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
+                    "year" => sortOrderDesc ? query.OrderByDescending(x => x.ReleaseDate).ThenBy(x => x.Id) : query.OrderBy(x => x.ReleaseDate).ThenBy(x => x.Id),
+                    "popularity" => sortOrderDesc ? query.OrderByDescending(x => x.Popularity).ThenBy(x => x.Id) : query.OrderBy(x => x.Popularity).ThenBy(x => x.Id),
                     "artist" => sortOrderDesc
                         ? query.OrderByDescending(x => x.AlbumArtistAssigns
                             .Select(aaa => aaa.Artist.Name)
                             .OrderBy(n => n)
-                            .FirstOrDefault())
+                            .FirstOrDefault()).ThenBy(x => x.Id)
                         : query.OrderBy(x => x.AlbumArtistAssigns
                             .Select(aaa => aaa.Artist.Name)
                             .OrderBy(n => n)
-                            .FirstOrDefault()),
-                    _ => sortOrderDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
+                            .FirstOrDefault()).ThenBy(x => x.Id),
+                    _ => sortOrderDesc ? query.OrderByDescending(x => x.Name).ThenBy(x => x.Id) : query.OrderBy(x => x.Name).ThenBy(x => x.Id),
                 };
             }
 
             // Dodatkowe zabezpieczenie przed przeładowaniem
-            query = query.Take(1500);
+            if (page <= 0)
+                page = 1;
+
+            if (pageSize <= 0)
+                pageSize = 100;
+
+            pageSize = Math.Min(pageSize, 100);
+            var totalRows = await query.CountAsync();
 
             var albums = new List<SpAlbum>();
 
             try
             {
-                albums = await query.ToListAsync();
+                albums = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
             }
             catch (Exception ex)
             {
@@ -1120,10 +1132,10 @@ namespace SpotifyBasicApi2025.Services
                     })
                     .ToList();
 
-                return new { total = albumDtos.Count, items = albumDtos };
+                return new { TotalRows = totalRows, total = totalRows, page, pageSize, items = albumDtos };
             }
 
-            return new { total = albumModels.Count, items = albumModels };
+            return new { TotalRows = totalRows, total = totalRows, page, pageSize, items = albumModels };
         }
 
         public async Task<List<object>> GetAlbumTagCountsAsync(

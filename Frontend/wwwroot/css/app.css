@@ -472,7 +472,15 @@ code {
     background: var(--albums-panel-surface);
 }
 
-.albums-toolbar-heading { grid-area: heading; }
+.albums-toolbar-heading { grid-area: heading; min-width: 0; }
+.albums-results-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+    min-width: 0;
+}
+.albums-results-heading .library-results-count { white-space: nowrap; }
 .albums-search-group { grid-area: search; min-width: 0; }
 .albums-filter-fields { grid-area: filters; }
 .albums-toolbar-actions { grid-area: actions; }
@@ -481,6 +489,20 @@ code {
 .albums-tag-filters {
     width: min(100%, 72rem);
     margin-inline: auto;
+}
+
+.album-infinite-scroll-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    color: #cbd5e1;
+    font-size: 0.85rem;
+}
+
+.album-infinite-scroll-sentinel {
+    height: 1px;
 }
 
 .active-library-filters {
