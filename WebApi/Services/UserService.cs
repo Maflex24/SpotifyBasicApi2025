@@ -1,8 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
-using SpotifyBasicApi2025.Entities.Helpers;
 using SpotifyBasicApi2025.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace SpotifyBasicApi2025.Services
 {
@@ -20,81 +19,77 @@ namespace SpotifyBasicApi2025.Services
         }
 
         /// <summary>
-        /// Pobiera aktualnie zalogowanego użytkownika Spotify
+        /// Pobiera ID użytkownika dla bieżącej sesji tokenu.
+        /// Cache jest powiązany z wersją sesji, więc nie może przeżyć zmiany konta.
         /// </summary>
-        /// <returns>ID użytkownika Spotify lub null jeśli nie jest zalogowany</returns>
         public async Task<string?> GetCurrentUserIdAsync()
         {
-            // Sprawdź czy mamy ważny token
-            if (!_tokenManager.HasValidToken())
+            while (true)
             {
-                return null;
-            }
+                var session = _tokenManager.GetUserSessionSnapshot();
+                if (session == null)
+                    return null;
 
-            try
-            {
-                // Pobierz profil użytkownika z Spotify API
-                var userProfile = await _spotifyApiService.GetCurrentUserProfileAsync();
-                
-                if (userProfile == null)
+                if (!string.IsNullOrWhiteSpace(session.Value.CachedSpotifyUserId))
+                    return session.Value.CachedSpotifyUserId;
+
+                await _tokenManager.WaitForUserIdentityLoadAsync();
+                try
                 {
+                    session = _tokenManager.GetUserSessionSnapshot();
+                    if (session == null)
+                        return null;
+
+                    if (!string.IsNullOrWhiteSpace(session.Value.CachedSpotifyUserId))
+                        return session.Value.CachedSpotifyUserId;
+
+                    var userProfile = await _spotifyApiService.GetCurrentUserProfileAsync();
+                    if (userProfile == null)
+                        return null;
+
+                    // The token may have changed while Spotify was answering.
+                    // Discard that profile and retry against the active session.
+                    if (!_tokenManager.IsSessionCurrent(session.Value.Version))
+                        continue;
+
+                    await _spotifyApiService.SaveUserFromSpotifyProfileAsync(userProfile);
+
+                    if (_tokenManager.TryCacheSpotifyUserId(session.Value.Version, userProfile.Id))
+                        return userProfile.Id;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Błąd podczas pobierania profilu użytkownika: {ex.Message}");
                     return null;
                 }
-
-                // Zapisz/aktualizuj użytkownika w bazie danych
-                await _spotifyApiService.SaveUserFromSpotifyProfileAsync(userProfile);
-
-                return userProfile.Id;
-            }
-            catch (Exception ex)
-            {
-                // Loguj błąd, ale nie przerywaj działania
-                Console.WriteLine($"Błąd podczas pobierania profilu użytkownika: {ex.Message}");
-                return null;
+                finally
+                {
+                    _tokenManager.ReleaseUserIdentityLoad();
+                }
             }
         }
 
         /// <summary>
-        /// Pobiera pełny profil aktualnie zalogowanego użytkownika
+        /// Pobiera pełny profil aktualnie zalogowanego użytkownika z bazy danych.
         /// </summary>
-        /// <returns>Profil użytkownika z bazy danych lub null jeśli nie jest zalogowany</returns>
         public async Task<SpUser?> GetCurrentUserAsync()
         {
             var userId = await GetCurrentUserIdAsync();
-            
-            if (string.IsNullOrEmpty(userId))
-            {
-                return null;
-            }
-
-            return await GetUserByIdAsync(userId);
+            return string.IsNullOrEmpty(userId) ? null : await GetUserByIdAsync(userId);
         }
 
-        /// <summary>
-        /// Sprawdza czy użytkownik jest zalogowany
-        /// </summary>
-        /// <returns>True jeśli użytkownik jest zalogowany</returns>
         public async Task<bool> IsUserLoggedInAsync()
         {
             var userId = await GetCurrentUserIdAsync();
             return !string.IsNullOrEmpty(userId);
         }
 
-        /// <summary>
-        /// Pobiera użytkownika z bazy danych po ID
-        /// </summary>
-        /// <param name="userId">ID użytkownika Spotify</param>
-        /// <returns>Użytkownik z bazy danych lub null</returns>
         public async Task<SpUser?> GetUserByIdAsync(string userId)
         {
             return await _context.SpUsers
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
-        /// <summary>
-        /// Pobiera wszystkich użytkowników z bazy danych
-        /// </summary>
-        /// <returns>Lista wszystkich użytkowników</returns>
         public async Task<List<SpUser>> GetAllUsersAsync()
         {
             return await _context.SpUsers
@@ -102,34 +97,36 @@ namespace SpotifyBasicApi2025.Services
                 .ToListAsync();
         }
 
-
-
         /// <summary>
-        /// Wymusza odświeżenie profilu użytkownika z Spotify API
+        /// Wymusza pobranie profilu z Spotify i aktualizuje cache tylko wtedy,
+        /// gdy sesja tokenu nie zmieniła się w trakcie żądania.
         /// </summary>
-        /// <returns>Zaktualizowany profil użytkownika</returns>
         public async Task<SpUser?> RefreshUserProfileAsync()
         {
-            if (!_tokenManager.HasValidToken())
-            {
-                return null;
-            }
-
+            await _tokenManager.WaitForUserIdentityLoadAsync();
             try
             {
-                var userProfile = await _spotifyApiService.GetCurrentUserProfileAsync();
-                
-                if (userProfile == null)
-                {
+                var session = _tokenManager.GetUserSessionSnapshot();
+                if (session == null)
                     return null;
-                }
 
-                return await _spotifyApiService.SaveUserFromSpotifyProfileAsync(userProfile);
+                var userProfile = await _spotifyApiService.GetCurrentUserProfileAsync();
+                if (userProfile == null || !_tokenManager.IsSessionCurrent(session.Value.Version))
+                    return null;
+
+                var user = await _spotifyApiService.SaveUserFromSpotifyProfileAsync(userProfile);
+                return _tokenManager.TryCacheSpotifyUserId(session.Value.Version, userProfile.Id)
+                    ? user
+                    : null;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Błąd podczas odświeżania profilu użytkownika: {ex.Message}");
                 return null;
+            }
+            finally
+            {
+                _tokenManager.ReleaseUserIdentityLoad();
             }
         }
     }

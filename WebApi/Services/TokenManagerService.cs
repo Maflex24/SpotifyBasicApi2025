@@ -6,7 +6,12 @@ namespace SpotifyBasicApi2025.Services
     {
         private SpotifyTokenResponse? _currentToken;
         private DateTimeOffset? _expiresAt;
+        private long _sessionVersion;
+        private string? _cachedSpotifyUserId;
         private readonly object _lockObject = new object();
+        private readonly SemaphoreSlim _userIdentityLoadLock = new SemaphoreSlim(1, 1);
+
+        public readonly record struct UserSessionSnapshot(long Version, string? CachedSpotifyUserId);
 
         public SpotifyTokenResponse? GetCurrentToken()
         {
@@ -25,6 +30,8 @@ namespace SpotifyBasicApi2025.Services
 
                 _currentToken = token;
                 _expiresAt = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn);
+                _sessionVersion++;
+                _cachedSpotifyUserId = null;
             }
         }
 
@@ -34,6 +41,8 @@ namespace SpotifyBasicApi2025.Services
             {
                 _currentToken = null;
                 _expiresAt = null;
+                _sessionVersion++;
+                _cachedSpotifyUserId = null;
             }
         }
 
@@ -78,5 +87,44 @@ namespace SpotifyBasicApi2025.Services
                 return _expiresAt;
             }
         }
+
+        public UserSessionSnapshot? GetUserSessionSnapshot()
+        {
+            lock (_lockObject)
+            {
+                if (_currentToken == null || string.IsNullOrWhiteSpace(_currentToken.AccessToken))
+                    return null;
+
+                return new UserSessionSnapshot(_sessionVersion, _cachedSpotifyUserId);
+            }
+        }
+
+        public bool IsSessionCurrent(long version)
+        {
+            lock (_lockObject)
+            {
+                return _currentToken != null
+                    && !string.IsNullOrWhiteSpace(_currentToken.AccessToken)
+                    && _sessionVersion == version;
+            }
+        }
+
+        public bool TryCacheSpotifyUserId(long version, string spotifyUserId)
+        {
+            lock (_lockObject)
+            {
+                if (_currentToken == null
+                    || string.IsNullOrWhiteSpace(_currentToken.AccessToken)
+                    || _sessionVersion != version)
+                    return false;
+
+                _cachedSpotifyUserId = spotifyUserId;
+                return true;
+            }
+        }
+
+        public Task WaitForUserIdentityLoadAsync() => _userIdentityLoadLock.WaitAsync();
+
+        public void ReleaseUserIdentityLoad() => _userIdentityLoadLock.Release();
     }
 }
