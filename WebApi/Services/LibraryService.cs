@@ -146,12 +146,20 @@ namespace SpotifyBasicApi2025.Services
             string? includeTags = null,
             string? includeMode = null,
             string? excludeTags = null,
-            string? excludeMode = null)
+            string? excludeMode = null,
+            string? search = null,
+            bool includeExternal = false)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
             if (string.IsNullOrEmpty(userId))
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            if (includeExternal && (!string.IsNullOrWhiteSpace(tags)
+                || !string.IsNullOrWhiteSpace(includeTags)
+                || !string.IsNullOrWhiteSpace(excludeTags)
+                || sortTagId.HasValue))
+                throw new ArgumentException("External search cannot be combined with tag filters.");
 
             var query = context.LibArtistUserAssigns
                 .Where(a => a.UserId == userId)
@@ -281,10 +289,48 @@ namespace SpotifyBasicApi2025.Services
             var artistModels = artists.Select(artist =>
             {
                 var tags = tagsByArtist.GetValueOrDefault(artist.Id, new List<ArtistTagModel>());
-                return artist.MapToArtistModel(tags);
+                var model = artist.MapToArtistModel(tags);
+                model.IsInLibrary = true;
+                model.TagStrength = sortTagId.HasValue
+                    ? tags.FirstOrDefault(tag => tag.TagId == sortTagId.Value)?.Strength ?? 0f
+                    : 0f;
+                return model;
             }).ToList();
 
             // Dodatkowo dołącz bieżącą siłę wybranego tagu (jeśli podano)
+            if (includeExternal && !string.IsNullOrWhiteSpace(search))
+            {
+                var existingIds = artistModels.Select(artist => artist.Id).ToHashSet(StringComparer.Ordinal);
+                var spotifyArtists = await spotifyApiService.SearchArtistsAsync(search);
+                var externalArtists = spotifyArtists
+                    .Where(artist => !string.IsNullOrWhiteSpace(artist.Id) && !existingIds.Contains(artist.Id))
+                    .Where(artist => string.IsNullOrWhiteSpace(genre) || artist.Genres.Any(value => string.Equals(value, genre.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    .Select(artist => new ArtistModel
+                    {
+                        Id = artist.Id,
+                        Name = artist.Name,
+                        Type = artist.Type,
+                        Uri = artist.Uri,
+                        Href = artist.Href,
+                        Genres = artist.Genres,
+                        Popularity = artist.Popularity,
+                        Images = artist.Images.Select(image => new SpotifyImage { Url = image.Url, Height = image.Height, Width = image.Width }).ToList(),
+                        IsInLibrary = false
+                    })
+                    .ToList();
+
+                artistModels.AddRange(externalArtists);
+                artistModels = sortKey switch
+                {
+                    "popularity" => sortOrderDesc
+                        ? artistModels.OrderByDescending(artist => artist.Popularity).ThenBy(artist => artist.Name, StringComparer.OrdinalIgnoreCase).ToList()
+                        : artistModels.OrderBy(artist => artist.Popularity).ThenBy(artist => artist.Name, StringComparer.OrdinalIgnoreCase).ToList(),
+                    _ => sortOrderDesc
+                        ? artistModels.OrderByDescending(artist => artist.Name, StringComparer.OrdinalIgnoreCase).ToList()
+                        : artistModels.OrderBy(artist => artist.Name, StringComparer.OrdinalIgnoreCase).ToList()
+                };
+            }
+
             if (sortTagId.HasValue)
             {
                 var artistDtos = artistModels

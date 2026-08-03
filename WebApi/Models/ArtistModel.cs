@@ -18,6 +18,10 @@ namespace SpotifyBasicApi2025.Models
         public List<string> Genres { get; set; } = new List<string>();
         
         public int Popularity { get; set; }
+
+        public bool IsInLibrary { get; set; }
+
+        public float TagStrength { get; set; }
         
         public List<SpotifyImage> Images { get; set; } = new List<SpotifyImage>();
         

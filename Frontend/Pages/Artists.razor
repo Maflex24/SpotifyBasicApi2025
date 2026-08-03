@@ -55,6 +55,9 @@
         </div>
         <div class="library-playback-actions">
             <button class="btn btn-sm album-action-button album-action-random" title="Wylosuj artystę z bieżących wyników" @onclick="PickRandomArtist"><AppIcon Name="shuffle" /><span class="album-action-label">Losuj</span></button>
+            <label class="tag-visibility-toggle" title="@(HasTagCriteria ? "Wyszukiwanie poza biblioteką jest niedostępne przy filtrach tagów" : "Dołącz wyniki wyszukiwania Spotify")">
+                <input type="checkbox" @bind="searchOutsideLibrary" disabled="@HasTagCriteria" /> <span>Szukaj poza swoją biblioteką</span>
+            </label>
         </div>
     </section>
 
@@ -176,16 +179,23 @@
     <div class="library-card-grid">
         @foreach (var a in filteredArtists)
         {
+            var libraryCss = a.IsInLibrary ? string.Empty : "artist-not-in-library";
             <div class="library-card-grid-item">
                 <div class="card bg-dark text-light h-100">
                     @if (a.Images?.Any() == true)
                     {
-                        <div class="artist-image-square" style="position:relative;">
+                        <div class="artist-image-square @libraryCss" style="position:relative;">
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
                             <button class="artist-play-overlay" title="Odtwórz top utwory"
                                     @onclick="() => PlayArtistTopTracks(a.Id)">▶</button>
                             <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
                                     @onclick="() => ConfirmRemoveArtist(a.Id)">✖</button>
+                        </div>
+                    }
+                    @if (!a.IsInLibrary)
+                    {
+                        <div class="px-3 pt-3">
+                            <span class="badge bg-outline-primary text-primary">Poza biblioteką</span>
                         </div>
                     }
                     <div class="card-body">
@@ -228,7 +238,11 @@
                         
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <button class="btn btn-sm btn-outline-light" @onclick="() => OpenArtistTagging(a.Id)">Taguj</button>
+                                <button class="btn btn-sm btn-outline-light" disabled="@(!a.IsInLibrary)" @onclick="() => OpenArtistTagging(a.Id)">Taguj</button>
+                                @if (!a.IsInLibrary)
+                                {
+                                    <button class="btn btn-sm album-card-tag" @onclick="() => AddArtistToLibraryAsync(a.Id)"><AppIcon Name="save" /><span>Dodaj do biblioteki</span></button>
+                                }
                             </div>
                         </div>
                     </div>
@@ -261,6 +275,7 @@
     private string? selectedGenre;
     private string? selectedTagFilter;
     private string? selectedTagSort;
+    private bool searchOutsideLibrary;
     private List<Artist> artists = new();
     private List<Artist> filteredArtists = new();
     private List<TagDto> availableTags = new();
@@ -288,6 +303,7 @@
     private string? taggingArtistId;
     private Dictionary<long, int> tagCounts = new();
     private ArtistFilterSnapshot? appliedFilters;
+    private bool HasTagCriteria => !string.IsNullOrWhiteSpace(selectedTagFilter) || !string.IsNullOrWhiteSpace(selectedTagSort) || includeTagIds.Count > 0 || excludeTagIds.Count > 0 || sortKey == "weight";
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
 
     protected override async Task OnInitializedAsync()
@@ -338,7 +354,13 @@
         savedFilters = await res.Content.ReadFromJsonAsync<List<SavedFilterItem>>() ?? new List<SavedFilterItem>();
     }
 
-    private ArtistFilterSnapshot CaptureCurrentFilters() => new(sortKey, sortOrder, selectedGenre, selectedTagFilter, selectedTagSort, localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray());
+    private ArtistFilterSnapshot CaptureCurrentFilters()
+    {
+        if (HasTagCriteria)
+            searchOutsideLibrary = false;
+
+        return new ArtistFilterSnapshot(sortKey, sortOrder, selectedGenre, selectedTagFilter, selectedTagSort, localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), searchOutsideLibrary);
+    }
 
     private async Task ApplyFiltersAsync()
     {
@@ -355,6 +377,8 @@
         if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
         if (!string.IsNullOrEmpty(filters.SelectedGenre)) query.Add($"genre={Uri.EscapeDataString(filters.SelectedGenre)}");
         if (!string.IsNullOrEmpty(filters.SelectedTagSort)) query.Add($"sortTagId={filters.SelectedTagSort}");
+        if (!string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
+        if (filters.SearchOutsideLibrary && !string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add("includeExternal=true");
         if (filters.IncludeTagIds.Length > 0)
         {
             query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
@@ -615,6 +639,7 @@
         public string Name { get; set; } = string.Empty; 
         public int Popularity { get; set; } 
         public float TagStrength { get; set; }
+        public bool IsInLibrary { get; set; } = true;
         public List<string> Genres { get; set; } = new();
         public List<SpotifyImage> Images { get; set; } = new();
         public List<ArtistTag> Tags { get; set; } = new();
@@ -636,6 +661,7 @@
             excludeTagIds = excludeTagIds.ToArray(),
             includeMode,
             excludeMode,
+            searchOutsideLibrary,
             showTagFilters
         };
 
@@ -657,6 +683,7 @@
         localSearch = state.localSearch;
         includeMode = state.includeMode ?? includeMode;
         excludeMode = state.excludeMode ?? excludeMode;
+        searchOutsideLibrary = state.searchOutsideLibrary ?? false;
 
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
@@ -676,6 +703,7 @@
         public string? localSearch { get; set; }
         public string? includeMode { get; set; }
         public string? excludeMode { get; set; }
+        public bool? searchOutsideLibrary { get; set; }
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
         public bool? showTagFilters { get; set; }
@@ -756,6 +784,13 @@
         await LoadArtists();
     }
 
+    private async Task AddArtistToLibraryAsync(string artistId)
+    {
+        var response = await Http.PostAsync($"api/library/artists/{Uri.EscapeDataString(artistId)}", null);
+        if (response.IsSuccessStatusCode)
+            await LoadArtists();
+    }
+
     private Task ResetFilters()
     {
         sortKey = "name";
@@ -768,6 +803,7 @@
         excludeTagIds.Clear();
         includeMode = "or";
         excludeMode = "or";
+        searchOutsideLibrary = false;
 
         // Reset przygotowuje jedynie pusty stan roboczy.
         return Task.CompletedTask;
@@ -797,6 +833,7 @@
         localSearch = localSearch,
         includeMode = includeMode,
         excludeMode = excludeMode,
+        searchOutsideLibrary = searchOutsideLibrary,
         includeTagIds = includeTagIds.ToArray(),
         excludeTagIds = excludeTagIds.ToArray(),
         showTagFilters = showTagFilters
@@ -814,9 +851,9 @@
     }
 
     private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
-    private sealed record ArtistFilterSnapshot(string SortKey, string SortOrder, string? SelectedGenre, string? SelectedTagFilter, string? SelectedTagSort, string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds)
+    private sealed record ArtistFilterSnapshot(string SortKey, string SortOrder, string? SelectedGenre, string? SelectedTagFilter, string? SelectedTagSort, string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, bool SearchOutsideLibrary)
     {
-        public bool Matches(ArtistFilterSnapshot? other) => other is not null && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedGenre == other.SelectedGenre && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds);
+        public bool Matches(ArtistFilterSnapshot? other) => other is not null && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedGenre == other.SelectedGenre && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && SearchOutsideLibrary == other.SearchOutsideLibrary && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds);
     }
 
     private async Task SaveCurrentFilter()
@@ -849,6 +886,7 @@
         localSearch = state.localSearch;
         includeMode = state.includeMode ?? includeMode;
         excludeMode = state.excludeMode ?? excludeMode;
+        searchOutsideLibrary = state.searchOutsideLibrary ?? false;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
         showTagFilters = state.showTagFilters ?? showTagFilters;
@@ -902,6 +940,7 @@
         selectedTagSort = tag;
         sortKey = "weight";
         sortOrder = "desc";
+        searchOutsideLibrary = false;
 
         return Task.CompletedTask;
     }
@@ -1042,6 +1081,7 @@
         if (state == 0)
         {
             includeTagIds.Add(tagId);
+            searchOutsideLibrary = false;
             return;
         }
 
@@ -1049,6 +1089,7 @@
         {
             includeTagIds.Remove(tagId);
             excludeTagIds.Add(tagId);
+            searchOutsideLibrary = false;
             return;
         }
 

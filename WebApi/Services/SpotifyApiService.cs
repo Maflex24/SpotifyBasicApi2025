@@ -241,6 +241,20 @@ namespace SpotifyBasicApi2025.Services
             return await requestService.MakeSpotifyRequestAsync($"search?q={encodedQuery}&type=track&limit={limit}");
         }
 
+        public async Task<List<SpotifyArtistObject>> SearchArtistsAsync(string query, int limit = 50)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return new List<SpotifyArtistObject>();
+
+            var encodedQuery = Uri.EscapeDataString(query);
+            var response = await requestService.MakeSpotifyRequestAsync($"search?q={encodedQuery}&type=artist&limit={Math.Clamp(limit, 1, 50)}");
+            if (response == null)
+                return new List<SpotifyArtistObject>();
+
+            var result = JsonSerializer.Deserialize<SpotifyArtistSearchResponse>(response.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return result?.Artists?.Items ?? new List<SpotifyArtistObject>();
+        }
+
         #endregion Search
 
         #region Database Operations

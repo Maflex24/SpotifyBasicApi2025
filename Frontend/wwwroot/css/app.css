@@ -194,6 +194,10 @@ code {
     opacity: 0.55;
 }
 
+.artist-image-square.artist-not-in-library > .btn-outline-danger {
+    display: none;
+}
+
 /* Album filters and actions */
 .app-icon {
     width: 1rem;
