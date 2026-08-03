@@ -242,6 +242,42 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("LibTags");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAlias", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<long>("TagId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagId");
+
+                    b.HasIndex("UserId", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("LibTagAliases");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAssign", b =>
                 {
                     b.Property<long>("Id")
@@ -888,6 +924,19 @@ namespace SpotifyBasicApi2025.Migrations
                         .IsRequired();
 
                     b.Navigation("TagGroup");
+
+                    b.Navigation("Aliases");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAlias", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.LibTag", "Tag")
+                        .WithMany("Aliases")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tag");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibTagAssign", b =>

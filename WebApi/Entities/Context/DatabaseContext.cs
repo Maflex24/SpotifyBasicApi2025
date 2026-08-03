@@ -24,6 +24,7 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         // Library Entities
         public DbSet<LibTag> LibTags { get; set; }
+        public DbSet<LibTagAlias> LibTagAliases { get; set; }
 
         public DbSet<LibTagGroup> LibTagGroups { get; set; }
         public DbSet<LibTagAssign> LibTagAssigns { get; set; }
@@ -212,6 +213,16 @@ namespace SpotifyBasicApi2025.Entities.Context
 
             modelBuilder.Entity<LibTag>()
                 .HasIndex(t => t.TagGroupId);
+
+            modelBuilder.Entity<LibTagAlias>()
+                .HasOne(alias => alias.Tag)
+                .WithMany(tag => tag.Aliases)
+                .HasForeignKey(alias => alias.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibTagAlias>()
+                .HasIndex(alias => new { alias.UserId, alias.NormalizedName })
+                .IsUnique();
 
             // Konfiguracja relacji LibTagAssign
             modelBuilder.Entity<LibTagAssign>()

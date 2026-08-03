@@ -589,7 +589,7 @@
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForTrack).OrderBy(t => t.Name).ToList();
-        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, TagGroupId = t.TagGroupId }).ToList();
+        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId }).ToList();
         await LoadTrackTagCounts();
     }
 
@@ -1228,10 +1228,15 @@
 
     private Task SaveTagVisibility() => Store.SetItemAsync(TagVisibilityStoreKey, showUnassignedTags);
 
-    private IEnumerable<TagDto> GetVisibleTags() => (showUnassignedTags
+    private IEnumerable<TagDto> GetVisibleTags() => ExpandTagVariants(showUnassignedTags
         ? availableTags
         : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id)))
         .Where(tag => string.IsNullOrWhiteSpace(tagSearch) || tag.Name.Contains(tagSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<TagDto> ExpandTagVariants(IEnumerable<TagDto> tags) => tags.SelectMany(tag => new[] { tag }.Concat(tag.Aliases
+        .Where(alias => !string.Equals(alias, tag.Name, StringComparison.OrdinalIgnoreCase))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Select(alias => new TagDto { Id = tag.Id, Name = alias, ForTrack = tag.ForTrack, TagGroupId = tag.TagGroupId })));
 
     private void ClearTagSearch() => tagSearch = null;
 
@@ -1304,7 +1309,7 @@
     private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
     private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
-    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForTrack { get; set; } public long TagGroupId { get; set; } }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForTrack { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
     private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public List<TagDto> Tags { get; set; } = new(); }
     private List<TagItem> trackTagItems = new();

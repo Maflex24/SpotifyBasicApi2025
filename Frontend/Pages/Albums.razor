@@ -634,7 +634,7 @@
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForAlbum).OrderBy(t => t.Name).ToList();
-        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, TagGroupId = t.TagGroupId }).ToList();
+        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId }).ToList();
         if (appliedFilters is not null)
             await LoadAlbumTagCounts(appliedFilters);
     }
@@ -1095,7 +1095,7 @@
         public float Strength { get; set; }
     }
 
-    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } public long TagGroupId { get; set; } }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForAlbum { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
     private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public List<TagDto> Tags { get; set; } = new(); }
     private List<TagItem> albumTagItems = new();
@@ -1293,10 +1293,15 @@
 
     private Task SaveTagVisibility() => Store.SetItemAsync(TagVisibilityStoreKey, showUnassignedTags);
 
-    private IEnumerable<TagDto> GetVisibleTags() => (showUnassignedTags
+    private IEnumerable<TagDto> GetVisibleTags() => ExpandTagVariants(showUnassignedTags
         ? availableTags
         : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id)))
         .Where(tag => string.IsNullOrWhiteSpace(tagSearch) || tag.Name.Contains(tagSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<TagDto> ExpandTagVariants(IEnumerable<TagDto> tags) => tags.SelectMany(tag => new[] { tag }.Concat(tag.Aliases
+        .Where(alias => !string.Equals(alias, tag.Name, StringComparison.OrdinalIgnoreCase))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Select(alias => new TagDto { Id = tag.Id, Name = alias, ForAlbum = tag.ForAlbum, TagGroupId = tag.TagGroupId })));
 
     private void ClearTagSearch() => tagSearch = null;
 

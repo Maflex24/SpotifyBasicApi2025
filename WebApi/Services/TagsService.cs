@@ -3,12 +3,17 @@ using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
-using System;
+using System.Text.RegularExpressions;
 
 namespace SpotifyBasicApi2025.Services
 {
     public class TagsService
     {
+        public sealed class TagNameValidationException : Exception
+        {
+            public TagNameValidationException(string message) : base(message) { }
+        }
+
         private readonly DatabaseContext context;
         private readonly UserService userService;
 
@@ -83,9 +88,19 @@ namespace SpotifyBasicApi2025.Services
 
         #region Tags
 
-        public async Task<TagModel> CreateTagAsync(TagModel model)
+        public async Task<TagModel> CreateTagAsync(TagModel model, string userId)
         {
+            var names = await ValidateTagNamesAsync(model, userId);
             var entity = model.MapToEntity();
+            entity.Name = names.MainName;
+            entity.Aliases = names.Aliases
+                .Select(alias => new LibTagAlias
+                {
+                    UserId = userId,
+                    Name = alias.Name,
+                    NormalizedName = alias.NormalizedName
+                })
+                .ToList();
 
             context.LibTags.Add(entity);
             await context.SaveChangesAsync();
@@ -96,6 +111,8 @@ namespace SpotifyBasicApi2025.Services
         public async Task<List<TagModel>> GetAllTagsAsync(string userId)
         {
             var entities = await context.LibTags
+                .AsNoTracking()
+                .Include(t => t.Aliases)
                 .Where(t => t.TagGroup.UserId == userId)
                 .OrderBy(t => t.Name)
                 .ToListAsync();
@@ -115,27 +132,33 @@ namespace SpotifyBasicApi2025.Services
             if (categoriesIds.Any())
                 query = query.Where(t => categoriesIds.Contains(t.TagGroupId));
 
-            return await query
+            var entities = await query
                 .AsNoTracking()
+                .Include(t => t.Aliases)
                 .Where(t => t.TagGroup.UserId == userId)
                 .OrderBy(t => t.Name)
-                .Select(t => new TagModel
-                {
-                    Id = t.Id,
-                    Name = t.Name,
-                    ForAlbum = t.ForAlbum,
-                    ForArtist = t.ForArtist,
-                    ForTrack = t.ForTrack,
-                    ForPlaylist = t.ForPlaylist,
-                    TagGroupId = t.TagGroupId,
-                    AssignmentCount = context.LibTagAssigns.Count(assign => assign.UserId == userId && assign.TagId == t.Id)
-                })
                 .ToListAsync();
+
+            var tagIds = entities.Select(tag => tag.Id).ToList();
+            var assignmentCounts = await context.LibTagAssigns
+                .AsNoTracking()
+                .Where(assign => assign.UserId == userId && tagIds.Contains(assign.TagId))
+                .GroupBy(assign => assign.TagId)
+                .Select(group => new { TagId = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(item => item.TagId, item => item.Count);
+
+            return entities.Select(entity =>
+            {
+                var model = entity.MapToTagModel();
+                model.AssignmentCount = assignmentCounts.GetValueOrDefault(entity.Id);
+                return model;
+            }).ToList();
         }
 
         public async Task<TagModel?> GetTagByIdAsync(int id)
         {
             var entity = await context.LibTags
+                .Include(t => t.Aliases)
                 .FirstOrDefaultAsync(t => t.Id == id);
 
             return entity?.MapToTagModel();
@@ -151,17 +174,47 @@ namespace SpotifyBasicApi2025.Services
         {
             var entity = await context.LibTags
                 .Include(t => t.TagGroup)
+                .Include(t => t.Aliases)
                 .FirstOrDefaultAsync(t => t.Id == id && t.TagGroup.UserId == userId);
 
             if (entity == null)
                 return null;
 
-            entity.Name = model.Name;
+            var names = await ValidateTagNamesAsync(model, userId, entity.Id);
+
+            entity.Name = names.MainName;
             entity.TagGroupId = model.TagGroupId;
             entity.ForAlbum = model.ForAlbum;
             entity.ForArtist = model.ForArtist;
             entity.ForTrack = model.ForTrack;
             entity.ForPlaylist = model.ForPlaylist;
+
+            var aliasesByNormalizedName = entity.Aliases
+                .ToDictionary(alias => alias.NormalizedName, StringComparer.Ordinal);
+            var requestedAliases = names.Aliases
+                .ToDictionary(alias => alias.NormalizedName, StringComparer.Ordinal);
+
+            foreach (var alias in entity.Aliases.Where(alias => !requestedAliases.ContainsKey(alias.NormalizedName)).ToList())
+            {
+                context.LibTagAliases.Remove(alias);
+                entity.Aliases.Remove(alias);
+            }
+
+            foreach (var requestedAlias in names.Aliases)
+            {
+                if (aliasesByNormalizedName.TryGetValue(requestedAlias.NormalizedName, out var existingAlias))
+                {
+                    existingAlias.Name = requestedAlias.Name;
+                    continue;
+                }
+
+                entity.Aliases.Add(new LibTagAlias
+                {
+                    UserId = userId,
+                    Name = requestedAlias.Name,
+                    NormalizedName = requestedAlias.NormalizedName
+                });
+            }
 
             await context.SaveChangesAsync();
 
@@ -181,6 +234,60 @@ namespace SpotifyBasicApi2025.Services
 
             return true;
         }
+
+        private async Task<TagNameSet> ValidateTagNamesAsync(TagModel model, string userId, long? editedTagId = null)
+        {
+            var mainName = CanonicalizeName(model.Name);
+            if (mainName is null)
+                throw new TagNameValidationException("Nazwa tagu jest wymagana i może mieć maksymalnie 255 znaków.");
+
+            var aliases = (model.Aliases ?? new List<string>())
+                .Select(CanonicalizeName)
+                .ToList();
+
+            if (aliases.Any(alias => alias is null))
+                throw new TagNameValidationException("Każda nazwa alternatywna jest wymagana i może mieć maksymalnie 255 znaków.");
+
+            var requestedNames = new[] { new TagName(mainName, NormalizeName(mainName)) }
+                .Concat(aliases.Select(alias => new TagName(alias!, NormalizeName(alias!))))
+                .ToList();
+
+            if (requestedNames.Select(name => name.NormalizedName).Distinct(StringComparer.Ordinal).Count() != requestedNames.Count)
+                throw new TagNameValidationException("Nazwa główna i nazwy alternatywne muszą być różne.");
+
+            var otherTagNames = await context.LibTags
+                .AsNoTracking()
+                .Where(tag => tag.TagGroup.UserId == userId && (!editedTagId.HasValue || tag.Id != editedTagId.Value))
+                .Select(tag => tag.Name)
+                .ToListAsync();
+
+            var otherAliasNames = await context.LibTagAliases
+                .AsNoTracking()
+                .Where(alias => alias.UserId == userId && (!editedTagId.HasValue || alias.TagId != editedTagId.Value))
+                .Select(alias => alias.NormalizedName)
+                .ToListAsync();
+
+            var occupiedNames = otherTagNames
+                .Select(NormalizeName)
+                .Concat(otherAliasNames)
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (requestedNames.Any(name => occupiedNames.Contains(name.NormalizedName)))
+                throw new TagNameValidationException("Ta nazwa jest już używana przez inny tag lub jego nazwę alternatywną.");
+
+            return new TagNameSet(mainName, requestedNames.Skip(1).ToList());
+        }
+
+        private static string? CanonicalizeName(string? name)
+        {
+            var canonical = Regex.Replace(name?.Trim() ?? string.Empty, @"\s+", " ");
+            return canonical.Length is > 0 and <= 255 ? canonical : null;
+        }
+
+        private static string NormalizeName(string name) => CanonicalizeName(name)!.ToUpperInvariant();
+
+        private sealed record TagName(string Name, string NormalizedName);
+        private sealed record TagNameSet(string MainName, List<TagName> Aliases);
 
         #endregion Tags
     }

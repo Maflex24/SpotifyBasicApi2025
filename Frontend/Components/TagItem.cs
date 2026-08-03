@@ -6,6 +6,8 @@ namespace Frontend.Components
 
 		public string Name { get; set; } = string.Empty;
 
+		public List<string> Aliases { get; set; } = new();
+
 		public long TagGroupId { get; set; }
 
 		// Uzupełniane przez panel tagowania po pobraniu nazw grup.

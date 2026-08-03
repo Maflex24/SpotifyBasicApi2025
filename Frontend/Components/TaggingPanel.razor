@@ -93,12 +93,32 @@
     private void BuildDisplayItems()
     {
         var groupNames = tagGroups.ToDictionary(group => group.Id, group => group.Name);
-        displayItems = Items.Select(item => new TagItem
+        displayItems = Items.SelectMany(item =>
         {
-            Id = item.Id,
-            Name = item.Name,
-            TagGroupId = item.TagGroupId,
-            TagGroupName = groupNames.TryGetValue(item.TagGroupId, out var name) ? name : null
+            var groupName = groupNames.TryGetValue(item.TagGroupId, out var name) ? name : null;
+            var variants = new List<TagItem>
+            {
+                new()
+                {
+                    Id = item.Id,
+                    Name = item.Name,
+                    TagGroupId = item.TagGroupId,
+                    TagGroupName = groupName
+                }
+            };
+
+            variants.AddRange(item.Aliases
+                .Where(alias => !string.Equals(alias, item.Name, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(alias => new TagItem
+                {
+                    Id = item.Id,
+                    Name = alias,
+                    TagGroupId = item.TagGroupId,
+                    TagGroupName = groupName
+                }));
+
+            return variants;
         }).ToList();
     }
 
@@ -107,7 +127,9 @@
         if (!showTagsGrouped)
             return new[] { new TagGroupView(string.Empty, localTags) };
 
-        var itemNames = displayItems.ToDictionary(item => item.Id, item => item.TagGroupName);
+        var itemNames = displayItems
+            .GroupBy(item => item.Id)
+            .ToDictionary(group => group.Key, group => group.First().TagGroupName);
         return localTags
             .GroupBy(tag => itemNames.TryGetValue(tag.TagId, out var groupName) && !string.IsNullOrWhiteSpace(groupName) ? groupName! : "Pozostałe tagi")
             .OrderBy(group => group.Key == "Pozostałe tagi" ? 1 : 0)

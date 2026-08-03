@@ -91,9 +91,20 @@ namespace SpotifyBasicApi2025.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var createdTag = await tagsService.CreateTagAsync(tagModel);
+                var userId = await userService.GetCurrentUserIdAsync();
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Użytkownik nie jest zalogowany");
+
+                if (!await tagsService.UserOwnsTagGroupAsync(tagModel.TagGroupId, userId))
+                    return BadRequest("Wybrana grupa tagów nie istnieje lub nie należy do użytkownika");
+
+                var createdTag = await tagsService.CreateTagAsync(tagModel, userId);
 
                 return CreatedAtAction(nameof(GetTagById), new { id = createdTag.Id }, createdTag);
+            }
+            catch (TagsService.TagNameValidationException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
@@ -252,6 +263,10 @@ namespace SpotifyBasicApi2025.Controllers
                     return NotFound($"Tag o ID {id} nie został znaleziony");
 
                 return Ok(updatedTag);
+            }
+            catch (TagsService.TagNameValidationException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {

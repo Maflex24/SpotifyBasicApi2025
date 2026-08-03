@@ -10,6 +10,7 @@
         public bool ForPlaylist { get; set; }
         public long TagGroupId { get; set; }
 
-        public virtual LibTagGroup TagGroup { get; set; }
+        public virtual LibTagGroup TagGroup { get; set; } = null!;
+        public virtual ICollection<LibTagAlias> Aliases { get; set; } = new List<LibTagAlias>();
     }
 }

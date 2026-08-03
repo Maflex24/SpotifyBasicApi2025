@@ -62,7 +62,11 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 ForArtist = entity.ForArtist,
                 ForPlaylist = entity.ForPlaylist,
                 ForTrack = entity.ForTrack,
-                TagGroupId = entity.TagGroupId
+                TagGroupId = entity.TagGroupId,
+                Aliases = entity.Aliases
+                    .OrderBy(alias => alias.Name)
+                    .Select(alias => alias.Name)
+                    .ToList()
             };
         }
 

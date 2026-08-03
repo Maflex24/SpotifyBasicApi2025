@@ -10,5 +10,6 @@
         public bool ForPlaylist { get; set; }
         public long TagGroupId { get; set; }
         public int AssignmentCount { get; set; }
+        public List<string> Aliases { get; set; } = new();
     }
 }

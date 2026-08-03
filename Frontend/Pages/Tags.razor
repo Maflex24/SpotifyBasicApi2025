@@ -101,6 +101,18 @@
                             <input class="form-control" @bind="editingTag.Name" />
                         </div>
                         <div class="mb-2">
+                            <label class="form-label">Nazwy alternatywne</label>
+                            @for (var i = 0; i < editingTag.Aliases.Count; i++)
+                            {
+                                var aliasIndex = i;
+                                <div class="input-group mb-2">
+                                    <input class="form-control" aria-label="Nazwa alternatywna" @bind="editingTag.Aliases[aliasIndex]" />
+                                    <button type="button" class="btn btn-outline-danger" title="Usuń nazwę alternatywną" aria-label="Usuń nazwę alternatywną" @onclick="() => RemoveAlias(aliasIndex)">×</button>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-light" @onclick="AddAlias">Dodaj nazwę alternatywną</button>
+                        </div>
+                        <div class="mb-2">
                             <label class="form-label">Grupa</label>
                             <select class="form-select" @bind="editingTag.TagGroupId">
                                 @foreach (var group in groups)
@@ -119,19 +131,24 @@
                             <button class="btn btn-success btn-sm" @onclick="SaveTag">Zapisz</button>
                             <button class="btn btn-secondary btn-sm" @onclick="CancelTag">Anuluj</button>
                         </div>
+                        @if (!string.IsNullOrWhiteSpace(tagEditorError))
+                        {
+                            <div class="text-danger small mt-2" role="alert">@tagEditorError</div>
+                        }
                     </div>
                 }
 
                 @{
-                    var tagsOfGroup = GetVisibleTags(g).ToList();
+                    var tagsOfGroup = GetVisibleTagEntries(g).ToList();
                 }
                 <ul class="list-group">
                     @if (tagsOfGroup.Count > 0)
                     {
-                        @foreach (var t in tagsOfGroup)
+                        @foreach (var entry in tagsOfGroup)
                         {
+                            var t = entry.Tag;
                             <li class="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center">
-                                <span class="d-inline-flex align-items-center gap-2"><span class="tag-management-tag-name">@t.Name</span>@if (t.AssignmentCount > 0) { <span class="tag-count-info" title="Łączna liczba przypisań">@t.AssignmentCount</span> }</span>
+                                <span class="d-inline-flex align-items-center gap-2"><span class="tag-management-tag-name">@entry.DisplayName</span>@if (t.AssignmentCount > 0) { <span class="tag-count-info" title="Łączna liczba przypisań">@t.AssignmentCount</span> }</span>
                                 <span class="d-flex gap-2">
                                     <button class="btn btn-outline-light btn-sm" title="Edytuj tag" @onclick="() => EditTag(t)">Edytuj</button>
                                     <button class="btn btn-outline-danger btn-sm" title="Usuń tag" @onclick="() => DeleteTag(t)">Usuń</button>
@@ -159,13 +176,22 @@
     private TagGroup? editingGroup;
     private Tag? editingTag;
     private long? editingTagHostGroupId;
+    private string? tagEditorError;
 
     private IEnumerable<TagGroup> GetVisibleGroups() => groups.Where(group =>
-        GroupMatchesSearch(group) || GetTagsForGroup(group.Id).Any(TagMatchesSearch));
+        GroupMatchesSearch(group) || GetVisibleTagEntries(group).Any());
 
-    private IEnumerable<Tag> GetVisibleTags(TagGroup group) => GroupMatchesSearch(group)
-        ? GetTagsForGroup(group.Id)
-        : GetTagsForGroup(group.Id).Where(TagMatchesSearch);
+    private IEnumerable<TagListItem> GetVisibleTagEntries(TagGroup group)
+    {
+        var entries = GetTagsForGroup(group.Id).SelectMany(CreateTagListItems);
+        if (!GroupMatchesSearch(group) && !string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.Trim();
+            entries = entries.Where(entry => entry.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return entries.OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase);
+    }
 
     private IEnumerable<Tag> GetTagsForGroup(long groupId) => groupIdToTags.TryGetValue(groupId, out var tags)
         ? tags
@@ -174,8 +200,17 @@
     private bool GroupMatchesSearch(TagGroup group) => string.IsNullOrWhiteSpace(searchText)
         || group.Name.Contains(searchText.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    private bool TagMatchesSearch(Tag tag) => string.IsNullOrWhiteSpace(searchText)
-        || tag.Name.Contains(searchText.Trim(), StringComparison.OrdinalIgnoreCase);
+    private static IEnumerable<TagListItem> CreateTagListItems(Tag tag)
+    {
+        yield return new TagListItem(tag, tag.Name);
+
+        foreach (var alias in tag.Aliases
+            .Where(alias => !string.Equals(alias, tag.Name, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            yield return new TagListItem(tag, $"{alias} ({tag.Name})");
+        }
+    }
 
     private void ClearSearch() => searchText = null;
 
@@ -293,6 +328,7 @@
     private void ShowCreateTag(TagGroup group)
     {
         editingTagHostGroupId = group.Id;
+        tagEditorError = null;
         editingTag = new Tag
         {
             TagGroupId = group.Id,
@@ -306,10 +342,12 @@
     private void EditTag(Tag tag)
     {
         editingTagHostGroupId = tag.TagGroupId;
+        tagEditorError = null;
         editingTag = new Tag
         {
             Id = tag.Id,
             Name = tag.Name,
+            Aliases = tag.Aliases.ToList(),
             TagGroupId = tag.TagGroupId,
             ForAlbum = tag.ForAlbum,
             ForArtist = tag.ForArtist,
@@ -322,6 +360,18 @@
     {
         editingTag = null;
         editingTagHostGroupId = null;
+        tagEditorError = null;
+    }
+
+    private void AddAlias()
+    {
+        editingTag?.Aliases.Add(string.Empty);
+    }
+
+    private void RemoveAlias(int index)
+    {
+        if (editingTag is not null && index >= 0 && index < editingTag.Aliases.Count)
+            editingTag.Aliases.RemoveAt(index);
     }
 
     private async Task SaveTag()
@@ -337,7 +387,12 @@
             {
                 editingTag = null;
                 editingTagHostGroupId = null;
+                tagEditorError = null;
                 await LoadAllTags();
+            }
+            else
+            {
+                tagEditorError = await resC.Content.ReadAsStringAsync();
             }
         }
         else
@@ -348,7 +403,12 @@
             {
                 editingTag = null;
                 editingTagHostGroupId = null;
+                tagEditorError = null;
                 await LoadAllTags();
+            }
+            else
+            {
+                tagEditorError = await resU.Content.ReadAsStringAsync();
             }
         }
     }
@@ -367,7 +427,8 @@
     
 
     private sealed class TagGroup { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
-    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } public int AssignmentCount { get; set; } }
+    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } public int AssignmentCount { get; set; } }
+    private sealed record TagListItem(Tag Tag, string DisplayName);
 }
 
 
