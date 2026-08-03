@@ -26,6 +26,34 @@ namespace SpotifyBasicApi2025.Services
                     .Select(match => match.Value.ToLowerInvariant())
                     .ToList();
 
+        private static int? GetReleaseYear(string? releaseDate)
+        {
+            if (string.IsNullOrWhiteSpace(releaseDate))
+                return null;
+
+            if (DateTime.TryParse(releaseDate, out var date))
+                return date.Year;
+
+            return releaseDate.Length >= 4 && int.TryParse(releaseDate[..4], out var year)
+                ? year
+                : null;
+        }
+
+        private sealed class AlbumReadRow
+        {
+            public string Id { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+            public string? Uri { get; init; }
+            public string AlbumType { get; init; } = string.Empty;
+            public int TotalTracks { get; init; }
+            public int Popularity { get; init; }
+            public string? ReleaseDate { get; init; }
+            public string? Images { get; init; }
+            public DateTime CreatedAt { get; init; }
+            public DateTime UpdatedAt { get; init; }
+            public List<SimpleArtist> Artists { get; init; } = new();
+        }
+
         // Saved filters API
         public async Task<List<object>> GetSavedFiltersAsync(string scope, string? contextId = null)
         {
@@ -955,8 +983,6 @@ namespace SpotifyBasicApi2025.Services
 
             var query = context.LibAlbumUserAssigns
                 .Where(a => a.UserId == userId)
-                .Include(a => a.Album)
-                    .ThenInclude(al => al.AlbumArtistAssigns)
                 .Select(a => a.Album)
                 .AsQueryable();
 
@@ -1083,11 +1109,33 @@ namespace SpotifyBasicApi2025.Services
             pageSize = Math.Min(pageSize, 100);
             var totalRows = await query.CountAsync();
 
-            var albums = new List<SpAlbum>();
+            var albums = new List<AlbumReadRow>();
 
             try
             {
-                albums = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+                albums = await query
+                    .AsNoTracking()
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(album => new AlbumReadRow
+                    {
+                        Id = album.Id,
+                        Name = album.Name,
+                        Uri = album.Uri,
+                        AlbumType = album.AlbumType,
+                        TotalTracks = album.TotalTracks,
+                        Popularity = album.Popularity,
+                        ReleaseDate = album.ReleaseDate,
+                        Images = album.Images,
+                        CreatedAt = album.CreatedAt,
+                        UpdatedAt = album.UpdatedAt,
+                        Artists = album.AlbumArtistAssigns.Select(assign => new SimpleArtist
+                        {
+                            Id = assign.ArtistId,
+                            Name = assign.ArtistName
+                        }).ToList()
+                    })
+                    .ToListAsync();
             }
             catch (Exception ex)
             {
@@ -1097,19 +1145,47 @@ namespace SpotifyBasicApi2025.Services
 
             var albumIds = albums.Select(a => a.Id).ToList();
             var albumTags = await context.LibTagAssigns
+                .AsNoTracking()
                 .Where(ass => ass.UserId == userId && ass.ItemType == "album" && albumIds.Contains(ass.SpotifyItemId))
-                .Include(ass => ass.Tag)
-                .ThenInclude(t => t.TagGroup)
+                .Select(ass => new
+                {
+                    ass.SpotifyItemId,
+                    ass.TagId,
+                    ass.Strength,
+                    TagName = ass.Tag.Name,
+                    TagGroupName = ass.Tag.TagGroup.Name
+                })
                 .ToListAsync();
 
             var tagsByAlbum = albumTags
                 .GroupBy(ass => ass.SpotifyItemId)
-                .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToAlbumTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
+                .ToDictionary(g => g.Key, g => g.Select(ass => new AlbumTagModel
+                {
+                    TagId = ass.TagId,
+                    TagName = ass.TagName,
+                    TagGroupName = ass.TagGroupName,
+                    Strength = ass.Strength
+                }).ToList());
 
             var albumModels = albums.Select(album =>
             {
                 var tagsList = tagsByAlbum.GetValueOrDefault(album.Id, new List<AlbumTagModel>());
-                return album.MapToAlbumModel(tagsList);
+                return new AlbumModel
+                {
+                    Id = album.Id,
+                    Name = album.Name,
+                    Uri = album.Uri,
+                    AlbumType = album.AlbumType,
+                    TotalTracks = album.TotalTracks,
+                    Popularity = album.Popularity,
+                    ReleaseDate = album.ReleaseDate,
+                    ReleaseYear = GetReleaseYear(album.ReleaseDate),
+                    Images = ImageMappingExtensions.ParseSpotifyImages(album.Images),
+                    CreatedAt = album.CreatedAt,
+                    UpdatedAt = album.UpdatedAt,
+                    Tags = tagsList,
+                    Artists = album.Artists
+                };
             }).ToList();
 
             if (sortTagId.HasValue)
