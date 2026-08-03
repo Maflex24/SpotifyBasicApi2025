@@ -973,6 +973,7 @@ namespace SpotifyBasicApi2025.Services
             string? excludeTags = null,
             string? excludeMode = null,
             string? search = null,
+            bool random = false,
             int page = 1,
             int pageSize = 100)
         {
@@ -1055,10 +1056,47 @@ namespace SpotifyBasicApi2025.Services
                 var termLocal = term;
                 query = query.Where(album =>
                     (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
+                    || EF.Functions.Like(album.Id.ToLower(), "%" + termLocal + "%")
                     || context.SpAlbumArtistAssigns.Any(assign =>
                         assign.AlbumId == album.Id
                         && assign.Artist.Name != null
                         && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
+            }
+
+            if (random)
+            {
+                var randomTotalRows = await query.CountAsync();
+                if (randomTotalRows == 0)
+                    return new { randomSearch = (string?)null };
+
+                var randomOffset = Random.Shared.Next(randomTotalRows);
+                var randomAlbum = await query
+                    .AsNoTracking()
+                    .OrderBy(album => album.Id)
+                    .Skip(randomOffset)
+                    .Select(album => new { album.Id, album.Name })
+                    .FirstOrDefaultAsync();
+
+                if (randomAlbum == null)
+                    return new { randomSearch = (string?)null };
+
+                var artistNames = await context.SpAlbumArtistAssigns
+                    .AsNoTracking()
+                    .Where(assign => assign.AlbumId == randomAlbum.Id)
+                    .OrderBy(assign => assign.ArtistName)
+                    .Select(assign => assign.ArtistName)
+                    .ToListAsync();
+
+                var randomSearch = string.Join(" ", new[]
+                    {
+                        search,
+                        string.Join(" ", artistNames),
+                        randomAlbum.Name,
+                        randomAlbum.Id
+                    }
+                    .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+                return new { randomSearch };
             }
 
             var sortKey = (sort ?? "name").ToLowerInvariant();
@@ -1334,6 +1372,7 @@ namespace SpotifyBasicApi2025.Services
                 var termLocal = term;
                 query = query.Where(album =>
                     (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
+                    || EF.Functions.Like(album.Id.ToLower(), "%" + termLocal + "%")
                     || context.SpAlbumArtistAssigns.Any(assign =>
                         assign.AlbumId == album.Id
                         && assign.Artist.Name != null

@@ -78,9 +78,15 @@
         </div>
 
         <div class="albums-playback-actions" aria-label="Szybkie akcje wyników">
-            <button class="btn btn-sm album-action-button album-action-random" title="Wylosuj album z bieżących wyników" aria-label="Wylosuj album z bieżących wyników" @onclick="PickRandomAlbum">
-                <AppIcon Name="shuffle" /><span class="album-action-label">Losuj</span>
+            <button class="btn btn-sm album-action-button album-action-random" title="Wylosuj album z zastosowanych wyników" aria-label="Wylosuj album z zastosowanych wyników" disabled="@isLoadingAlbums" @onclick="PickRandomAlbumAsync">
+                <AppIcon Name="shuffle" /><span class="album-action-label">@(isRandomSelection ? "Losuj ponownie" : "Losuj")</span>
             </button>
+            @if (isRandomSelection)
+            {
+                <button class="btn btn-sm album-action-button album-action-muted" title="Wróć do wyników przed losowaniem" aria-label="Wróć do wyników przed losowaniem" disabled="@isLoadingAlbums" @onclick="ReturnToRandomSourceAsync">
+                    <AppIcon Name="reset" /><span class="album-action-label">Wróć do wyników</span>
+                </button>
+            }
             <button class="btn btn-sm album-action-button album-action-play-all" title="Dodaj wszystkie wyświetlone albumy do kolejki" aria-label="Odtwórz wszystkie wyświetlone albumy" disabled="@(isQueueingAllAlbums || filteredAlbums.Count == 0)" @onclick="PlayAllAlbums">
                 <AppIcon Name="play" /><span class="album-action-label">Odtwórz wszystko</span>
             </button>
@@ -303,6 +309,8 @@
     private int currentPage;
     private int totalRows;
     private bool isLoadingAlbums;
+    private bool isRandomSelection;
+    private string? randomSourceSearch;
     private bool HasMoreAlbums => albums.Count < totalRows;
     private readonly HashSet<string> queuingAlbumIds = new();
     private bool isQueueingAllAlbums;
@@ -437,40 +445,7 @@
 
         try
         {
-        var query = new List<string>();
-
-        query.Add($"sort={filters.SortKey}");
-        query.Add($"order={filters.SortOrder}");
-
-        if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
-            query.Add($"tags={filters.SelectedTagFilter}");
-
-        if (!string.IsNullOrEmpty(filters.SelectedTagSort))
-            query.Add($"sortTagId={filters.SelectedTagSort}");
-
-        if (!string.IsNullOrEmpty(filters.SelectedArtistId))
-            query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
-
-        if (filters.FromYear.HasValue)
-            query.Add($"fromYear={filters.FromYear.Value}");
-
-        if (filters.ToYear.HasValue)
-            query.Add($"toYear={filters.ToYear.Value}");
-
-        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
-            query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
-
-        if (filters.IncludeTagIds.Length > 0)
-        {
-            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
-            query.Add($"includeMode={filters.IncludeMode}");
-        }
-
-        if (filters.ExcludeTagIds.Length > 0)
-        {
-            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
-            query.Add($"excludeMode={filters.ExcludeMode}");
-        }
+        var query = BuildAlbumQuery(filters);
 
         query.Add($"page={requestedPage}");
         query.Add($"pageSize={AlbumPageSize}");
@@ -525,6 +500,47 @@
             await LoadAlbumsAsync(appliedFilters ?? CaptureCurrentFilters(), reset: false);
     }
 
+    private static List<string> BuildAlbumQuery(AlbumFilterSnapshot filters)
+    {
+        var query = new List<string>
+        {
+            $"sort={filters.SortKey}",
+            $"order={filters.SortOrder}"
+        };
+
+        if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
+            query.Add($"tags={filters.SelectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(filters.SelectedTagSort))
+            query.Add($"sortTagId={filters.SelectedTagSort}");
+
+        if (!string.IsNullOrEmpty(filters.SelectedArtistId))
+            query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
+
+        if (filters.FromYear.HasValue)
+            query.Add($"fromYear={filters.FromYear.Value}");
+
+        if (filters.ToYear.HasValue)
+            query.Add($"toYear={filters.ToYear.Value}");
+
+        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
+            query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
+
+        if (filters.IncludeTagIds.Length > 0)
+        {
+            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
+            query.Add($"includeMode={filters.IncludeMode}");
+        }
+
+        if (filters.ExcludeTagIds.Length > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+            query.Add($"excludeMode={filters.ExcludeMode}");
+        }
+
+        return query;
+    }
+
     private AlbumsState BuildCurrentState() => new AlbumsState
     {
         sortKey = sortKey,
@@ -564,6 +580,7 @@
         var state = JsonSerializer.Deserialize<AlbumsState>(item.PayloadJson);
         if (state == null) return;
 
+        ClearRandomSelection();
         sortKey = state.sortKey ?? sortKey;
         sortOrder = state.sortOrder ?? sortOrder;
         selectedTagFilter = state.selectedTagFilter;
@@ -886,6 +903,7 @@
 
     private async Task ResetFilters()
     {
+        ClearRandomSelection();
         sortKey = "name";
         sortOrder = "asc";
         selectedTagFilter = null;
@@ -916,7 +934,11 @@
         return $"{count} {noun}";
     }
 
-    private Task MarkFiltersDirtyAsync() => SaveToStore();
+    private Task MarkFiltersDirtyAsync()
+    {
+        ClearRandomSelection();
+        return SaveToStore();
+    }
 
     private List<ActiveFilterChip> GetActiveFilterChips()
     {
@@ -1009,6 +1031,7 @@
 
     private async Task ApplyFilterByTag(long tagId)
     {
+        ClearRandomSelection();
         var tag = tagId.ToString();
 
         if (selectedTagFilter == tag)
@@ -1036,6 +1059,7 @@
         public int pageSize { get; set; }
         public List<Album> items { get; set; } = new();
     }
+    private sealed class RandomAlbumResponse { public string? randomSearch { get; set; } }
     private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
     private sealed record AlbumFilterSnapshot(
         string SortKey,
@@ -1129,7 +1153,9 @@
             excludeMode,
             showTagFilters,
             fromYear,
-            toYear
+            toYear,
+            isRandomSelection,
+            randomSourceSearch
         };
 
         await Store.SetItemAsync(StoreKey, state);
@@ -1156,6 +1182,8 @@
         fromYear = state.fromYear;
         toYear = state.toYear;
         showTagFilters = state.showTagFilters ?? showTagFilters;
+        isRandomSelection = state.isRandomSelection ?? false;
+        randomSourceSearch = state.randomSourceSearch;
 
     }
 
@@ -1174,6 +1202,8 @@
         public bool? showTagFilters { get; set; }
         public int? fromYear { get; set; }
         public int? toYear { get; set; }
+        public bool? isRandomSelection { get; set; }
+        public string? randomSourceSearch { get; set; }
     }
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
@@ -1338,19 +1368,86 @@
         }
     }
 
-    private void PickRandomAlbum()
+    private async Task PickRandomAlbumAsync()
     {
-        // Odtwórz pełną listę wyników przed losowaniem, aby kolejne kliknięcie
-        // nie losowało z wcześniej wyświetlonego pojedynczego albumu.
-        filteredAlbums = albums.ToList();
-
-        if (filteredAlbums.Count == 0)
+        if (isLoadingAlbums)
             return;
 
-        filteredAlbums = new List<Album>
+        var sourceFilters = GetRandomSourceFilters();
+        var query = BuildAlbumQuery(sourceFilters);
+        query.Add("random=true");
+
+        isLoadingAlbums = true;
+        await InvokeAsync(StateHasChanged);
+
+        string? randomSearch;
+        try
         {
-            filteredAlbums[Random.Shared.Next(filteredAlbums.Count)]
-        };
+            var response = await Http.GetAsync($"api/library/albums?{string.Join('&', query)}");
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            randomSearch = (await response.Content.ReadFromJsonAsync<RandomAlbumResponse>())?.randomSearch;
+        }
+        finally
+        {
+            isLoadingAlbums = false;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        if (string.IsNullOrWhiteSpace(randomSearch))
+            return;
+
+        var previousSearch = localSearch;
+        var previousRandomSelection = isRandomSelection;
+        var previousRandomSourceSearch = randomSourceSearch;
+        randomSourceSearch = sourceFilters.LocalSearch;
+        isRandomSelection = true;
+        localSearch = randomSearch;
+
+        var randomFilters = sourceFilters with { LocalSearch = randomSearch };
+        if (await LoadAlbumsAsync(randomFilters))
+            appliedFilters = randomFilters;
+        else
+        {
+            localSearch = previousSearch;
+            isRandomSelection = previousRandomSelection;
+            randomSourceSearch = previousRandomSourceSearch;
+            await SaveToStore();
+        }
+    }
+
+    private async Task ReturnToRandomSourceAsync()
+    {
+        if (!isRandomSelection || isLoadingAlbums)
+            return;
+
+        var sourceFilters = GetRandomSourceFilters();
+        var previousSearch = localSearch;
+        ClearRandomSelection();
+        localSearch = sourceFilters.LocalSearch;
+
+        if (await LoadAlbumsAsync(sourceFilters))
+            appliedFilters = sourceFilters;
+        else
+        {
+            localSearch = previousSearch;
+            isRandomSelection = true;
+            randomSourceSearch = sourceFilters.LocalSearch;
+            await SaveToStore();
+        }
+    }
+
+    private AlbumFilterSnapshot GetRandomSourceFilters()
+    {
+        var filters = appliedFilters ?? CaptureCurrentFilters();
+        return isRandomSelection ? filters with { LocalSearch = randomSourceSearch } : filters;
+    }
+
+    private void ClearRandomSelection()
+    {
+        isRandomSelection = false;
+        randomSourceSearch = null;
     }
 
     private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
