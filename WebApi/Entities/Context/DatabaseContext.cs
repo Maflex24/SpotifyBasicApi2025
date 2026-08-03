@@ -296,6 +296,10 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .HasIndex(aua => new { aua.UserId, aua.AlbumId })
                 .IsUnique();
 
+            // Stronicowanie biblioteki sortowanej po nazwie albumu.
+            modelBuilder.Entity<LibAlbumUserAssign>()
+                .HasIndex(aua => new { aua.UserId, aua.AlbumName, aua.AlbumId });
+
             // Konfiguracja relacji many-to-many Track-User
             modelBuilder.Entity<LibTrackUserAssign>()
                 .HasOne(tua => tua.User)

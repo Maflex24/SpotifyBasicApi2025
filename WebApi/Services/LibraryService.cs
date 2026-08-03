@@ -1107,12 +1107,58 @@ namespace SpotifyBasicApi2025.Services
                 pageSize = 100;
 
             pageSize = Math.Min(pageSize, 100);
-            var totalRows = await query.CountAsync();
+            var usesAlbumNamePagingIndex = sortKey == "name"
+                && !sortTagId.HasValue
+                && string.IsNullOrWhiteSpace(tags)
+                && string.IsNullOrWhiteSpace(artistId)
+                && !fromYear.HasValue
+                && !toYear.HasValue
+                && string.IsNullOrWhiteSpace(includeTags)
+                && string.IsNullOrWhiteSpace(excludeTags)
+                && string.IsNullOrWhiteSpace(search);
 
-            var albums = new List<AlbumReadRow>();
+            int totalRows;
+            List<AlbumReadRow> albums;
 
-            try
+            if (usesAlbumNamePagingIndex)
             {
+                // AlbumName jest kopią nazwy zapisaną przy przypisaniu albumu do biblioteki.
+                // Indeks pozwala wybrać 100 ID przed dołączeniem pełnych rekordów SpAlbums.
+                var assignments = context.LibAlbumUserAssigns
+                    .AsNoTracking()
+                    .Where(assign => assign.UserId == userId);
+
+                totalRows = await assignments.CountAsync();
+                assignments = sortOrderDesc
+                    ? assignments.OrderByDescending(assign => assign.AlbumName).ThenBy(assign => assign.AlbumId)
+                    : assignments.OrderBy(assign => assign.AlbumName).ThenBy(assign => assign.AlbumId);
+
+                albums = await assignments
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(assign => new AlbumReadRow
+                    {
+                        Id = assign.AlbumId,
+                        Name = assign.Album.Name,
+                        Uri = assign.Album.Uri,
+                        AlbumType = assign.Album.AlbumType,
+                        TotalTracks = assign.Album.TotalTracks,
+                        Popularity = assign.Album.Popularity,
+                        ReleaseDate = assign.Album.ReleaseDate,
+                        Images = assign.Album.Images,
+                        CreatedAt = assign.Album.CreatedAt,
+                        UpdatedAt = assign.Album.UpdatedAt,
+                        Artists = assign.Album.AlbumArtistAssigns.Select(artistAssign => new SimpleArtist
+                        {
+                            Id = artistAssign.ArtistId,
+                            Name = artistAssign.ArtistName
+                        }).ToList()
+                    })
+                    .ToListAsync();
+            }
+            else
+            {
+                totalRows = await query.CountAsync();
                 albums = await query
                     .AsNoTracking()
                     .Skip((page - 1) * pageSize)
@@ -1136,11 +1182,6 @@ namespace SpotifyBasicApi2025.Services
                         }).ToList()
                     })
                     .ToListAsync();
-            }
-            catch (Exception ex)
-            {
-                var message = ex.Message;
-                throw ex;
             }
 
             var albumIds = albums.Select(a => a.Id).ToList();

@@ -36,7 +36,8 @@ namespace SpotifyBasicApi2025.Migrations
 
                     b.Property<string>("AlbumName")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
 
                     b.Property<DateTime>("DateCreatedUtc")
                         .HasColumnType("datetime(6)");
@@ -53,6 +54,8 @@ namespace SpotifyBasicApi2025.Migrations
 
                     b.HasIndex("UserId", "AlbumId")
                         .IsUnique();
+
+                    b.HasIndex("UserId", "AlbumName", "AlbumId");
 
                     b.ToTable("LibAlbumUserAssigns");
                 });

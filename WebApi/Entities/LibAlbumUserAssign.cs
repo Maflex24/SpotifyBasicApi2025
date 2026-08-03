@@ -12,6 +12,7 @@ namespace SpotifyBasicApi2025.Entities
 
         public string AlbumId { get; set; } = string.Empty;
 
+        [MaxLength(255)]
         public string AlbumName { get; set; } = string.Empty;
 
         public DateTime DateCreatedUtc { get; set; } = DateTime.UtcNow;
