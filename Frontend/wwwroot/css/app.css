@@ -607,6 +607,10 @@ code {
     width: 100%;
 }
 
+.albums-search-group.input-group .form-control {
+    width: 1%;
+}
+
 .albums-filter-fields,
 .albums-toolbar-actions,
 .albums-playback-actions,

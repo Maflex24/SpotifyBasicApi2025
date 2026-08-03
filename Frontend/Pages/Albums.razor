@@ -33,8 +33,12 @@
             <h4 class="mb-0 albums-results-heading"><span>Albumy</span><span class="library-results-count">@($"{filteredAlbums.Count}/{totalRows} albumów")</span></h4>
         </div>
 
-        <div class="albums-search-group">
+        <div class="albums-search-group input-group input-group-sm">
             <label class="visually-hidden" for="albums-search">Szukaj albumu lub wykonawcy</label>
+            @if (!string.IsNullOrWhiteSpace(LocalSearch))
+            {
+                <button type="button" class="btn btn-outline-light albums-search-clear" title="Wyczyść wyszukiwanie albumów" aria-label="Wyczyść wyszukiwanie albumów" @onclick="ClearSearchFilterAsync">×</button>
+            }
             <input id="albums-search" class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
         </div>
 
