@@ -209,8 +209,26 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.RemoveArtistFromLibraryAsync(id);
+                var result = await libraryService.RemoveArtistSynchronouslyAsync(id);
                 return Ok(new { removed = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPost("artists/{id}")]
+        public async Task<IActionResult> AddArtist(string id)
+        {
+            try
+            {
+                var result = await libraryService.AddArtistToLibraryAsync(id);
+                return Ok(new { added = result });
             }
             catch (InvalidOperationException ex)
             {
@@ -227,7 +245,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.RemoveAlbumFromLibraryAsync(id);
+                var result = await libraryService.RemoveAlbumSynchronouslyAsync(id);
                 return Ok(new { removed = result });
             }
             catch (InvalidOperationException ex)
@@ -245,7 +263,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.AddAlbumToLibraryAsync(id);
+                var result = await libraryService.AddAlbumSynchronouslyAsync(id);
                 return Ok(new { added = result });
             }
             catch (InvalidOperationException ex)
@@ -256,6 +274,54 @@ namespace SpotifyBasicApi2025.Controllers
             {
                 return StatusCode(500, ex.Message);
             }
+        }
+
+        public sealed class ItemStatusesRequest
+        {
+            public string ItemType { get; set; } = string.Empty;
+            public List<string> SpotifyItemIds { get; set; } = new();
+        }
+
+        [HttpPost("items/status")]
+        public async Task<IActionResult> GetItemStatuses([FromBody] ItemStatusesRequest request)
+        {
+            try
+            {
+                var result = await libraryService.GetLibraryItemStatusesAsync(request.ItemType, request.SpotifyItemIds);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        public sealed class BulkAlbumRequest
+        {
+            public List<string> AlbumIds { get; set; } = new();
+        }
+
+        [HttpPost("albums/bulk")]
+        public async Task<IActionResult> AddAlbumsBulk([FromBody] BulkAlbumRequest request)
+        {
+            var result = new List<object>();
+            foreach (var albumId in request.AlbumIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
+            {
+                try
+                {
+                    var added = await libraryService.AddAlbumSynchronouslyAsync(albumId);
+                    result.Add(new { albumId, added, success = added });
+                }
+                catch (Exception ex)
+                {
+                    result.Add(new { albumId, added = false, success = false, error = ex.Message });
+                }
+            }
+            return Ok(result);
         }
 
         [HttpDelete("tracks/{id}")]

@@ -1,79 +1,114 @@
 @page "/artist/{Id}"
+@using System.Net.Http.Json
+@using Frontend.Components
 @inject HttpClient Http
-@inject IJSRuntime JS
-@using System.Text.Json
+@inject LocalStorageService Store
 
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 artist-detail-page">
     @if (artist == null)
     {
         <div>Wczytywanie…</div>
     }
     else
     {
-        <div class="d-flex align-items-start gap-3 mb-3">
-            <img src="@GetBestImageUrl(artist.images)" alt="okładka" style="width:160px;height:160px;object-fit:cover;border-radius:8px;" />
+        <section class="artist-detail-header mb-4">
+            <img src="@GetBestImageUrl(artist.images)" alt="Zdjęcie artysty @artist.name" class="artist-detail-image" />
             <div class="flex-fill">
-                <h3 class="mb-1">@artist.name</h3>
-                <button class="btn btn-sm btn-outline-light ms-2" @onclick="AddAllAlbumsClicked">Dodaj wszystkie albumy</button>
-                @if (artist.genres != null && artist.genres.Length > 0)
-                {
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                        @foreach (var g in artist.genres)
+                <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
+                    <div>
+                        <h3 class="mb-1">@artist.name</h3>
+                        @if (artist.genres.Length > 0)
                         {
-                            <span class="badge bg-outline-light text-light" style="font-size:0.75rem;">@g</span>
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                @foreach (var genre in artist.genres)
+                                {
+                                    <span class="badge bg-outline-light text-light">@genre</span>
+                                }
+                            </div>
+                        }
+                        @if (artistTags.Count > 0)
+                        {
+                            <div class="d-flex flex-wrap gap-1 mt-2" aria-label="Tagi artysty">
+                                @foreach (var tag in artistTags)
+                                {
+                                    <span class="badge badge-tag">@tag.TagName (@tag.Strength.ToString("0.0"))</span>
+                                }
+                            </div>
                         }
                     </div>
-                }
+                    <button type="button" class="btn btn-sm album-action-button @(artistInLibrary ? "album-action-muted" : "album-action-apply")"
+                            disabled="@isChangingArtist" @onclick="ToggleArtistLibraryAsync">
+                        <AppIcon Name="@(artistInLibrary ? "delete" : "save")" />
+                        <span>@(artistInLibrary ? "Usuń artystę z biblioteki" : "Dodaj artystę do biblioteki")</span>
+                    </button>
+                </div>
             </div>
-        </div>
+        </section>
 
         <h5>Najpopularniejsze utwory</h5>
         <div class="table-responsive mb-4" style="max-height: 50vh; overflow-y: auto;">
             <table class="table table-dark table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th style="width:56px;"></th>
-                        <th>Nazwa</th>
-                        <th>Album</th>
-                        <th style="width:80px;">Rok</th>
-                    </tr>
-                </thead>
+                <thead><tr><th style="width:56px;"></th><th>Nazwa</th><th>Album</th><th style="width:80px;">Rok</th></tr></thead>
                 <tbody>
-                    @foreach (var t in topTracks)
+                    @foreach (var track in topTracks)
                     {
                         <tr>
-                            <td>
-                                <div class="cover-container">
-                                    <img class="cover-img-56" src="@GetBestImageUrl(t.album?.images)" alt="okładka" />
-                                    <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.uri)">▶</button>
-                                </div>
-                            </td>
-                            <td>@t.name</td>
-                            <td>@t.album?.name</td>
-                            <td>@(t.album?.release_date?.Length >=4 ? t.album.release_date.Substring(0,4) : "—")</td>
+                            <td><div class="cover-container"><img class="cover-img-56" src="@GetBestImageUrl(track.album?.images)" alt="Okładka" /><button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(track.uri)">▶</button></div></td>
+                            <td>@track.name</td><td>@track.album?.name</td><td>@(track.album?.release_date?.Length >= 4 ? track.album.release_date[..4] : "—")</td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
 
-        <h5>Albumy</h5>
-        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3">
-            @foreach (var a in albums)
+        <section class="albums-toolbar artist-releases-toolbar mb-3" aria-label="Filtry wydawnictw artysty">
+            <div class="albums-toolbar-heading"><h4 class="mb-0 albums-results-heading"><span>Wydawnictwa</span><span class="library-results-count">@albums.Count</span></h4></div>
+            <div class="artist-release-type-filters">
+                <label class="tag-visibility-toggle"><input type="checkbox" @bind="showAlbums" @bind:after="ReleaseTypesChangedAsync" /> <span>Albumy</span></label>
+                <label class="tag-visibility-toggle"><input type="checkbox" @bind="showSingles" @bind:after="ReleaseTypesChangedAsync" /> <span>Single</span></label>
+                <label class="tag-visibility-toggle"><input type="checkbox" @bind="showCompilations" @bind:after="ReleaseTypesChangedAsync" /> <span>Kompilacje</span></label>
+            </div>
+            <div class="albums-toolbar-actions">
+                <button type="button" class="btn btn-sm album-action-button album-action-apply" disabled="@(isAddingVisible || albums.Count == 0)" @onclick="AddVisibleAlbumsAsync">
+                    <AppIcon Name="save" /><span>Dodaj wszystkie widoczne</span>
+                </button>
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(actionMessage))
+        {
+            <div class="alert @(actionFailed ? "alert-danger" : "alert-success") py-2" role="status">@actionMessage</div>
+        }
+
+        <div class="library-card-grid">
+            @foreach (var album in albums)
             {
-                <div class="col">
+                var libraryActionClass = album.isInLibrary ? "album-card-library is-saved" : "album-card-library";
+                var libraryActionTitle = album.isInLibrary ? "Usuń z biblioteki" : "Dodaj do biblioteki";
+                var libraryActionLabel = $"{libraryActionTitle}: {album.name}";
+                var libraryActionIcon = album.isInLibrary ? "delete" : "save";
+                <div class="library-card-grid-item">
                     <div class="card bg-dark text-light h-100">
-                        <div class="artist-image-square" style="position:relative;">
-                            <img src="@GetBestImageUrl(a.images)" alt="@a.name">
-                            <button class="artist-play-overlay" title="Odtwórz album" @onclick="() => PlayAlbumById(a.id)">▶</button>
+                        <div class="artist-image-square position-relative">
+                            @*
+                            <img src="@GetBestImageUrl(album.images)" alt="Okładka @album.name" />
+                            <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @album.name" @onclick="() => PlayAlbum(album.id)"><AppIcon Name="play" /></button>
+                            <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.name" disabled="@queuingAlbumIds.Contains(album.id)" @onclick="() => QueueAlbumAsync(album.id)"><AppIcon Name="queue" /></button>
+                            <button class="album-card-library @(album.isInLibrary ? "is-saved" : string.Empty)" title="@(album.isInLibrary ? "Usuń z biblioteki" : "Dodaj do biblioteki")" aria-label="@(album.isInLibrary ? "Usuń z biblioteki: " : "Dodaj do biblioteki: ")@album.name" disabled="@changingAlbumIds.Contains(album.id)" @onclick="() => ToggleAlbumLibraryAsync(album)"><AppIcon Name="@(album.isInLibrary ? "delete" : "save")" /></button>
+                            *@
+                            <img src="@GetBestImageUrl(album.images)" alt="Okładka @album.name" />
+                            <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album" @onclick="() => PlayAlbum(album.id)"><AppIcon Name="play" /></button>
+                            <button class="artist-queue-overlay album-card-queue" title="Dodaj album do kolejki" aria-label="Dodaj album do kolejki" disabled="@queuingAlbumIds.Contains(album.id)" @onclick="() => QueueAlbumAsync(album.id)"><AppIcon Name="queue" /></button>
+                            <button class="@libraryActionClass" title="@libraryActionTitle" aria-label="@libraryActionLabel" disabled="@changingAlbumIds.Contains(album.id)" @onclick="() => ToggleAlbumLibraryAsync(album)"><AppIcon Name="@libraryActionIcon" /></button>
                         </div>
                         <div class="card-body d-flex flex-column">
-                            <h6 class="card-title mb-2 text-truncate">@a.name</h6>
-                            <div class="small text-secondary">@(a.release_date)</div>
-                            <div class="small text-secondary">Typ: @(a.album_type ?? "—"), utworów: @(a.total_tracks)</div>
-                            <div class="mt-2 mt-auto">
-                                <a class="btn btn-sm btn-outline-light" href="/album/@a.id">Otwórz album</a>
-                            </div>
+                            <div class="d-flex justify-content-between align-items-start mb-2 gap-2"><h6 class="card-title mb-0"><a href="/album/@album.id" class="link-light text-decoration-none">@album.name</a></h6><span class="badge bg-secondary">@album.album_type</span></div>
+                            <div class="small text-secondary">@album.release_date · @album.total_tracks utw.</div>
+                            @if (album.tags.Count > 0)
+                            {
+                                <div class="mt-2"><small class="text-muted">Tagi:</small><div class="d-flex flex-wrap gap-1 mt-1">@foreach (var tag in album.tags.Take(3)) { <span class="badge badge-tag">@tag.TagName (@tag.Strength.ToString("0.0"))</span> } @if (album.tags.Count > 3) { <span class="badge bg-outline-primary text-primary badge-tag">+@(album.tags.Count - 3)</span> }</div></div>
+                            }
+                            <div class="mt-auto pt-3"><button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" @onclick="() => OpenAlbumTagging(album.id)"><AppIcon Name="tag" /><span>Taguj</span></button></div>
                         </div>
                     </div>
                 </div>
@@ -82,110 +117,154 @@
     }
 </div>
 
-@code {
-    [Parameter] public string Id { get; set; } = string.Empty;
+@if (showAlbumTagging && taggingAlbumId != null)
+{
+    <TaggingPanel Title="Tagowanie albumu" ItemType="album" SpotifyItemId="@taggingAlbumId" Items="tagItems" Tags="@(albums.FirstOrDefault(album => album.id == taggingAlbumId)?.tags ?? new List<TagBadge>())" Placeholder="Taguj album..." OnChanged="ApplyTaggedAlbumState" OnClose="CloseAlbumTagging" />
+}
 
+@code {
+    private const string ReleaseTypesStoreKey = "artist-detail:release-types:v1";
+    [Parameter] public string Id { get; set; } = string.Empty;
     private ArtistDto? artist;
     private List<TrackDto> topTracks = new();
     private List<AlbumDto> albums = new();
+    private List<TagBadge> artistTags = new();
+    private List<TagItem> tagItems = new();
+    private HashSet<string> changingAlbumIds = new();
+    private HashSet<string> queuingAlbumIds = new();
+    private bool artistInLibrary, isChangingArtist, isAddingVisible, showAlbumTagging, showAlbums = true, showSingles = true, showCompilations = true;
+    private string? taggingAlbumId, actionMessage;
+    private bool actionFailed;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAll();
+        var filters = await Store.GetItemAsync<ReleaseTypesState>(ReleaseTypesStoreKey);
+        if (filters != null) { showAlbums = filters.Albums; showSingles = filters.Singles; showCompilations = filters.Compilations; }
+        await LoadAllAsync();
+        await LoadTagItemsAsync();
     }
 
-    private async Task LoadAll()
+    private async Task LoadAllAsync()
     {
-        var aTask = Http.GetFromJsonAsync<ArtistDto>($"api/artists/{Uri.EscapeDataString(Id)}");
-        var tTask = Http.GetFromJsonAsync<List<TrackDto>>($"api/artists/{Uri.EscapeDataString(Id)}/top-tracks");
-        var alTask = Http.GetFromJsonAsync<List<AlbumDto>>($"api/artists/{Uri.EscapeDataString(Id)}/albums");
+        var artistTask = Http.GetFromJsonAsync<ArtistDto>($"api/artists/{Uri.EscapeDataString(Id)}");
+        var tracksTask = Http.GetFromJsonAsync<List<TrackDto>>($"api/artists/{Uri.EscapeDataString(Id)}/top-tracks");
+        await Task.WhenAll(artistTask!, tracksTask!);
+        artist = artistTask.Result;
+        topTracks = tracksTask.Result ?? new();
+        await LoadAlbumsAsync();
+    }
 
-        await Task.WhenAll(aTask!, tTask!, alTask!);
+    private async Task ReleaseTypesChangedAsync()
+    {
+        await Store.SetItemAsync(ReleaseTypesStoreKey, new ReleaseTypesState { Albums = showAlbums, Singles = showSingles, Compilations = showCompilations });
+        await LoadAlbumsAsync();
+    }
 
-        artist = aTask?.Result;
-        topTracks = tTask?.Result ?? new List<TrackDto>();
-        albums = alTask?.Result ?? new List<AlbumDto>();
+    private async Task LoadAlbumsAsync()
+    {
+        var groups = new List<string>();
+        if (showAlbums) groups.Add("album");
+        if (showSingles) groups.Add("single");
+        if (showCompilations) groups.Add("compilation");
+        if (groups.Count == 0) { albums.Clear(); await RefreshLibraryStatusesAsync(); return; }
+        albums = await Http.GetFromJsonAsync<List<AlbumDto>>($"api/artists/{Uri.EscapeDataString(Id)}/albums?includeGroups={Uri.EscapeDataString(string.Join(',', groups))}") ?? new();
+        await RefreshLibraryStatusesAsync();
+    }
+
+    private async Task RefreshLibraryStatusesAsync()
+    {
+        var albumRequest = Http.PostAsJsonAsync("api/library/items/status", new ItemStatusRequest { ItemType = "album", SpotifyItemIds = albums.Select(album => album.id).ToList() });
+        var artistRequest = Http.PostAsJsonAsync("api/library/items/status", new ItemStatusRequest { ItemType = "artist", SpotifyItemIds = new() { Id } });
+        await Task.WhenAll(albumRequest, artistRequest);
+        if (albumRequest.Result.IsSuccessStatusCode)
+        {
+            var statuses = await albumRequest.Result.Content.ReadFromJsonAsync<List<ItemStatus>>() ?? new();
+            foreach (var album in albums)
+            {
+                var status = statuses.FirstOrDefault(item => item.SpotifyItemId == album.id);
+                album.isInLibrary = status?.IsInLibrary ?? false;
+                album.tags = status?.Tags ?? new();
+            }
+        }
+        if (artistRequest.Result.IsSuccessStatusCode)
+        {
+            var status = (await artistRequest.Result.Content.ReadFromJsonAsync<List<ItemStatus>>())?.FirstOrDefault();
+            artistInLibrary = status?.IsInLibrary ?? false;
+            artistTags = status?.Tags ?? new();
+        }
+    }
+
+    private async Task LoadTagItemsAsync() => tagItems = await Http.GetFromJsonAsync<List<TagItem>>("api/tags") ?? new();
+
+    private async Task ToggleArtistLibraryAsync()
+    {
+        if (isChangingArtist) return;
+        isChangingArtist = true;
+        try
+        {
+            var response = artistInLibrary ? await Http.DeleteAsync($"api/library/artists/{Uri.EscapeDataString(Id)}") : await Http.PostAsync($"api/library/artists/{Uri.EscapeDataString(Id)}", null);
+            if (response.IsSuccessStatusCode) artistInLibrary = !artistInLibrary; else SetMessage("Nie udało się zsynchronizować artysty z biblioteką.", true);
+        }
+        finally { isChangingArtist = false; }
+    }
+
+    private async Task ToggleAlbumLibraryAsync(AlbumDto album)
+    {
+        if (!changingAlbumIds.Add(album.id)) return;
+        try
+        {
+            var response = album.isInLibrary ? await Http.DeleteAsync($"api/library/albums/{Uri.EscapeDataString(album.id)}") : await Http.PostAsync($"api/library/albums/{Uri.EscapeDataString(album.id)}", null);
+            if (response.IsSuccessStatusCode) album.isInLibrary = !album.isInLibrary; else SetMessage($"Nie udało się zsynchronizować albumu „{album.name}”.", true);
+        }
+        finally { changingAlbumIds.Remove(album.id); }
+    }
+
+    private async Task AddVisibleAlbumsAsync()
+    {
+        if (isAddingVisible || albums.Count == 0) return;
+        isAddingVisible = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/library/albums/bulk", new { albumIds = albums.Select(album => album.id).ToList() });
+            if (!response.IsSuccessStatusCode) { SetMessage("Nie udało się dodać widocznych albumów.", true); return; }
+            var results = await response.Content.ReadFromJsonAsync<List<BulkResult>>() ?? new();
+            foreach (var result in results.Where(result => result.success)) { var album = albums.FirstOrDefault(item => item.id == result.albumId); if (album != null) album.isInLibrary = true; }
+            var failures = results.Count(result => !result.success);
+            SetMessage(failures == 0 ? "Dodano wszystkie widoczne wydawnictwa do biblioteki." : $"Dodano {results.Count - failures} wydawnictw; {failures} nie udało się zsynchronizować.", failures > 0);
+        }
+        finally { isAddingVisible = false; }
+    }
+
+    private void OpenAlbumTagging(string albumId) { taggingAlbumId = albumId; showAlbumTagging = true; }
+    private void CloseAlbumTagging() { taggingAlbumId = null; showAlbumTagging = false; }
+    private Task ApplyTaggedAlbumState(TagAssignmentState state)
+    {
+        var album = albums.FirstOrDefault(item => item.id == state.SpotifyItemId);
+        if (album != null) album.tags = state.Tags;
+        return Task.CompletedTask;
     }
 
     private async Task PlayTrack(string? uri)
     {
         if (string.IsNullOrWhiteSpace(uri)) return;
-        var body = new { uris = new[] { uri } };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        await Http.PutAsJsonAsync("api/player/play", new { uris = new[] { uri } });
     }
-
-    private async Task PlayAlbum(string? contextUri)
+    private Task PlayAlbum(string albumId) => Http.PutAsJsonAsync("api/player/play", new { context_uri = $"spotify:album:{albumId}" });
+    private async Task QueueAlbumAsync(string albumId)
     {
-        if (string.IsNullOrWhiteSpace(contextUri)) return;
-        var body = new { context_uri = contextUri };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        if (!queuingAlbumIds.Add(albumId)) return;
+        try { await Http.PostAsync($"api/player/queue/albums/{Uri.EscapeDataString(albumId)}", null); } finally { queuingAlbumIds.Remove(albumId); }
     }
+    private void SetMessage(string message, bool failed) { actionMessage = message; actionFailed = failed; }
+    private static string? GetBestImageUrl(ImgDto[]? images) => images?.OrderByDescending(image => image.width ?? 0).FirstOrDefault()?.url;
 
-    private Task PlayAlbumById(string albumId)
-    {
-        var uri = $"spotify:album:{albumId}";
-        return PlayAlbum(uri);
-    }
-
-    private string? GetBestImageUrl(ImgDto[]? images)
-    {
-        if (images == null || images.Length == 0) return null;
-        return images.OrderByDescending(i => i.width ?? 0).First().url;
-    }
-
-    private bool addingAlbums = false;
-
-    private async Task AddAllAlbumsClicked()
-    {
-        if (addingAlbums) return;
-
-        addingAlbums = true;
-
-        var res = await Http.PostAsync($"api/spotify/artists/{Uri.EscapeDataString(Id)}/add-albums", null);
-
-        if (res.IsSuccessStatusCode)
-        {
-            var result = await res.Content.ReadFromJsonAsync<JsonElement>();
-            // prosta informacja użytkownikowi
-            await JS.InvokeVoidAsync("alert", $"Dodano: {result.GetProperty("added").GetInt32()}, już w bibliotece: {result.GetProperty("alreadyInLibrary").GetInt32()}");
-        }
-        else
-        {
-            var txt = await res.Content.ReadAsStringAsync();
-            await JS.InvokeVoidAsync("alert", $"Błąd: {res.StatusCode} - {txt}");
-        }
-
-        addingAlbums = false;
-    }
-
-    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
-    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
-
+    private sealed class ReleaseTypesState { public bool Albums { get; set; } = true; public bool Singles { get; set; } = true; public bool Compilations { get; set; } = true; }
+    private sealed class ItemStatusRequest { public string ItemType { get; set; } = string.Empty; public List<string> SpotifyItemIds { get; set; } = new(); }
+    private sealed class ItemStatus { public string SpotifyItemId { get; set; } = string.Empty; public bool IsInLibrary { get; set; } public List<TagBadge> Tags { get; set; } = new(); }
+    private sealed class BulkResult { public string albumId { get; set; } = string.Empty; public bool success { get; set; } }
     private sealed class ArtistDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string[] genres { get; set; } = Array.Empty<string>(); public ImgDto[] images { get; set; } = Array.Empty<ImgDto>(); }
     private sealed class TrackDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? uri { get; set; } public AAlbum? album { get; set; } }
     private sealed class AAlbum { public string? name { get; set; } public string? release_date { get; set; } public ImgDto[]? images { get; set; } }
-    private sealed class AlbumDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? release_date { get; set; } public ImgDto[] images { get; set; } = Array.Empty<ImgDto>(); public string? album_type { get; set; } public int total_tracks { get; set; } }
+    private sealed class AlbumDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? release_date { get; set; } public ImgDto[] images { get; set; } = Array.Empty<ImgDto>(); public string? album_type { get; set; } public int total_tracks { get; set; } public bool isInLibrary { get; set; } public List<TagBadge> tags { get; set; } = new(); }
     private sealed class ImgDto { public string url { get; set; } = string.Empty; public int? width { get; set; } public int? height { get; set; } }
 }
-
-

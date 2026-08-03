@@ -479,6 +479,101 @@ namespace SpotifyBasicApi2025.Services
             return ok;
         }
 
+        public async Task<bool> AddArtistToLibraryAsync(string artistId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("User is not logged in");
+
+            var endpoint = $"me/following?type=artist&ids={Uri.EscapeDataString(artistId)}";
+            if (!await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint))
+                return false;
+
+            try
+            {
+                var artist = await context.SpArtists.FirstOrDefaultAsync(a => a.Id == artistId);
+                if (artist == null)
+                {
+                    var spotifyArtist = await spotifyApiService.GetAndSaveArtist(artistId);
+                    if (spotifyArtist == null)
+                        throw new InvalidOperationException("Could not load artist from Spotify");
+                    artist = await context.SpArtists.FirstAsync(a => a.Id == artistId);
+                }
+
+                if (!await context.LibArtistUserAssigns.AnyAsync(a => a.UserId == userId && a.ArtistId == artistId))
+                {
+                    context.LibArtistUserAssigns.Add(new LibArtistUserAssign
+                    {
+                        UserId = userId,
+                        ArtistId = artistId,
+                        ArtistName = artist.Name,
+                        DateCreatedUtc = DateTime.UtcNow
+                    });
+                    await context.SaveChangesAsync();
+                }
+                return true;
+            }
+            catch
+            {
+                await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+                throw;
+            }
+        }
+
+        public async Task<bool> RemoveArtistSynchronouslyAsync(string artistId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("User is not logged in");
+
+            var endpoint = $"me/following?type=artist&ids={Uri.EscapeDataString(artistId)}";
+            if (!await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint))
+                return false;
+
+            try
+            {
+                var assign = await context.LibArtistUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.ArtistId == artistId);
+                if (assign != null)
+                {
+                    context.LibArtistUserAssigns.Remove(assign);
+                    await context.SaveChangesAsync();
+                }
+                return true;
+            }
+            catch
+            {
+                await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
+                throw;
+            }
+        }
+
+        public async Task<bool> RemoveAlbumSynchronouslyAsync(string albumId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("User is not logged in");
+
+            var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
+            if (!await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint))
+                return false;
+
+            try
+            {
+                var assign = await context.LibAlbumUserAssigns.FirstOrDefaultAsync(a => a.UserId == userId && a.AlbumId == albumId);
+                if (assign != null)
+                {
+                    context.LibAlbumUserAssigns.Remove(assign);
+                    await context.SaveChangesAsync();
+                }
+                return true;
+            }
+            catch
+            {
+                await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
+                throw;
+            }
+        }
+
         public async Task<bool> RemoveAlbumFromLibraryAsync(string albumId)
         {
             var userId = await userService.GetCurrentUserIdAsync();
@@ -547,6 +642,67 @@ namespace SpotifyBasicApi2025.Services
             var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
             var ok = await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint);
             return ok;
+        }
+
+        public async Task<bool> AddAlbumSynchronouslyAsync(string albumId)
+        {
+            var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";
+            if (!await spotifyRequestService.SendAsync(HttpMethod.Put, endpoint))
+                return false;
+
+            try
+            {
+                // The existing method also maintains SpSavedAlbums and LibAlbumUserAssigns.
+                await AddAlbumToLibraryAsync(albumId);
+                return true;
+            }
+            catch
+            {
+                await spotifyRequestService.SendAsync(HttpMethod.Delete, endpoint);
+                throw;
+            }
+        }
+
+        public async Task<List<object>> GetLibraryItemStatusesAsync(string itemType, IEnumerable<string>? spotifyItemIds)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("User is not logged in");
+
+            var normalizedType = itemType?.Trim().ToLowerInvariant();
+            if (normalizedType is not ("album" or "artist"))
+                throw new InvalidOperationException("Supported item types are album and artist");
+
+            var ids = (spotifyItemIds ?? Enumerable.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var savedIds = normalizedType == "album"
+                ? await context.LibAlbumUserAssigns.Where(a => a.UserId == userId && ids.Contains(a.AlbumId)).Select(a => a.AlbumId).ToListAsync()
+                : await context.LibArtistUserAssigns.Where(a => a.UserId == userId && ids.Contains(a.ArtistId)).Select(a => a.ArtistId).ToListAsync();
+
+            var tagRows = await context.LibTagAssigns
+                .AsNoTracking()
+                .Where(a => a.UserId == userId && a.ItemType == normalizedType && ids.Contains(a.SpotifyItemId))
+                .Select(a => new { a.SpotifyItemId, a.TagId, TagName = a.Tag.Name, TagGroupName = a.Tag.TagGroup.Name, a.Strength })
+                .ToListAsync();
+
+            var tagsById = tagRows.GroupBy(row => row.SpotifyItemId).ToDictionary(group => group.Key, group => group.Select(row => (object)new
+            {
+                row.TagId,
+                row.TagName,
+                row.TagGroupName,
+                row.Strength
+            }).ToList());
+
+            var savedSet = savedIds.ToHashSet(StringComparer.Ordinal);
+            return ids.Select(id => (object)new
+            {
+                SpotifyItemId = id,
+                IsInLibrary = savedSet.Contains(id),
+                Tags = tagsById.GetValueOrDefault(id, new List<object>())
+            }).ToList();
         }
 
         public async Task<bool> RemoveTrackFromLibraryAsync(string trackId)

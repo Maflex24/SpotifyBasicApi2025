@@ -884,6 +884,77 @@ code {
     border-color: #ff9eaa;
 }
 
+.album-card-library {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    color: #dbeafe;
+    background: rgba(38, 43, 50, 0.88);
+    border: 1px solid rgba(191, 219, 254, 0.58);
+    border-radius: 999px;
+    transition: transform .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.album-card-library:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(13, 110, 253, 0.38);
+    border-color: #bfdbfe;
+    transform: scale(1.06);
+}
+
+.album-card-library.is-saved {
+    color: #ffd5da;
+    border-color: rgba(255, 158, 170, 0.75);
+}
+
+.album-card-library:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.artist-detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(31, 41, 55, 0.94), rgba(17, 24, 39, 0.82));
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 0.75rem;
+}
+
+.artist-detail-image {
+    width: 10rem;
+    height: 10rem;
+    flex: 0 0 auto;
+    object-fit: cover;
+    border-radius: 0.55rem;
+    background: #262b32;
+}
+
+.artist-releases-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "heading actions" "filters filters";
+}
+
+.artist-release-type-filters {
+    grid-area: filters;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+
+@media (max-width: 575.98px) {
+    .artist-detail-header { flex-direction: column; }
+    .artist-detail-image { width: 7rem; height: 7rem; }
+    .artist-releases-toolbar { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "filters" "actions"; }
+}
+
 .album-card-tag {
     color: #e5e7eb;
     background: transparent;
