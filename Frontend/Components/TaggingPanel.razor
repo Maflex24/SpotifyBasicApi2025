@@ -17,33 +17,24 @@
         </div>
     </div>
 
-    <TagSearchSelect Items="displayItems" Grouped="showTagsGrouped" InFlow="true" Placeholder="@Placeholder" OnSelected="AddSelected" ShowClear="false" ShowSearchClear="true" />
+    <TagSearchSelect Items="displayItems" Grouped="showTagsGrouped" InFlow="true" Placeholder="@Placeholder" OnSelected="AddSelected" ShowClear="false" ShowSearchClear="true" SelectedTagIds="assignedTagIds" KeepOpenAfterSelection="true" />
 
     @if (localTags.Count > 0)
     {
-        <div class="tagging-assignment-groups">
-            @foreach (var group in GetAssignedTagGroups())
-            {
-                <section class="tagging-assignment-group">
-                    @if (showTagsGrouped)
-                    {
-                        <h6 class="tagging-assignment-group-heading">@group.Name</h6>
-                    }
-                    <div class="tagging-assignment-list">
-                        @foreach (var assign in group.Tags)
-                        {
-                            <article class="tagging-assignment">
-                                <span class="tagging-assignment-name">@assign.TagName <span class="tagging-assignment-strength">@assign.Strength.ToString("0.0")</span></span>
-                                <div class="tagging-assignment-actions" aria-label="Akcje tagu @assign.TagName">
-                                    <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zmniejsz siłę" aria-label="Zmniejsz siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">−</button>
-                                    <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zwiększ siłę" aria-label="Zwiększ siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@isMutating" title="Usuń tag" aria-label="Usuń tag @assign.TagName" @onclick="(() => Remove(assign.TagId))">✕</button>
-                                </div>
-                            </article>
-                        }
-                    </div>
-                </section>
-            }
+        <div class="tagging-assignment-strip" aria-label="Wybrane tagi">
+            <div class="tagging-assignment-list">
+                @foreach (var assign in localTags.OrderBy(tag => tag.TagName))
+                {
+                    <article class="tagging-assignment">
+                        <span class="tagging-assignment-name">@assign.TagName <span class="tagging-assignment-strength">@assign.Strength.ToString("0.0")</span></span>
+                        <div class="tagging-assignment-actions" aria-label="Akcje tagu @assign.TagName">
+                            <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zmniejsz siłę" aria-label="Zmniejsz siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">&minus;</button>
+                            <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zwiększ siłę" aria-label="Zwiększ siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" disabled="@isMutating" title="Usuń tag" aria-label="Usuń tag @assign.TagName" @onclick="(() => Remove(assign.TagId))">&times;</button>
+                        </div>
+                    </article>
+                }
+            </div>
         </div>
     }
 </section>
@@ -67,6 +58,7 @@
     private bool isMutating;
     private ElementReference panelRef;
     private bool layoutObserverRegistered;
+    private IReadOnlyCollection<long> assignedTagIds => localTags.Select(tag => tag.TagId).ToHashSet();
 
     protected override async Task OnInitializedAsync()
     {
@@ -141,21 +133,6 @@
 
             return variants;
         }).ToList();
-    }
-
-    private IEnumerable<TagGroupView> GetAssignedTagGroups()
-    {
-        if (!showTagsGrouped)
-            return new[] { new TagGroupView(string.Empty, localTags) };
-
-        var itemNames = displayItems
-            .GroupBy(item => item.Id)
-            .ToDictionary(group => group.Key, group => group.First().TagGroupName);
-        return localTags
-            .GroupBy(tag => itemNames.TryGetValue(tag.TagId, out var groupName) && !string.IsNullOrWhiteSpace(groupName) ? groupName! : "Pozostałe tagi")
-            .OrderBy(group => group.Key == "Pozostałe tagi" ? 1 : 0)
-            .ThenBy(group => group.Key)
-            .Select(group => new TagGroupView(group.Key, group.OrderBy(tag => tag.TagName).ToList()));
     }
 
     private async Task ToggleTagLayout()
@@ -239,5 +216,4 @@
 
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
-    private sealed record TagGroupView(string Name, List<TagBadge> Tags);
 }

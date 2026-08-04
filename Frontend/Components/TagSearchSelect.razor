@@ -28,7 +28,9 @@
                 @foreach (var item in group.Items)
                 {
                     var active = (itemIndex + baseIndex) == activeIndex ? " active" : string.Empty;
-                    <button type="button" class="tag-chip tag-select-chip@active" @onclick="() => Select(item)">@if (item.IsPinnedShortcut) { <AppIcon Name="pin" Class="tag-pin-icon" /> }@item.Name</button>
+                    var isSelected = IsSelected(item.Id);
+                    var selectionClass = isSelected ? " is-selected" : string.Empty;
+                    <button type="button" class="tag-chip tag-select-chip@selectionClass@active" disabled="@isSelected" aria-pressed="@isSelected" @onclick="() => Select(item)">@if (item.IsPinnedShortcut) { <AppIcon Name="pin" Class="tag-pin-icon" /> }@if (isSelected) { <span class="tag-select-chip-check" aria-hidden="true">✓</span> }@item.Name</button>
                     itemIndex++;
                 }
             </div>
@@ -46,10 +48,18 @@
     [Parameter] public string ClearLabel { get; set; } = "— usuń przypisanie —";
     [Parameter] public bool Grouped { get; set; }
     [Parameter] public bool InFlow { get; set; }
+    [Parameter] public IReadOnlyCollection<long> SelectedTagIds { get; set; } = Array.Empty<long>();
+    [Parameter] public bool KeepOpenAfterSelection { get; set; }
 
     private string search = string.Empty;
     private bool isOpen;
     private int activeIndex;
+
+    protected override void OnParametersSet()
+    {
+        if (InFlow && KeepOpenAfterSelection)
+            isOpen = true;
+    }
 
     private List<TagItem> Filtered => string.IsNullOrWhiteSpace(search)
         ? Items
@@ -127,10 +137,25 @@
 
     private async Task Select(TagItem item)
     {
-        search = item.Name;
-        isOpen = false;
+        if (IsSelected(item.Id))
+            return;
+
+        if (KeepOpenAfterSelection)
+        {
+            search = string.Empty;
+            isOpen = true;
+            activeIndex = ShowClear ? 1 : 0;
+        }
+        else
+        {
+            search = item.Name;
+            isOpen = false;
+        }
+
         await OnSelected.InvokeAsync(item.Id);
     }
+
+    private bool IsSelected(long tagId) => SelectedTagIds.Contains(tagId);
 
     private void ClearSearch()
     {

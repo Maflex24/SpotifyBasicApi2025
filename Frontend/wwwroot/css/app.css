@@ -1424,8 +1424,11 @@ code {
     bottom: var(--tagging-panel-bottom-offset);
     z-index: 2000;
     width: min(72rem, calc(100vw - 1rem));
+    display: flex;
+    flex-direction: column;
+    height: var(--tagging-panel-available-height);
     max-height: var(--tagging-panel-available-height);
-    overflow-y: auto;
+    overflow: hidden;
     overscroll-behavior-y: contain;
     scrollbar-gutter: stable;
     padding: 1rem;
@@ -1468,36 +1471,27 @@ code {
     gap: 0.35rem;
 }
 
-.tagging-assignment-groups {
-    display: grid;
-    gap: 0.75rem;
-    margin-top: 0.85rem;
-}
-
-.tagging-assignment-group {
-    padding: 0.7rem;
+.tagging-assignment-strip {
+    flex: 0 0 auto;
+    max-height: 9.5rem;
+    margin-top: 0.75rem;
+    padding: 0.6rem;
+    overflow-y: auto;
     background: rgba(31, 37, 47, 0.82);
     border: 1px solid #3b4555;
     border-radius: 0.6rem;
 }
 
-.tagging-assignment-group-heading {
-    margin: 0 0 0.55rem;
-    color: #cbd5e1;
-    font-size: 0.8rem;
-    font-weight: 700;
-}
-
 .tagging-assignment-list {
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 0.5rem;
 }
 
 .tagging-assignment {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.85rem;
+    gap: 0.55rem;
     min-height: 2.5rem;
     padding: 0.35rem 0.4rem 0.35rem 0.65rem;
     background: #222933;
@@ -1522,8 +1516,17 @@ code {
 
 .tagging-panel .tag-search-select-flow .tag-search-dropdown {
     position: static;
-    max-height: max(8rem, calc(var(--tagging-panel-available-height) - 7rem));
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
     margin: 0.5rem 0 0;
+}
+
+.tagging-panel .tag-search-select-flow {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .tagging-panel .tag-search-select-flow .tag-search-group-items {
@@ -1556,6 +1559,22 @@ code {
     border-color: rgba(255, 255, 255, 0.9);
     box-shadow: 0 2px 7px rgba(0, 0, 0, 0.32);
     transform: translateY(-1px);
+}
+
+.tagging-panel .tag-search-select-flow .tag-select-chip.is-selected,
+.tagging-panel .tag-search-select-flow .tag-select-chip:disabled {
+    color: #d1fae5;
+    cursor: default;
+    opacity: 1;
+    background: #1f4d43;
+    border-color: rgba(110, 231, 183, 0.8);
+    box-shadow: none;
+    transform: none;
+}
+
+.tag-select-chip-check {
+    margin-right: 0.4rem;
+    font-weight: 800;
 }
 
 .tagging-panel .tag-search-select-flow .tag-select-chip:focus-visible {
