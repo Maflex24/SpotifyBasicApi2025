@@ -1404,13 +1404,17 @@ code {
 }
 
 .tagging-panel {
+    --tagging-panel-available-height: min(70dvh, 620px);
+    --tagging-panel-bottom-offset: 64px;
     position: fixed;
     left: 50%;
-    bottom: 64px;
+    bottom: var(--tagging-panel-bottom-offset);
     z-index: 2000;
     width: min(72rem, calc(100vw - 1rem));
-    max-height: min(70vh, 620px);
+    max-height: var(--tagging-panel-available-height);
     overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
     padding: 1rem;
     color: #f8fafc;
     background: #101319;
@@ -1505,7 +1509,7 @@ code {
 
 .tagging-panel .tag-search-select-flow .tag-search-dropdown {
     position: static;
-    max-height: 13rem;
+    max-height: max(8rem, calc(var(--tagging-panel-available-height) - 7rem));
     margin: 0.5rem 0 0;
 }
 
@@ -1578,7 +1582,7 @@ code {
 
 @media (max-width: 767.98px) {
     .tagging-panel {
-        bottom: 56px;
+        --tagging-panel-bottom-offset: 56px;
         padding: 0.75rem;
     }
 

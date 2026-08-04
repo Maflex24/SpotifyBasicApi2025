@@ -2,8 +2,9 @@
 @inject HttpClient Http
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject LocalStorageService Store
+@implements IAsyncDisposable
 
-<section class="tagging-panel shadow" aria-label="@Title">
+<section class="tagging-panel shadow" @ref="panelRef" aria-label="@Title">
     <div class="tagging-panel-header">
         <strong>@Title</strong>
         <div class="tagging-panel-header-actions">
@@ -64,6 +65,8 @@
     private List<TagGroupDto> tagGroups = new();
     private bool showTagsGrouped;
     private bool isMutating;
+    private ElementReference panelRef;
+    private bool layoutObserverRegistered;
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,6 +91,22 @@
     {
         localTags = Tags?.Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList() ?? new List<TagBadge>();
         BuildDisplayItems();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("taggingPanelLayout.observe", panelRef);
+            layoutObserverRegistered = true;
+        }
+        catch
+        {
+            // Brak pomiaru nie blokuje tagowania; CSS zachowuje bezpieczny limit zastępczy.
+        }
     }
 
     private void BuildDisplayItems()
@@ -199,6 +218,20 @@
         finally
         {
             isMutating = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!layoutObserverRegistered)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("taggingPanelLayout.disconnect", panelRef);
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
         }
     }
 
