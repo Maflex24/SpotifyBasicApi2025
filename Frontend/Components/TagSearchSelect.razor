@@ -28,7 +28,7 @@
                 @foreach (var item in group.Items)
                 {
                     var active = (itemIndex + baseIndex) == activeIndex ? " active" : string.Empty;
-                    <button type="button" class="tag-chip tag-select-chip@active" @onclick="() => Select(item)">@item.Name</button>
+                    <button type="button" class="tag-chip tag-select-chip@active" @onclick="() => Select(item)">@if (item.IsPinnedShortcut) { <AppIcon Name="pin" Class="tag-pin-icon" /> }@item.Name</button>
                     itemIndex++;
                 }
             </div>
@@ -55,14 +55,29 @@
         ? Items
         : Items.Where(item => item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
 
-    private List<TagSearchGroup> VisibleGroups => Grouped
-        ? Filtered
-            .GroupBy(item => string.IsNullOrWhiteSpace(item.TagGroupName) ? "Pozostałe tagi" : item.TagGroupName!)
-            .OrderBy(group => group.Key == "Pozostałe tagi" ? 1 : 0)
-            .ThenBy(group => group.Key)
-            .Select(group => new TagSearchGroup(group.Key, group.OrderBy(item => item.Name).ToList()))
-            .ToList()
-        : new List<TagSearchGroup> { new(string.Empty, Filtered.OrderBy(item => item.Name).ToList()) };
+    private List<TagSearchGroup> VisibleGroups
+    {
+        get
+        {
+            var sortedItems = Filtered.OrderBy(item => item.Name).ToList();
+            var pinnedShortcuts = sortedItems.Where(item => item.IsPinned).Select(CreatePinnedShortcut).ToList();
+
+            if (!Grouped)
+                return new List<TagSearchGroup> { new(string.Empty, pinnedShortcuts.Concat(sortedItems).ToList()) };
+
+            var groups = sortedItems
+                .GroupBy(item => string.IsNullOrWhiteSpace(item.TagGroupName) ? "Pozostałe tagi" : item.TagGroupName!)
+                .OrderBy(group => group.Key == "Pozostałe tagi" ? 1 : 0)
+                .ThenBy(group => group.Key)
+                .Select(group => new TagSearchGroup(group.Key, group.ToList()))
+                .ToList();
+
+            if (pinnedShortcuts.Count > 0)
+                groups.Insert(0, new TagSearchGroup("Przypięte", pinnedShortcuts));
+
+            return groups;
+        }
+    }
 
     private List<TagItem> SelectableItems => VisibleGroups.SelectMany(group => group.Items).ToList();
 
@@ -129,6 +144,17 @@
         isOpen = false;
         await OnClearRequested.InvokeAsync();
     }
+
+    private static TagItem CreatePinnedShortcut(TagItem item) => new()
+    {
+        Id = item.Id,
+        Name = item.Name,
+        Aliases = item.Aliases,
+        TagGroupId = item.TagGroupId,
+        IsPinned = true,
+        IsPinnedShortcut = true,
+        TagGroupName = item.TagGroupName
+    };
 
     private sealed record TagSearchGroup(string Name, List<TagItem> Items);
 }

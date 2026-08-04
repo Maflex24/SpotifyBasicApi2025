@@ -83,6 +83,22 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        public sealed class PinTagRequest
+        {
+            public bool IsPinned { get; set; }
+        }
+
+        [HttpPut("{id}/pin")]
+        public async Task<IActionResult> SetTagPinned(long id, [FromBody] PinTagRequest request)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized("Użytkownik nie jest zalogowany");
+
+            var updated = await tagsService.SetTagPinnedAsync(id, request.IsPinned, userId);
+            return updated ? NoContent() : NotFound($"Tag o ID {id} nie został znaleziony");
+        }
+
         [HttpPost]
         public async Task<IActionResult> CreateTag([FromBody] TagModel tagModel)
         {

@@ -164,6 +164,20 @@ namespace SpotifyBasicApi2025.Services
             return entity?.MapToTagModel();
         }
 
+        public async Task<bool> SetTagPinnedAsync(long id, bool isPinned, string userId)
+        {
+            var entity = await context.LibTags
+                .Include(tag => tag.TagGroup)
+                .FirstOrDefaultAsync(tag => tag.Id == id && tag.TagGroup.UserId == userId);
+
+            if (entity is null)
+                return false;
+
+            entity.IsPinned = isPinned;
+            await context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<bool> UserOwnsTagGroupAsync(long tagGroupId, string userId)
         {
             return await context.LibTagGroups

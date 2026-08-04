@@ -8,6 +8,7 @@
         public bool ForArtist { get; set; }
         public bool ForTrack { get; set; }
         public bool ForPlaylist { get; set; }
+        public bool IsPinned { get; set; }
         public long TagGroupId { get; set; }
         public int AssignmentCount { get; set; }
         public List<string> Aliases { get; set; } = new();

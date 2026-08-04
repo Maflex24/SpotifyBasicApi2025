@@ -48,6 +48,7 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 ForArtist = model.ForArtist,
                 ForPlaylist = model.ForPlaylist,
                 ForTrack = model.ForTrack,
+                IsPinned = false,
                 TagGroupId = model.TagGroupId
             };
         }
@@ -62,6 +63,7 @@ namespace SpotifyBasicApi2025.Models.Extensions
                 ForArtist = entity.ForArtist,
                 ForPlaylist = entity.ForPlaylist,
                 ForTrack = entity.ForTrack,
+                IsPinned = entity.IsPinned,
                 TagGroupId = entity.TagGroupId,
                 Aliases = entity.Aliases
                     .OrderBy(alias => alias.Name)

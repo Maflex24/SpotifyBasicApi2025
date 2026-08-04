@@ -1337,6 +1337,19 @@ code {
     position: relative;
 }
 
+.tag-pin-icon {
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-right: 0.3rem;
+    color: #facc15;
+}
+
+.tag-pin-button.is-pinned {
+    color: #facc15;
+    border-color: rgba(250, 204, 21, 0.7);
+    background: rgba(250, 204, 21, 0.1);
+}
+
 .tag-search-input-row {
     display: flex;
     align-items: stretch;

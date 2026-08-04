@@ -10,6 +10,10 @@ namespace Frontend.Components
 
 		public long TagGroupId { get; set; }
 
+		public bool IsPinned { get; set; }
+
+		public bool IsPinnedShortcut { get; set; }
+
 		// Uzupełniane przez panel tagowania po pobraniu nazw grup.
 		public string? TagGroupName { get; set; }
 	}

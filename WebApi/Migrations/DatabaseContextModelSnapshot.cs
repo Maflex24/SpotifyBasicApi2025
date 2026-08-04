@@ -226,6 +226,9 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Property<bool>("ForTrack")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<bool>("IsPinned")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("varchar(255)");

@@ -69,7 +69,7 @@
                     @foreach (var group in GetGroupedTags())
                     {
                         <section class="tag-group" aria-label="Kategoria tagów: @group.Name">
-                            <h6 class="tag-group-heading">@group.Name</h6>
+                            <h6 class="tag-group-heading">@if (group.IsPinnedGroup) { <AppIcon Name="pin" Class="tag-pin-icon" /> }@group.Name</h6>
                             <div class="tag-chips-container">
                             @foreach (var t in group.Tags)
                             {
@@ -77,6 +77,7 @@
                                 var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                                 var count = GetTagCount(t.Id);
                                 <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
+                                    @if (group.IsPinnedGroup) { <AppIcon Name="pin" Class="tag-pin-icon" /> }
                                     <span class="tag-chip-label">@t.Name</span>
                                 @if (count > 0)
                                 {
@@ -98,6 +99,7 @@
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                         var count = GetTagCount(t.Id);
                         <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
+                            @if (t.IsPinnedShortcut) { <AppIcon Name="pin" Class="tag-pin-icon" /> }
                             <span class="tag-chip-label">@t.Name</span>
                         @if (count > 0)
                         {
@@ -392,7 +394,7 @@
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForTrack).OrderBy(t => t.Name).ToList();
-        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId }).ToList();
+        trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
         await LoadPlaylistTagCounts();
     }
 
@@ -771,23 +773,34 @@
 
     private Task SaveTagVisibility() => Store.SetItemAsync(TagVisibilityStoreKey, showUnassignedTags);
 
-    private IEnumerable<TagDto> GetVisibleTags() => ExpandTagVariants(showUnassignedTags
+    private IEnumerable<TagDto> GetNormalVisibleTags() => ExpandTagVariants(showUnassignedTags
         ? availableTags
         : availableTags.Where(tag => GetTagCount(tag.Id) > 0 || includeTagIds.Contains(tag.Id) || excludeTagIds.Contains(tag.Id)))
         .Where(tag => string.IsNullOrWhiteSpace(tagSearch) || tag.Name.Contains(tagSearch.Trim(), StringComparison.OrdinalIgnoreCase));
 
+    private IEnumerable<TagDto> GetVisibleTags()
+    {
+        var tags = GetNormalVisibleTags().ToList();
+        return tags.Where(tag => tag.IsPinned).Select(CreatePinnedShortcut).Concat(tags);
+    }
+
     private static IEnumerable<TagDto> ExpandTagVariants(IEnumerable<TagDto> tags) => tags.SelectMany(tag => new[] { tag }.Concat(tag.Aliases
         .Where(alias => !string.Equals(alias, tag.Name, StringComparison.OrdinalIgnoreCase))
         .Distinct(StringComparer.OrdinalIgnoreCase)
-        .Select(alias => new TagDto { Id = tag.Id, Name = alias, ForTrack = tag.ForTrack, TagGroupId = tag.TagGroupId })));
+        .Select(alias => new TagDto { Id = tag.Id, Name = alias, ForTrack = tag.ForTrack, IsPinned = tag.IsPinned, TagGroupId = tag.TagGroupId })));
+
+    private static TagDto CreatePinnedShortcut(TagDto tag) => new() { Id = tag.Id, Name = tag.Name, ForTrack = tag.ForTrack, IsPinned = true, IsPinnedShortcut = true, TagGroupId = tag.TagGroupId };
 
     private void ClearTagSearch() => tagSearch = null;
 
     private IEnumerable<TagGroupView> GetGroupedTags()
     {
         var groupedTagIds = tagGroups.Select(group => group.Id).ToHashSet();
-        var visibleTags = GetVisibleTags().ToList();
+        var visibleTags = GetNormalVisibleTags().ToList();
+        var pinnedTags = visibleTags.Where(tag => tag.IsPinned).Select(CreatePinnedShortcut).ToList();
         var groups = tagGroups.OrderBy(group => group.Name).Select(group => new TagGroupView { Name = group.Name, Tags = visibleTags.Where(tag => tag.TagGroupId == group.Id).OrderBy(tag => tag.Name).ToList() }).Where(group => group.Tags.Count > 0).ToList();
+        if (pinnedTags.Count > 0)
+            groups.Insert(0, new TagGroupView { Name = "Przypięte", Tags = pinnedTags, IsPinnedGroup = true });
         var ungroupedTags = visibleTags.Where(tag => !groupedTagIds.Contains(tag.TagGroupId)).OrderBy(tag => tag.Name).ToList();
         if (ungroupedTags.Count > 0)
             groups.Add(new TagGroupView { Name = "Pozostałe tagi", Tags = ungroupedTags });
@@ -973,9 +986,9 @@
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
-    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForTrack { get; set; } public long TagGroupId { get; set; } }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForTrack { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
-    private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public List<TagDto> Tags { get; set; } = new(); }
+    private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public bool IsPinnedGroup { get; set; } public List<TagDto> Tags { get; set; } = new(); }
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class PlaylistsListResponse { public List<PlaylistSummary> items { get; set; } = new(); }
     private sealed class PlaylistSummary { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }

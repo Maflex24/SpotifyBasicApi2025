@@ -12,7 +12,8 @@
                     <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie" aria-label="Wyczyść wyszukiwanie" @onclick="ClearSearch">×</button>
                 }
             </div>
-        <button class="btn btn-sm btn-primary" @onclick="ShowCreateGroup">Dodaj grupę</button>
+            <label class="tag-visibility-toggle"><input type="checkbox" @bind="showPinnedOnly" /> <span>Tylko przypięte</span></label>
+            <button class="btn btn-sm btn-primary" @onclick="ShowCreateGroup">Dodaj grupę</button>
         </div>
     </div>
 
@@ -147,9 +148,13 @@
                         @foreach (var entry in tagsOfGroup)
                         {
                             var t = entry.Tag;
+                            var pinClass = t.IsPinned ? "is-pinned" : string.Empty;
+                            var pinTitle = t.IsPinned ? "Odepnij tag" : "Przypnij tag";
+                            var pinAriaLabel = $"{pinTitle}: {entry.DisplayName}";
                             <li class="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center">
                                 <span class="d-inline-flex align-items-center gap-2"><span class="tag-management-tag-name">@entry.DisplayName</span>@if (t.AssignmentCount > 0) { <span class="tag-count-info" title="Łączna liczba przypisań">@t.AssignmentCount</span> }</span>
                                 <span class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-light btn-sm tag-pin-button @pinClass" title="@pinTitle" aria-label="@pinAriaLabel" aria-pressed="@t.IsPinned" @onclick="() => ToggleTagPin(t)"><AppIcon Name="pin" /></button>
                                     <button class="btn btn-outline-light btn-sm" title="Edytuj tag" @onclick="() => EditTag(t)">Edytuj</button>
                                     <button class="btn btn-outline-danger btn-sm" title="Usuń tag" @onclick="() => DeleteTag(t)">Usuń</button>
                                 </span>
@@ -171,6 +176,7 @@
     private List<TagGroup> groups = new();
     private Dictionary<long, List<Tag>> groupIdToTags = new();
     private string? searchText;
+    private bool showPinnedOnly;
 
     private TagGroup? creatingGroup;
     private TagGroup? editingGroup;
@@ -179,11 +185,14 @@
     private string? tagEditorError;
 
     private IEnumerable<TagGroup> GetVisibleGroups() => groups.Where(group =>
-        GroupMatchesSearch(group) || GetVisibleTagEntries(group).Any());
+        GetVisibleTagEntries(group).Any() || (!showPinnedOnly && GroupMatchesSearch(group)));
 
     private IEnumerable<TagListItem> GetVisibleTagEntries(TagGroup group)
     {
         var entries = GetTagsForGroup(group.Id).SelectMany(CreateTagListItems);
+        if (showPinnedOnly)
+            entries = entries.Where(entry => entry.Tag.IsPinned);
+
         if (!GroupMatchesSearch(group) && !string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim();
@@ -424,10 +433,18 @@
             await LoadAllTags();
     }
 
+    private async Task ToggleTagPin(Tag tag)
+    {
+        var response = await Http.PutAsJsonAsync($"api/tags/{tag.Id}/pin", new PinTagRequest { IsPinned = !tag.IsPinned });
+        if (response.IsSuccessStatusCode)
+            tag.IsPinned = !tag.IsPinned;
+    }
+
     
 
     private sealed class TagGroup { public long Id { get; set; } public string Name { get; set; } = string.Empty; public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } }
-    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } public int AssignmentCount { get; set; } }
+    private sealed class Tag { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public long TagGroupId { get; set; } public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool ForTrack { get; set; } public bool ForPlaylist { get; set; } public bool IsPinned { get; set; } public int AssignmentCount { get; set; } }
+    private sealed class PinTagRequest { public bool IsPinned { get; set; } }
     private sealed record TagListItem(Tag Tag, string DisplayName);
 }
 
