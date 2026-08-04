@@ -28,9 +28,9 @@
                     <article class="tagging-assignment">
                         <span class="tagging-assignment-name">@assign.TagName <span class="tagging-assignment-strength">@assign.Strength.ToString("0.0")</span></span>
                         <div class="tagging-assignment-actions" aria-label="Akcje tagu @assign.TagName">
-                            <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zmniejsz siłę" aria-label="Zmniejsz siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">&minus;</button>
-                            <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zwiększ siłę" aria-label="Zwiększ siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" disabled="@isMutating" title="Usuń tag" aria-label="Usuń tag @assign.TagName" @onclick="(() => Remove(assign.TagId))">&times;</button>
+                            <button type="button" class="btn btn-sm tagging-assignment-action tagging-assignment-action-adjust" disabled="@isMutating" title="Zmniejsz siłę" aria-label="Zmniejsz siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength - 0.5f, 0.0f, 6.0f)))">&minus;</button>
+                            <button type="button" class="btn btn-sm tagging-assignment-action tagging-assignment-action-adjust" disabled="@isMutating" title="Zwiększ siłę" aria-label="Zwiększ siłę tagu @assign.TagName" @onclick="(() => Change(assign.TagId, Math.Clamp(assign.Strength + 0.5f, 0.0f, 6.0f)))">+</button>
+                            <button type="button" class="btn btn-sm tagging-assignment-action tagging-assignment-action-remove" disabled="@isMutating" title="Usuń tag" aria-label="Usuń tag @assign.TagName" @onclick="(() => Remove(assign.TagId))">&times;</button>
                         </div>
                     </article>
                 }
