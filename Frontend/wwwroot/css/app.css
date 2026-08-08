@@ -631,6 +631,16 @@ code {
     margin-bottom: 0;
 }
 
+.album-artist-filter-groups {
+    display: grid;
+    gap: 0.75rem;
+    max-height: min(36rem, 55dvh);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    padding-right: 0.25rem;
+}
+
 .albums-controls-dock .albums-toolbar,
 .albums-controls-dock .albums-tag-filters,
 .albums-controls-dock .saved-filters-panel {

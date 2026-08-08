@@ -3,6 +3,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @inject HttpClient Http
+@using System.Globalization
 @using System.Text.Json
 @implements IAsyncDisposable
 
@@ -179,14 +180,22 @@
                 <button type="button" class="tag-mode-chip tag-include" @onclick="SelectAllAlbumArtistsAsync"><span>Wszyscy</span></button>
                 <button type="button" class="tag-mode-chip tag-none" @onclick="ClearAlbumArtistFiltersAsync"><span>Żadni</span></button>
             </div>
-            <div class="tag-chips-container">
-                @foreach (var artist in GetVisibleAlbumArtists())
+            <div class="album-artist-filter-groups" aria-label="Lista wykonawców">
+                @foreach (var group in GetGroupedAlbumArtists())
                 {
-                    var state = GetArtistFilterState(artist.Id);
-                    var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
-                    <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleArtistFilterStateAsync(artist.Id)">
-                        <span class="tag-chip-label">@artist.Name</span>
-                    </button>
+                    <section class="tag-group" aria-label="Wykonawcy na literę @group.Name">
+                        <h6 class="tag-group-heading">@group.Name</h6>
+                        <div class="tag-chips-container">
+                            @foreach (var artist in group.Artists)
+                            {
+                                var state = GetArtistFilterState(artist.Id);
+                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                                <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleArtistFilterStateAsync(artist.Id)">
+                                    <span class="tag-chip-label">@artist.Name</span>
+                                </button>
+                            }
+                        </div>
+                    </section>
                 }
             </div>
         </section>
@@ -1187,6 +1196,7 @@
     private List<TagItem> albumTagItems = new();
 
     private sealed class AlbumArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+    private sealed class ArtistFilterGroup { public string Name { get; set; } = string.Empty; public List<AlbumArtistOption> Artists { get; set; } = new(); }
 
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
 
@@ -1542,6 +1552,30 @@
 
     private IEnumerable<AlbumArtistOption> GetVisibleAlbumArtists() => availableAlbumArtists
         .Where(artist => string.IsNullOrWhiteSpace(artistSearch) || artist.Name.Contains(artistSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<ArtistFilterGroup> GetGroupedAlbumArtists()
+    {
+        var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("pl-PL"), ignoreCase: true);
+
+        return GetVisibleAlbumArtists()
+            .GroupBy(artist => GetArtistGroupName(artist.Name), StringComparer.Ordinal)
+            .OrderBy(group => group.Key == "#")
+            .ThenBy(group => group.Key, comparer)
+            .Select(group => new ArtistFilterGroup
+            {
+                Name = group.Key,
+                Artists = group.OrderBy(artist => artist.Name, comparer).ToList()
+            });
+    }
+
+    private static string GetArtistGroupName(string? artistName)
+    {
+        var name = artistName?.Trim();
+        if (string.IsNullOrEmpty(name) || !char.IsLetter(name[0]))
+            return "#";
+
+        return char.ToUpper(name[0], CultureInfo.GetCultureInfo("pl-PL")).ToString();
+    }
 
     private void ClearArtistSearch() => artistSearch = null;
 
