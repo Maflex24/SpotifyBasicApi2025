@@ -529,6 +529,8 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? tags = null,
             [FromQuery] long? sortTagId = null,
             [FromQuery] string? artistId = null,
+            [FromQuery] string? includeArtists = null,
+            [FromQuery] string? excludeArtists = null,
             [FromQuery] int? fromYear = null,
             [FromQuery] int? toYear = null,
             [FromQuery] string? includeTags = null,
@@ -542,7 +544,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search, random, page, pageSize);
+                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search, random, page, pageSize);
 
                 return Ok(result);
             }
@@ -578,6 +580,8 @@ namespace SpotifyBasicApi2025.Controllers
         public async Task<IActionResult> GetAlbumTagCounts(
             [FromQuery] string? tags = null,
             [FromQuery] string? artistId = null,
+            [FromQuery] string? includeArtists = null,
+            [FromQuery] string? excludeArtists = null,
             [FromQuery] int? fromYear = null,
             [FromQuery] int? toYear = null,
             [FromQuery] string? includeTags = null,
@@ -588,7 +592,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetAlbumTagCountsAsync(tags, artistId, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search);
+                var result = await libraryService.GetAlbumTagCountsAsync(tags, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -602,11 +606,19 @@ namespace SpotifyBasicApi2025.Controllers
         }
 
         [HttpGet("albums/artists")]
-        public async Task<IActionResult> GetAlbumsArtists()
+        public async Task<IActionResult> GetAlbumsArtists(
+            [FromQuery] string? tags = null,
+            [FromQuery] int? fromYear = null,
+            [FromQuery] int? toYear = null,
+            [FromQuery] string? includeTags = null,
+            [FromQuery] string? includeMode = null,
+            [FromQuery] string? excludeTags = null,
+            [FromQuery] string? excludeMode = null,
+            [FromQuery] string? search = null)
         {
             try
             {
-                var result = await libraryService.GetAlbumsArtistsForUserAsync();
+                var result = await libraryService.GetAlbumsArtistsForUserAsync(tags, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, search);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
