@@ -136,6 +136,24 @@ code {
     min-width: 0;
 }
 
+.album-artist-groups {
+    display: grid;
+    gap: 1.75rem;
+}
+
+.album-artist-group {
+    min-width: 0;
+}
+
+.album-artist-group-heading {
+    margin: 0 0 0.8rem;
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid rgba(255,255,255,0.16);
+    color: #e2e8f0;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
 /* Square image container for artist cards */
 .artist-image-square {
     position: relative;
@@ -489,6 +507,18 @@ code {
 .albums-filter-fields { grid-area: filters; }
 .albums-toolbar-actions { grid-area: actions; }
 .albums-playback-actions { grid-area: playback; }
+.album-artist-grouping-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 31px;
+    padding: 0 0.2rem;
+    color: #dbeafe;
+    cursor: pointer;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+.album-artist-grouping-toggle input { accent-color: #0d6efd; }
 
 .albums-tag-filters {
     width: min(100%, 72rem);

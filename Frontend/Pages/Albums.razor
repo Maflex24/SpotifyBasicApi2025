@@ -54,6 +54,13 @@
                 <option value="asc">Rosnąco</option>
                 <option value="desc">Malejąco</option>
             </select>
+            @if (string.Equals(sortKey, "artist", StringComparison.OrdinalIgnoreCase))
+            {
+                <label class="album-artist-grouping-toggle">
+                    <input type="checkbox" @bind="groupByArtist" @bind:after="SaveToStore" />
+                    <span>Grupuj</span>
+                </label>
+            }
             <select class="form-select form-select-sm select-dark albums-artist-select" aria-label="Wykonawca" @bind="selectedArtistId" @bind:after="MarkFiltersDirtyAsync">
                 <option value="">Wszyscy wykonawcy</option>
                 @foreach (var ar in availableAlbumArtists)
@@ -226,71 +233,32 @@
         </section>
     }
 
-    <div class="library-card-grid">
-        @foreach (var a in filteredAlbums)
+    @if (IsArtistGroupingEnabled)
+    {
+        <div class="album-artist-groups">
+        @foreach (var group in GetArtistAlbumGroups())
         {
-            <div class="library-card-grid-item">
-                <div class="card bg-dark text-light h-100">
-                    @if (a.Images?.Any() == true)
+            <section class="album-artist-group" aria-label="Albumy wykonawcy @group.Name">
+                <h5 class="album-artist-group-heading">@group.Name</h5>
+                <div class="library-card-grid">
+                    @foreach (var album in group.Albums)
                     {
-                        <div class="artist-image-square" style="position:relative;">
-                            <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
-                            <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @a.Name"
-                                    @onclick="() => PlayAlbum(a.Uri)"><AppIcon Name="play" /></button>
-                            <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @a.Name"
-                                    disabled="@queuingAlbumIds.Contains(a.Id)" @onclick="() => QueueAlbum(a.Id)"><AppIcon Name="queue" /></button>
-                            <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @a.Name"
-                                    @onclick="() => ConfirmRemoveAlbum(a.Id)"><AppIcon Name="delete" /></button>
-                        </div>
+                        @RenderAlbumCard(album)
                     }
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="card-title mb-1"><a href="/album/@a.Id" class="link-light text-decoration-none">@a.Name</a> @if (a.ReleaseYear.HasValue) { <text> (@a.ReleaseYear)</text> }</h6>
-                            <span class="badge bg-secondary">@a.Popularity</span>
-                        </div>
-
-                        @if (a.Artists?.Any() == true)
-                        {
-                            <div class="mb-2">
-                                <div class="d-flex flex-wrap gap-1 mt-1">
-                                    @foreach (var art in a.Artists)
-                                    {
-                                        <a href="/artist/@art.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@art.Name</a>
-                                    }
-                                </div>
-                            </div>
-                        }
-
-                        @if (a.Tags?.Any() == true)
-                        {
-                            <div class="mb-2">
-                                <small class="text-muted">Tagi:</small>
-                                <div class="d-flex flex-wrap gap-1 mt-1">
-                                    @foreach (var tag in a.Tags.Take(3))
-                                    {
-                                        <span class="badge badge-tag">@tag.TagName (@tag.Strength)</span>
-                                    }
-                                    @if (a.Tags.Count > 3)
-                                    {
-                                        <span class="badge bg-outline-primary text-primary badge-tag">+@(a.Tags.Count - 3)</span>
-                                    }
-                                </div>
-                            </div>
-                        }
-
-                        <div class="mt-2">
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @a.Name" @onclick="() => OpenAlbumTagging(a.Id)">
-                                    <AppIcon Name="tag" /><span>Taguj</span>
-                                </button>
-                                <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@a.TotalTracks</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
-            </div>
+            </section>
         }
-    </div>
+        </div>
+    }
+    else
+    {
+        <div class="library-card-grid">
+            @foreach (var album in filteredAlbums)
+            {
+                @RenderAlbumCard(album)
+            }
+        </div>
+    }
     @if (isLoadingAlbums && filteredAlbums.Count > 0)
     {
         <div class="album-infinite-scroll-status" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Wczytywanie kolejnych albumów...</span></div>
@@ -306,6 +274,7 @@
 
     private string sortKey = "name";
     private string sortOrder = "asc";
+    private bool groupByArtist;
     private string? selectedTagFilter;
     private string? selectedTagSort;
     private string? selectedArtistId;
@@ -885,6 +854,7 @@
             var albumIds = filteredAlbums
                 .Select(album => album.Id)
                 .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
 
             await Http.PostAsJsonAsync("api/player/queue/albums", new { albumIds });
@@ -1110,6 +1080,12 @@
         public List<SimpleArtist> Artists { get; set; } = new();
     }
 
+    private sealed class ArtistAlbumGroup
+    {
+        public string Name { get; set; } = string.Empty;
+        public List<Album> Albums { get; set; } = new();
+    }
+
     private sealed class SpotifyImage
     {
         public string Url { get; set; } = string.Empty;
@@ -1134,6 +1110,61 @@
 
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
 
+    private bool IsArtistGroupingEnabled => groupByArtist && string.Equals(sortKey, "artist", StringComparison.OrdinalIgnoreCase);
+
+    private List<ArtistAlbumGroup> GetArtistAlbumGroups()
+    {
+        var groups = new Dictionary<string, ArtistAlbumGroup>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var album in filteredAlbums)
+        {
+            var artists = (album.Artists ?? new List<SimpleArtist>())
+                .Where(artist => !string.IsNullOrWhiteSpace(artist.Name))
+                .GroupBy(artist => !string.IsNullOrWhiteSpace(artist.Id) ? $"artist:{artist.Id}" : $"name:{artist.Name.Trim()}", StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+
+            if (artists.Count == 0)
+            {
+                AddAlbumToArtistGroup("unknown", "Nieznany wykonawca", album);
+                continue;
+            }
+
+            foreach (var artist in artists)
+            {
+                var key = !string.IsNullOrWhiteSpace(artist.Id) ? $"artist:{artist.Id}" : $"name:{artist.Name.Trim()}";
+                AddAlbumToArtistGroup(key, artist.Name.Trim(), album);
+            }
+        }
+
+        foreach (var group in groups.Values)
+        {
+            group.Albums = group.Albums
+                .GroupBy(album => album.Id, StringComparer.Ordinal)
+                .Select(albumGroup => albumGroup.First())
+                .OrderBy(album => string.IsNullOrWhiteSpace(album.ReleaseDate))
+                .ThenBy(album => album.ReleaseDate, StringComparer.Ordinal)
+                .ThenBy(album => album.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(album => album.Id, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        return string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase)
+            ? groups.Values.OrderByDescending(group => group.Name, StringComparer.CurrentCultureIgnoreCase).ToList()
+            : groups.Values.OrderBy(group => group.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+
+        void AddAlbumToArtistGroup(string key, string name, Album album)
+        {
+            if (!groups.TryGetValue(key, out var group))
+            {
+                group = new ArtistAlbumGroup { Name = name };
+                groups[key] = group;
+            }
+
+            group.Albums.Add(album);
+        }
+    }
+
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
 
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
@@ -1149,6 +1180,7 @@
         {
             sortKey,
             sortOrder,
+            groupByArtist,
             selectedTagFilter,
             selectedTagSort,
             selectedArtistId,
@@ -1176,6 +1208,7 @@
 
         sortKey = state.sortKey ?? sortKey;
         sortOrder = state.sortOrder ?? sortOrder;
+        groupByArtist = state.groupByArtist ?? false;
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
         selectedArtistId = state.selectedArtistId;
@@ -1197,6 +1230,7 @@
     {
         public string? sortKey { get; set; }
         public string? sortOrder { get; set; }
+        public bool? groupByArtist { get; set; }
         public string? selectedTagFilter { get; set; }
         public string? selectedTagSort { get; set; }
         public string? selectedArtistId { get; set; }
@@ -1211,6 +1245,67 @@
         public bool? isRandomSelection { get; set; }
         public string? randomSourceSearch { get; set; }
     }
+
+    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item">
+        <div class="card bg-dark text-light h-100">
+            @if (album.Images?.Any() == true)
+            {
+                <div class="artist-image-square" style="position:relative;">
+                    <img src="@GetBestImageUrl(album.Images)" alt="@album.Name">
+                    <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @album.Name"
+                            @onclick="() => PlayAlbum(album.Uri)"><AppIcon Name="play" /></button>
+                    <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Name"
+                            disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
+                    <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Name"
+                            @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
+                </div>
+            }
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="card-title mb-1"><a href="/album/@album.Id" class="link-light text-decoration-none">@album.Name</a> @if (album.ReleaseYear.HasValue) { <text> (@album.ReleaseYear)</text> }</h6>
+                    <span class="badge bg-secondary">@album.Popularity</span>
+                </div>
+
+                @if (album.Artists?.Any() == true)
+                {
+                    <div class="mb-2">
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            @foreach (var artist in album.Artists)
+                            {
+                                <a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (album.Tags?.Any() == true)
+                {
+                    <div class="mb-2">
+                        <small class="text-muted">Tagi:</small>
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            @foreach (var tag in album.Tags.Take(3))
+                            {
+                                <span class="badge badge-tag">@tag.TagName (@tag.Strength)</span>
+                            }
+                            @if (album.Tags.Count > 3)
+                            {
+                                <span class="badge bg-outline-primary text-primary badge-tag">+@(album.Tags.Count - 3)</span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="mt-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @album.Name" @onclick="() => OpenAlbumTagging(album.Id)">
+                            <AppIcon Name="tag" /><span>Taguj</span>
+                        </button>
+                        <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>;
 
     private string? GetBestImageUrl(List<SpotifyImage> images)
     {
