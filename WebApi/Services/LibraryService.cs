@@ -1356,7 +1356,7 @@ namespace SpotifyBasicApi2025.Services
             if (pageSize <= 0)
                 pageSize = 100;
 
-            pageSize = Math.Min(pageSize, 100);
+            pageSize = Math.Min(pageSize, 500);
             var usesAlbumNamePagingIndex = sortKey == "name"
                 && !sortTagId.HasValue
                 && string.IsNullOrWhiteSpace(tags)

@@ -9,6 +9,7 @@ Porównanie zmian: `2.7.0` → `2.8.0`.
 - Przy sortowaniu albumów według wykonawcy dostępny jest przełącznik **Grupuj**. Dzieli on wyniki na sekcje wykonawców, a albumy w każdej sekcji układa chronologicznie od najstarszego.
 - Album z kilkoma wykonawcami pojawia się w każdej odpowiadającej mu sekcji. Akcja **Odtwórz wszystko** nadal dodaje taki album do kolejki tylko raz.
 - Ustawienie grupowania jest zapamiętywane lokalnie i pozostaje dostępne po ponownym wybraniu sortowania według wykonawcy.
+- Lista albumów pobiera teraz do 500 pozycji w jednej stronie, zanim uruchomi doczytywanie kolejnej strony.
 
 ### Albumy: filtr wykonawców
 
