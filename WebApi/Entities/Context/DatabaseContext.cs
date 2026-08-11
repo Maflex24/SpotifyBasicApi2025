@@ -38,6 +38,7 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         public DbSet<LibTrackUserAssign> LibTrackUserAssigns { get; set; }
         public DbSet<LibSavedFilter> LibSavedFilters { get; set; }
+        public DbSet<LibItemNote> LibItemNotes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -339,6 +340,20 @@ namespace SpotifyBasicApi2025.Entities.Context
             modelBuilder.Entity<LibSavedFilter>()
                 .HasIndex(f => new { f.UserId, f.Scope, f.ContextId, f.Name })
                 .IsUnique();
+
+            modelBuilder.Entity<LibItemNote>()
+                .HasOne(note => note.User)
+                .WithMany()
+                .HasForeignKey(note => note.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<LibItemNote>()
+                .HasIndex(note => new { note.UserId, note.ItemType, note.SpotifyItemId })
+                .IsUnique();
+
+            modelBuilder.Entity<LibItemNote>()
+                .Property(note => note.Content)
+                .HasColumnType("longtext");
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
         }

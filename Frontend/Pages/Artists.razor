@@ -190,6 +190,11 @@
                             <img src="@GetBestImageUrl(a.Images)" alt="@a.Name">
                             <button class="artist-play-overlay" title="Odtwórz top utwory"
                                     @onclick="() => PlayArtistTopTracks(a.Id)">▶</button>
+                            @if (a.IsInLibrary)
+                            {
+                                <button class="artist-queue-overlay artist-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę artysty: @a.Name"
+                                        @onclick="() => OpenArtistNote(a)"><AppIcon Name="edit" /></button>
+                            }
                             <button class="btn btn-sm btn-outline-danger" title="Usuń z biblioteki" style="position:absolute; right:6px; top:6px;"
                                     @onclick="() => ConfirmRemoveArtist(a.Id)">✖</button>
                         </div>
@@ -237,10 +242,19 @@
                                 </div>
                             </div>
                         }
+
+                        @if (!string.IsNullOrWhiteSpace(a.Note))
+                        {
+                            <p class="item-note-preview" title="@a.Note">@a.Note</p>
+                        }
                         
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <button class="btn btn-sm btn-outline-light" disabled="@(!a.IsInLibrary)" @onclick="() => OpenArtistTagging(a.Id)">Taguj</button>
+                                @if (a.IsInLibrary)
+                                {
+                                    <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę artysty: @a.Name" @onclick="() => OpenArtistNote(a)"><AppIcon Name="edit" /><span>Notatka</span></button>
+                                }
                                 @if (!a.IsInLibrary)
                                 {
                                     <button class="btn btn-sm album-card-tag" @onclick="() => AddArtistToLibraryAsync(a.Id)"><AppIcon Name="save" /><span>Dodaj do biblioteki</span></button>
@@ -264,6 +278,16 @@
                   Placeholder="Taguj artystę..."
                   OnChanged="ApplyTaggedArtistState"
                   OnClose="CloseArtistTagging" />
+}
+
+@if (showItemNotePanel && taggingNoteArtistId != null)
+{
+    <ItemNotePanel Title="@ArtistNoteTitle"
+                   ItemType="artist"
+                   SpotifyItemId="@taggingNoteArtistId"
+                   Content="@taggingNoteContent"
+                   OnChanged="ApplyArtistNoteState"
+                   OnClose="CloseArtistNote" />
 }
 
 @code {
@@ -303,6 +327,11 @@
     private Dictionary<string, long?> selectedTagByArtist = new();
     private bool showArtistTagging = false;
     private string? taggingArtistId;
+    private bool showItemNotePanel;
+    private string? taggingNoteArtistId;
+    private string? taggingNoteArtistName;
+    private string? taggingNoteContent;
+    private string ArtistNoteTitle => $"Notatka: {taggingNoteArtistName}";
     private Dictionary<long, int> tagCounts = new();
     private ArtistFilterSnapshot? appliedFilters;
     private bool HasTagCriteria => !string.IsNullOrWhiteSpace(selectedTagFilter) || !string.IsNullOrWhiteSpace(selectedTagSort) || includeTagIds.Count > 0 || excludeTagIds.Count > 0 || sortKey == "weight";
@@ -540,6 +569,40 @@
         taggingArtistId = null;
     }
 
+    private void OpenArtistNote(Artist artist)
+    {
+        if (!artist.IsInLibrary)
+            return;
+
+        taggingNoteArtistId = artist.Id;
+        taggingNoteArtistName = artist.Name;
+        taggingNoteContent = artist.Note;
+        showItemNotePanel = true;
+    }
+
+    private void CloseArtistNote()
+    {
+        showItemNotePanel = false;
+        taggingNoteArtistId = null;
+        taggingNoteArtistName = null;
+        taggingNoteContent = null;
+    }
+
+    private Task ApplyArtistNoteState(ItemNoteState state)
+    {
+        if (!string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
+            return Task.CompletedTask;
+
+        var artist = artists.FirstOrDefault(item => item.Id == state.SpotifyItemId);
+        if (artist == null)
+            return Task.CompletedTask;
+
+        artist.Note = string.IsNullOrWhiteSpace(state.Content) ? null : state.Content;
+        taggingNoteContent = artist.Note;
+        ApplyLocalFilter();
+        return InvokeAsync(StateHasChanged);
+    }
+
     private List<TagBadge> GetArtistTagBadges()
     {
         return artists.FirstOrDefault(artist => artist.Id == taggingArtistId)?.Tags?
@@ -645,6 +708,7 @@
         public List<string> Genres { get; set; } = new();
         public List<SpotifyImage> Images { get; set; } = new();
         public List<ArtistTag> Tags { get; set; } = new();
+        public string? Note { get; set; }
     }
 
     private const string StoreKey = "filters:artists";
@@ -985,6 +1049,9 @@
 
             if (a.Tags != null && a.Tags.Count > 0)
                 parts.Add(string.Join(' ', a.Tags.Select(t => t.TagName)));
+
+            if (!string.IsNullOrWhiteSpace(a.Note))
+                parts.Add(a.Note);
 
             var hay = string.Join(' ', parts).ToLowerInvariant();
 

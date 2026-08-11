@@ -326,9 +326,14 @@
                             <span class="badge badge-tag album-artist-tag">@tag.TagName (@tag.Strength)</span>
                         }
                     </div>
+                    @if (!string.IsNullOrWhiteSpace(group.Note))
+                    {
+                        <p class="item-note-preview album-artist-group-note" title="@group.Note">@group.Note</p>
+                    }
                     @if (!string.IsNullOrWhiteSpace(group.Id))
                     {
                         <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @group.Name" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
+                        <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @group.Name" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
                     }
                 </header>
                 @if (!IsArtistGroupCollapsed(group.Id))
@@ -423,6 +428,12 @@
     private string? taggingAlbumId;
     private bool showArtistTagging;
     private string? taggingArtistId;
+    private bool showItemNotePanel;
+    private string? noteItemType;
+    private string? noteItemId;
+    private string? noteItemName;
+    private string? noteContent;
+    private string ItemNoteTitle => $"Notatka: {noteItemName}";
     private List<TagItem> artistTagItems = new();
     private readonly HashSet<string> collapsedArtistGroupIds = new(StringComparer.Ordinal);
     private Dictionary<long, int> tagCounts = new();
@@ -927,6 +938,45 @@
         taggingArtistId = null;
     }
 
+    private void OpenAlbumNote(Album album) => OpenItemNote("album", album.Id, album.Name, album.Note);
+
+    private void OpenArtistNote(ArtistAlbumGroup artist) => OpenItemNote("artist", artist.Id, artist.Name, artist.Note);
+
+    private void OpenItemNote(string itemType, string itemId, string itemName, string? content)
+    {
+        noteItemType = itemType;
+        noteItemId = itemId;
+        noteItemName = itemName;
+        noteContent = content;
+        showItemNotePanel = true;
+    }
+
+    private void CloseItemNote()
+    {
+        showItemNotePanel = false;
+        noteItemType = null;
+        noteItemId = null;
+        noteItemName = null;
+        noteContent = null;
+    }
+
+    private async Task ApplyItemNoteState(ItemNoteState state)
+    {
+        var content = string.IsNullOrWhiteSpace(state.Content) ? null : state.Content;
+        if (string.Equals(state.ItemType, "album", StringComparison.OrdinalIgnoreCase))
+            albums.Where(album => album.Id == state.SpotifyItemId).ToList().ForEach(album => album.Note = content);
+        else if (string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
+            albums.SelectMany(album => album.Artists).Where(artist => artist.Id == state.SpotifyItemId).ToList().ForEach(artist => artist.Note = content);
+        else
+            return;
+
+        noteContent = content;
+        if (!string.IsNullOrWhiteSpace((appliedFilters ?? CaptureCurrentFilters()).LocalSearch))
+            await ReloadAppliedAlbumsAsync();
+        else
+            await InvokeAsync(StateHasChanged);
+    }
+
     private List<TagBadge> GetArtistTagBadges() => string.IsNullOrWhiteSpace(taggingArtistId)
         ? new List<TagBadge>()
         : albums.SelectMany(album => album.Artists)
@@ -1332,6 +1382,7 @@
         public List<SpotifyImage> Images { get; set; } = new(); 
         public List<AlbumTag> Tags { get; set; } = new();
         public List<SimpleArtist> Artists { get; set; } = new();
+        public string? Note { get; set; }
     }
 
     private sealed class ArtistAlbumGroup
@@ -1340,6 +1391,7 @@
         public string Name { get; set; } = string.Empty;
         public List<string> Genres { get; set; } = new();
         public List<ArtistTag> Tags { get; set; } = new();
+        public string? Note { get; set; }
         public List<Album> Albums { get; set; } = new();
     }
 
@@ -1368,7 +1420,7 @@
     private sealed class GenreFilterGroup { public string Name { get; set; } = string.Empty; public List<string> Genres { get; set; } = new(); }
 
     private sealed class ArtistTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
-    private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public List<string> Genres { get; set; } = new(); public List<ArtistTag> Tags { get; set; } = new(); }
+    private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public List<string> Genres { get; set; } = new(); public List<ArtistTag> Tags { get; set; } = new(); public string? Note { get; set; } }
 
     private bool IsArtistGroupingEnabled => groupByArtist && string.Equals(sortKey, "artist", StringComparison.OrdinalIgnoreCase);
 
@@ -1435,7 +1487,8 @@
                     Id = artist?.Id ?? string.Empty,
                     Name = name,
                     Genres = artist?.Genres?.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>(),
-                    Tags = artist?.Tags?.OrderBy(tag => tag.TagName, StringComparer.OrdinalIgnoreCase).ToList() ?? new List<ArtistTag>()
+                    Tags = artist?.Tags?.OrderBy(tag => tag.TagName, StringComparer.OrdinalIgnoreCase).ToList() ?? new List<ArtistTag>(),
+                    Note = artist?.Note
                 };
                 groups[key] = group;
             }
@@ -1560,6 +1613,8 @@
                             @onclick="() => PlayAlbum(album.Uri)"><AppIcon Name="play" /></button>
                     <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Name"
                             disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
+                    <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Name"
+                            @onclick="() => OpenAlbumNote(album)"><AppIcon Name="edit" /></button>
                     <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Name"
                             @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
                 </div>
@@ -1599,10 +1654,18 @@
                     </div>
                 }
 
+                @if (!string.IsNullOrWhiteSpace(album.Note))
+                {
+                    <p class="item-note-preview" title="@album.Note">@album.Note</p>
+                }
+
                 <div class="mt-2">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @album.Name" @onclick="() => OpenAlbumTagging(album.Id)">
                             <AppIcon Name="tag" /><span>Taguj</span>
+                        </button>
+                        <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Name" @onclick="() => OpenAlbumNote(album)">
+                            <AppIcon Name="edit" /><span>Notatka</span>
                         </button>
                         <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
                     </div>
@@ -2084,4 +2147,14 @@
                   Placeholder="Taguj artystę..."
                   OnChanged="ApplyTaggedArtistState"
                   OnClose="CloseArtistTagging" />
+}
+
+@if (showItemNotePanel && !string.IsNullOrWhiteSpace(noteItemType) && !string.IsNullOrWhiteSpace(noteItemId))
+{
+    <ItemNotePanel Title="@ItemNoteTitle"
+                   ItemType="@noteItemType"
+                   SpotifyItemId="@noteItemId"
+                   Content="@noteContent"
+                   OnChanged="ApplyItemNoteState"
+                   OnClose="CloseItemNote" />
 }

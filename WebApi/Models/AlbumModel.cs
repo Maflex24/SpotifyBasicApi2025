@@ -26,6 +26,8 @@ namespace SpotifyBasicApi2025.Models
 
 		public List<AlbumTagModel> Tags { get; set; } = new List<AlbumTagModel>();
 
+		public string? Note { get; set; }
+
 		public List<SimpleArtist> Artists { get; set; } = new List<SimpleArtist>();
 	}
 
@@ -49,6 +51,8 @@ namespace SpotifyBasicApi2025.Models
 		public List<string> Genres { get; set; } = new();
 
 		public List<ArtistTagModel> Tags { get; set; } = new();
+
+		public string? Note { get; set; }
 	}
 }
 

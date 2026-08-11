@@ -2,8 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 
-using SpotifyBasicApi2025.Entities;
-
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Models.Extensions;
 using System.Text.RegularExpressions;
@@ -145,6 +143,101 @@ namespace SpotifyBasicApi2025.Services
             this.spotifyApiService = spotifyApiService;
         }
 
+        private static string NormalizeNoteItemType(string? itemType)
+        {
+            var normalized = itemType?.Trim().ToLowerInvariant();
+            return normalized is "artist" or "album"
+                ? normalized
+                : throw new ArgumentException("Notatki są obecnie dostępne tylko dla artystów i albumów.");
+        }
+
+        private async Task<bool> IsItemInUserLibraryAsync(string userId, string itemType, string spotifyItemId) => itemType switch
+        {
+            "artist" => await context.LibArtistUserAssigns.AnyAsync(assign => assign.UserId == userId && assign.ArtistId == spotifyItemId),
+            "album" => await context.LibAlbumUserAssigns.AnyAsync(assign => assign.UserId == userId && assign.AlbumId == spotifyItemId),
+            _ => false
+        };
+
+        public async Task<ItemNoteModel?> GetItemNoteAsync(string itemType, string spotifyItemId)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var normalizedType = NormalizeNoteItemType(itemType);
+            if (string.IsNullOrWhiteSpace(spotifyItemId))
+                throw new ArgumentException("Identyfikator elementu jest wymagany.");
+
+            return await context.LibItemNotes
+                .AsNoTracking()
+                .Where(note => note.UserId == userId && note.ItemType == normalizedType && note.SpotifyItemId == spotifyItemId)
+                .Select(note => new ItemNoteModel
+                {
+                    ItemType = note.ItemType,
+                    SpotifyItemId = note.SpotifyItemId,
+                    Content = note.Content,
+                    UpdatedAtUtc = note.UpdatedAtUtc
+                })
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<ItemNoteModel?> SetItemNoteAsync(string itemType, string spotifyItemId, string? content)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var normalizedType = NormalizeNoteItemType(itemType);
+            if (string.IsNullOrWhiteSpace(spotifyItemId))
+                throw new ArgumentException("Identyfikator elementu jest wymagany.");
+
+            if (!await IsItemInUserLibraryAsync(userId, normalizedType, spotifyItemId))
+                throw new InvalidOperationException("Element nie znajduje się w bibliotece użytkownika.");
+
+            var normalizedContent = content?.Trim() ?? string.Empty;
+            var existing = await context.LibItemNotes
+                .FirstOrDefaultAsync(note => note.UserId == userId && note.ItemType == normalizedType && note.SpotifyItemId == spotifyItemId);
+
+            if (string.IsNullOrWhiteSpace(normalizedContent))
+            {
+                if (existing != null)
+                {
+                    context.LibItemNotes.Remove(existing);
+                    await context.SaveChangesAsync();
+                }
+
+                return null;
+            }
+
+            if (existing == null)
+            {
+                existing = new LibItemNote
+                {
+                    UserId = userId,
+                    ItemType = normalizedType,
+                    SpotifyItemId = spotifyItemId,
+                    Content = normalizedContent,
+                    CreatedAtUtc = DateTime.UtcNow,
+                    UpdatedAtUtc = DateTime.UtcNow
+                };
+                context.LibItemNotes.Add(existing);
+            }
+            else
+            {
+                existing.Content = normalizedContent;
+                existing.UpdatedAtUtc = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync();
+            return new ItemNoteModel
+            {
+                ItemType = existing.ItemType,
+                SpotifyItemId = existing.SpotifyItemId,
+                Content = existing.Content,
+                UpdatedAtUtc = existing.UpdatedAtUtc
+            };
+        }
+
         public async Task<object> GetUserArtistsAsync(
             string? sort = null,
             string? order = null,
@@ -251,6 +344,16 @@ namespace SpotifyBasicApi2025.Services
                 ));
             }
 
+            foreach (var term in GetSearchTerms(search))
+            {
+                var termLocal = term;
+                query = query.Where(artist =>
+                    (artist.Name != null && EF.Functions.Like(artist.Name.ToLower(), "%" + termLocal + "%"))
+                    || (artist.Genres != null && EF.Functions.Like(artist.Genres.ToLower(), "%" + termLocal + "%"))
+                    || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%")))
+                    || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "artist" && note.SpotifyItemId == artist.Id && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%")));
+            }
+
             // Sortowanie
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortOrderDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
@@ -293,12 +396,18 @@ namespace SpotifyBasicApi2025.Services
                 .GroupBy(ass => ass.SpotifyItemId)
                 .ToDictionary(g => g.Key, g => g.Select(ass => ass.MapToArtistTagModel(ass.Tag, ass.Tag.TagGroup)).ToList());
 
+            var notesByArtist = await context.LibItemNotes
+                .AsNoTracking()
+                .Where(note => note.UserId == userId && note.ItemType == "artist" && artistIds.Contains(note.SpotifyItemId))
+                .ToDictionaryAsync(note => note.SpotifyItemId, note => note.Content);
+
             // Mapuj artystów do modeli z tagami
             var artistModels = artists.Select(artist =>
             {
                 var tags = tagsByArtist.GetValueOrDefault(artist.Id, new List<ArtistTagModel>());
                 var model = artist.MapToArtistModel(tags);
                 model.IsInLibrary = true;
+                model.Note = notesByArtist.GetValueOrDefault(artist.Id);
                 model.TagStrength = sortTagId.HasValue
                     ? tags.FirstOrDefault(tag => tag.TagId == sortTagId.Value)?.Strength ?? 0f
                     : 0f;
@@ -349,6 +458,7 @@ namespace SpotifyBasicApi2025.Services
                         a.Popularity,
                         a.Genres,
                         a.Images,
+                        a.Note,
                         TagStrength = a.Tags.FirstOrDefault(t => t.TagId == sortTagId.Value)?.Strength ?? 0f,
                         Tags = a.Tags
                     })
@@ -470,7 +580,8 @@ namespace SpotifyBasicApi2025.Services
                     query = query.Where(artist =>
                         (artist.Name != null && EF.Functions.Like(artist.Name.ToLower(), "%" + termLocal + "%"))
                         || (artist.Genres != null && EF.Functions.Like(artist.Genres.ToLower(), "%" + termLocal + "%"))
-                        || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%"))));
+                        || context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && context.LibTags.Any(tag => tag.Id == assign.TagId && EF.Functions.Like(tag.Name.ToLower(), "%" + termLocal + "%")))
+                        || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "artist" && note.SpotifyItemId == artist.Id && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%")));
                 }
             }
 
@@ -1339,10 +1450,11 @@ namespace SpotifyBasicApi2025.Services
                 query = query.Where(album =>
                     (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
                     || EF.Functions.Like(album.Id.ToLower(), "%" + termLocal + "%")
+                    || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "album" && note.SpotifyItemId == album.Id && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%"))
                     || context.SpAlbumArtistAssigns.Any(assign =>
                         assign.AlbumId == album.Id
-                        && assign.Artist.Name != null
-                        && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
+                        && ((assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
+                            || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "artist" && note.SpotifyItemId == assign.ArtistId && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%")))));
             }
 
             if (random)
@@ -1550,6 +1662,21 @@ namespace SpotifyBasicApi2025.Services
                     Strength = ass.Strength
                 }).ToList());
 
+            var notesByAlbum = await context.LibItemNotes
+                .AsNoTracking()
+                .Where(note => note.UserId == userId && note.ItemType == "album" && albumIds.Contains(note.SpotifyItemId))
+                .ToDictionaryAsync(note => note.SpotifyItemId, note => note.Content);
+
+            var artistIds = albums
+                .SelectMany(album => album.Artists)
+                .Select(artist => artist.Id)
+                .Distinct()
+                .ToList();
+            var notesByAlbumArtist = await context.LibItemNotes
+                .AsNoTracking()
+                .Where(note => note.UserId == userId && note.ItemType == "artist" && artistIds.Contains(note.SpotifyItemId))
+                .ToDictionaryAsync(note => note.SpotifyItemId, note => note.Content);
+
             var albumModels = albums.Select(album =>
             {
                 var tagsList = tagsByAlbum.GetValueOrDefault(album.Id, new List<AlbumTagModel>());
@@ -1566,13 +1693,15 @@ namespace SpotifyBasicApi2025.Services
                     Images = ImageMappingExtensions.ParseSpotifyImages(album.Images),
                     CreatedAt = album.CreatedAt,
                     UpdatedAt = album.UpdatedAt,
+                    Note = notesByAlbum.GetValueOrDefault(album.Id),
                     Tags = tagsList,
                     Artists = album.Artists.Select(artist => new SimpleArtist
                     {
                         Id = artist.Id,
                         Name = artist.Name,
                         Genres = ParseGenres(artist.Genres),
-                        Tags = artist.Tags
+                        Tags = artist.Tags,
+                        Note = notesByAlbumArtist.GetValueOrDefault(artist.Id)
                     }).ToList()
                 };
             }).ToList();
@@ -1592,6 +1721,7 @@ namespace SpotifyBasicApi2025.Services
                         a.Popularity,
                         a.Images,
                         a.Artists,
+                        a.Note,
                         TagStrength = a.Tags.FirstOrDefault(t => t.TagId == sortTagId.Value)?.Strength ?? 0f,
                         Tags = a.Tags
                     })
@@ -1660,10 +1790,11 @@ namespace SpotifyBasicApi2025.Services
                 query = query.Where(album =>
                     (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
                     || EF.Functions.Like(album.Id.ToLower(), "%" + termLocal + "%")
+                    || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "album" && note.SpotifyItemId == album.Id && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%"))
                     || context.SpAlbumArtistAssigns.Any(assign =>
                         assign.AlbumId == album.Id
-                        && assign.Artist.Name != null
-                        && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
+                        && ((assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
+                            || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "artist" && note.SpotifyItemId == assign.ArtistId && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%")))));
             }
 
             var albumIds = await query.Select(a => a.Id).ToListAsync();
@@ -1760,10 +1891,11 @@ namespace SpotifyBasicApi2025.Services
                 query = query.Where(album =>
                     (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
                     || EF.Functions.Like(album.Id.ToLower(), "%" + termLocal + "%")
+                    || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "album" && note.SpotifyItemId == album.Id && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%"))
                     || context.SpAlbumArtistAssigns.Any(assign =>
                         assign.AlbumId == album.Id
-                        && assign.Artist.Name != null
-                        && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
+                        && ((assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
+                            || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "artist" && note.SpotifyItemId == assign.ArtistId && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%")))));
             }
 
             var artistInfos = await query
@@ -1828,7 +1960,10 @@ namespace SpotifyBasicApi2025.Services
                 query = query.Where(album =>
                     (album.Name != null && EF.Functions.Like(album.Name.ToLower(), "%" + termLocal + "%"))
                     || EF.Functions.Like(album.Id.ToLower(), "%" + termLocal + "%")
-                    || album.AlbumArtistAssigns.Any(assign => assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%")));
+                    || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "album" && note.SpotifyItemId == album.Id && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%"))
+                    || album.AlbumArtistAssigns.Any(assign =>
+                        (assign.Artist.Name != null && EF.Functions.Like(assign.Artist.Name.ToLower(), "%" + termLocal + "%"))
+                        || context.LibItemNotes.Any(note => note.UserId == userId && note.ItemType == "artist" && note.SpotifyItemId == assign.ArtistId && EF.Functions.Like(note.Content.ToLower(), "%" + termLocal + "%"))));
             }
 
             var rawGenres = await query

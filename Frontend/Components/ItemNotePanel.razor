@@ -1,0 +1,83 @@
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<section class="item-note-panel shadow" aria-label="@Title">
+    <div class="tagging-panel-header">
+        <strong>@Title</strong>
+        <button type="button" class="btn btn-sm btn-outline-light" disabled="@isMutating" title="Zamknij" aria-label="Zamknij" @onclick="OnClose">&times;</button>
+    </div>
+
+    <label class="form-label" for="item-note-content">Prywatna notatka</label>
+    <textarea id="item-note-content" class="form-control item-note-textarea" @bind="content" @bind:event="oninput" disabled="@isMutating" placeholder="Dodaj prywatną notatkę..."></textarea>
+
+    <div class="item-note-panel-actions">
+        <button type="button" class="btn btn-primary" disabled="@isMutating" @onclick="SaveAsync">Zapisz</button>
+        <button type="button" class="btn btn-outline-danger" disabled="@(isMutating || string.IsNullOrWhiteSpace(content))" @onclick="DeleteAsync">Usuń notatkę</button>
+        <button type="button" class="btn btn-outline-light" disabled="@isMutating" @onclick="OnClose">Zamknij</button>
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string ItemType { get; set; } = string.Empty;
+    [Parameter] public string SpotifyItemId { get; set; } = string.Empty;
+    [Parameter] public string? Content { get; set; }
+    [Parameter] public EventCallback<ItemNoteState> OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string content = string.Empty;
+    private string? currentItemKey;
+    private bool isMutating;
+
+    protected override void OnParametersSet()
+    {
+        var itemKey = $"{ItemType}:{SpotifyItemId}";
+        if (string.Equals(currentItemKey, itemKey, StringComparison.Ordinal))
+            return;
+
+        currentItemKey = itemKey;
+        content = Content ?? string.Empty;
+    }
+
+    private Task SaveAsync() => PersistAsync(content);
+
+    private Task DeleteAsync() => PersistAsync(string.Empty);
+
+    private async Task PersistAsync(string value)
+    {
+        if (isMutating || string.IsNullOrWhiteSpace(ItemType) || string.IsNullOrWhiteSpace(SpotifyItemId))
+            return;
+
+        isMutating = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync("api/library/notes", new ItemNoteRequest
+            {
+                ItemType = ItemType,
+                SpotifyItemId = SpotifyItemId,
+                Content = value
+            });
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            var saved = string.IsNullOrWhiteSpace(value)
+                ? new ItemNoteState { ItemType = ItemType, SpotifyItemId = SpotifyItemId, Content = string.Empty }
+                : await response.Content.ReadFromJsonAsync<ItemNoteState>() ?? new ItemNoteState { ItemType = ItemType, SpotifyItemId = SpotifyItemId, Content = value.Trim() };
+
+            content = saved.Content ?? string.Empty;
+            if (OnChanged.HasDelegate)
+                await OnChanged.InvokeAsync(saved);
+        }
+        finally
+        {
+            isMutating = false;
+        }
+    }
+
+    private sealed class ItemNoteRequest
+    {
+        public string ItemType { get; set; } = string.Empty;
+        public string SpotifyItemId { get; set; } = string.Empty;
+        public string? Content { get; set; }
+    }
+}

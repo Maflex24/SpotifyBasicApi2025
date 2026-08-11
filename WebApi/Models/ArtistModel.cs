@@ -31,6 +31,8 @@ namespace SpotifyBasicApi2025.Models
         
         // Tagi przypisane do artysty z ich siłą
         public List<ArtistTagModel> Tags { get; set; } = new List<ArtistTagModel>();
+
+        public string? Note { get; set; }
     }
     
     public class ArtistTagModel

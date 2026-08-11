@@ -32,6 +32,39 @@ namespace SpotifyBasicApi2025.Controllers
 
         public sealed class SaveFilterModel { public string Scope { get; set; } = string.Empty; public string? ContextId { get; set; } public string Name { get; set; } = string.Empty; public string PayloadJson { get; set; } = string.Empty; }
 
+        public sealed class ItemNoteRequest
+        {
+            public string ItemType { get; set; } = string.Empty;
+            public string SpotifyItemId { get; set; } = string.Empty;
+            public string? Content { get; set; }
+        }
+
+        [HttpGet("notes/{itemType}/{spotifyItemId}")]
+        public async Task<IActionResult> GetItemNote(string itemType, string spotifyItemId)
+        {
+            try
+            {
+                var note = await libraryService.GetItemNoteAsync(itemType, spotifyItemId);
+                return note == null ? NotFound() : Ok(note);
+            }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (InvalidOperationException ex) { return Unauthorized(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
+        }
+
+        [HttpPut("notes")]
+        public async Task<IActionResult> SetItemNote([FromBody] ItemNoteRequest request)
+        {
+            try
+            {
+                var note = await libraryService.SetItemNoteAsync(request.ItemType, request.SpotifyItemId, request.Content);
+                return Ok(note);
+            }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
+        }
+
         [HttpPost("filters")] // POST api/library/filters
         public async Task<IActionResult> CreateSavedFilter([FromBody] SaveFilterModel model)
         {

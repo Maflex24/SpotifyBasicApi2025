@@ -189,6 +189,11 @@ code {
     font-size: 0.78rem;
 }
 
+.album-artist-group-note {
+    flex: 1 0 100%;
+    margin-top: -0.15rem;
+}
+
 .album-artist-genre {
     font-size: 0.95rem;
 }
@@ -249,6 +254,10 @@ code {
 
 .artist-image-square .artist-queue-overlay {
     right: 4.2rem;
+}
+
+.artist-image-square .artist-card-note {
+    right: 7.8rem;
 }
 
 .artist-image-square .artist-queue-overlay:hover:not(:disabled) {
@@ -934,19 +943,22 @@ code {
     border-color: rgba(13,110,253,0.6);
 }
 
-.artist-image-square .album-card-queue {
+.artist-image-square .album-card-queue,
+.artist-image-square .album-card-note {
     width: 2.7rem;
     height: 2.7rem;
     right: 4.5rem;
 }
 
-.artist-image-square .album-card-queue .app-icon {
+.artist-image-square .album-card-queue .app-icon,
+.artist-image-square .album-card-note .app-icon {
     width: 1.1rem;
     height: 1.1rem;
 }
 
 .artist-image-square .album-card-play,
-.artist-image-square .album-card-queue {
+.artist-image-square .album-card-queue,
+.artist-image-square .album-card-note {
     color: #fff;
     background: rgba(38, 43, 50, 0.78);
     border-color: rgba(255,255,255,0.84);
@@ -955,7 +967,8 @@ code {
 }
 
 .artist-image-square .album-card-play .app-icon,
-.artist-image-square .album-card-queue .app-icon {
+.artist-image-square .album-card-queue .app-icon,
+.artist-image-square .album-card-note .app-icon {
     filter: drop-shadow(0 1px 1px rgba(0,0,0,0.72));
 }
 
@@ -1559,6 +1572,54 @@ code {
 .tagging-panel-header-actions,
 .tagging-assignment-actions {
     gap: 0.35rem;
+}
+
+.artist-image-square .album-card-note {
+    right: 7.55rem;
+}
+
+.item-note-panel {
+    position: fixed;
+    left: 50%;
+    bottom: 64px;
+    z-index: 2000;
+    width: min(52rem, calc(100vw - 1rem));
+    padding: 1rem;
+    color: #f8fafc;
+    background: #101319;
+    border: 1px solid #3d4654;
+    border-radius: 0.75rem;
+    transform: translateX(-50%);
+}
+
+@media (min-width: 641px) {
+    .item-note-panel {
+        left: calc(50% + 125px);
+        width: min(52rem, calc(100vw - 250px - 5rem));
+    }
+}
+
+.item-note-textarea {
+    min-height: 13rem;
+    resize: vertical;
+}
+
+.item-note-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.item-note-preview {
+    display: -webkit-box;
+    margin: 0.65rem 0 0;
+    overflow: hidden;
+    color: #b8c2d1;
+    font-size: 0.86rem;
+    white-space: pre-wrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 .tagging-assignment-actions {
