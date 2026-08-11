@@ -141,6 +141,54 @@ code {
     gap: 1.75rem;
 }
 
+.album-artist-navigation {
+    position: fixed;
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: calc(56px + max(0.85rem, env(safe-area-inset-bottom)));
+    z-index: 1040;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.album-artist-navigation-button {
+    display: grid;
+    width: 2.9rem;
+    height: 2.9rem;
+    place-items: center;
+    padding: 0;
+    color: #f8fafc;
+    background: rgba(30, 41, 59, 0.94);
+    border: 1px solid rgba(226, 232, 240, 0.74);
+    border-radius: 999px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
+    font-size: 1.45rem;
+    font-weight: 700;
+    line-height: 1;
+    transition: transform 120ms ease, background 120ms ease, opacity 120ms ease;
+}
+
+.album-artist-navigation-button:hover:not(:disabled) {
+    background: rgba(37, 99, 235, 0.92);
+    transform: translateY(-1px);
+}
+
+.album-artist-navigation-button:focus-visible {
+    outline: 3px solid #93c5fd;
+    outline-offset: 3px;
+}
+
+.album-artist-navigation-button:disabled {
+    cursor: default;
+    opacity: 0.38;
+}
+
+@media (max-width: 640px) {
+    .album-artist-navigation {
+        right: max(0.7rem, env(safe-area-inset-right));
+        bottom: calc(56px + max(0.7rem, env(safe-area-inset-bottom)));
+    }
+}
+
 .album-artist-group {
     min-width: 0;
 }

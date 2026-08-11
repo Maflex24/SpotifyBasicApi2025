@@ -304,12 +304,16 @@
         </section>
     }
 
+    @{
+        var artistAlbumGroups = IsArtistGroupingEnabled ? GetArtistAlbumGroups() : new List<ArtistAlbumGroup>();
+    }
+
     @if (IsArtistGroupingEnabled)
     {
         <div class="album-artist-groups">
-        @foreach (var group in GetArtistAlbumGroups())
+        @foreach (var group in artistAlbumGroups)
         {
-            <section class="album-artist-group" aria-label="Albumy wykonawcy @group.Name">
+            <section class="album-artist-group" data-artist-group-id="@group.Id" aria-label="Albumy wykonawcy @group.Name">
                 <header class="album-artist-group-heading">
                     <button type="button" class="album-artist-group-toggle" aria-expanded="@(!IsArtistGroupCollapsed(group.Id))" @onclick="() => ToggleArtistGroupAsync(group.Id)">
                         <span aria-hidden="true">@(IsArtistGroupCollapsed(group.Id) ? "▶" : "▼")</span>
@@ -367,6 +371,20 @@
     <div class="album-infinite-scroll-sentinel" @ref="albumsSentinel" aria-hidden="true"></div>
 </div>
 
+@if (artistAlbumGroups.Count > 1)
+{
+    <nav class="album-artist-navigation" aria-label="Nawigacja między wykonawcami">
+        <button type="button" class="album-artist-navigation-button" title="Poprzedni wykonawca" aria-label="Poprzedni wykonawca"
+                disabled="@(!canNavigateToPreviousArtist)" @onclick="() => NavigateArtistGroupAsync(-1)">
+            <span aria-hidden="true">↑</span>
+        </button>
+        <button type="button" class="album-artist-navigation-button" title="Następny wykonawca" aria-label="Następny wykonawca"
+                disabled="@(!canNavigateToNextArtist)" @onclick="() => NavigateArtistGroupAsync(1)">
+            <span aria-hidden="true">↓</span>
+        </button>
+    </nav>
+}
+
 @code {
     private List<SavedFilterItem> savedFilters = new();
     private string? selectedSavedFilterId;
@@ -418,6 +436,9 @@
     private ElementReference controlsSentinel;
     private ElementReference albumsSentinel;
     private DotNetObjectReference<Albums>? controlsObserverRef;
+    private bool artistNavigationObserved;
+    private bool canNavigateToPreviousArtist;
+    private bool canNavigateToNextArtist;
     private bool controlsPastAnchor;
     private bool controlsManuallyCollapsed;
     private bool ControlsCollapsed => controlsPastAnchor && controlsManuallyCollapsed;
@@ -452,12 +473,33 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
-            return;
+        if (firstRender)
+        {
+            controlsObserverRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("libraryControls.observe", controlsSentinel, controlsObserverRef);
+            await JS.InvokeVoidAsync("infiniteScroll.observeWindow", albumsSentinel, controlsObserverRef);
+        }
 
-        controlsObserverRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("libraryControls.observe", controlsSentinel, controlsObserverRef);
-        await JS.InvokeVoidAsync("infiniteScroll.observeWindow", albumsSentinel, controlsObserverRef);
+        var shouldObserveArtistNavigation = IsArtistGroupingEnabled && GetArtistAlbumGroups().Count > 1;
+        if (shouldObserveArtistNavigation && controlsObserverRef != null)
+        {
+            if (!artistNavigationObserved)
+            {
+                await JS.InvokeVoidAsync("albumsArtistNavigation.observe", controlsObserverRef);
+                artistNavigationObserved = true;
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("albumsArtistNavigation.refresh");
+            }
+        }
+        else if (artistNavigationObserved)
+        {
+            await JS.InvokeVoidAsync("albumsArtistNavigation.disconnect");
+            artistNavigationObserved = false;
+            canNavigateToPreviousArtist = false;
+            canNavigateToNextArtist = false;
+        }
     }
 
     [JSInvokable]
@@ -474,6 +516,25 @@
         return InvokeAsync(StateHasChanged);
     }
 
+    [JSInvokable]
+    public Task SetArtistNavigationState(bool canNavigatePrevious, bool canNavigateNext)
+    {
+        if (canNavigateToPreviousArtist == canNavigatePrevious && canNavigateToNextArtist == canNavigateNext)
+            return Task.CompletedTask;
+
+        canNavigateToPreviousArtist = canNavigatePrevious;
+        canNavigateToNextArtist = canNavigateNext;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task NavigateArtistGroupAsync(int direction)
+    {
+        if ((direction < 0 && !canNavigateToPreviousArtist) || (direction > 0 && !canNavigateToNextArtist))
+            return;
+
+        await JS.InvokeVoidAsync("albumsArtistNavigation.move", direction);
+    }
+
     private void ToggleControlsVisibility()
     {
         controlsManuallyCollapsed = !ControlsCollapsed;
@@ -485,6 +546,7 @@
         {
             await JS.InvokeVoidAsync("libraryControls.disconnect");
             await JS.InvokeVoidAsync("infiniteScroll.disconnect");
+            await JS.InvokeVoidAsync("albumsArtistNavigation.disconnect");
         }
         catch (JSDisconnectedException)
         {
