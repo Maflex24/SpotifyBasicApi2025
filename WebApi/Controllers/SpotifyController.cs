@@ -53,6 +53,22 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        [HttpGet("artists/{artistId}/related")]
+        public async Task<ActionResult<object>> GetRelatedArtists([FromRoute] string artistId)
+        {
+            return Ok(await _spotifyApiService.GetRelatedArtistsAsync(artistId));
+        }
+
+        [HttpGet("artists/catalog-search")]
+        public async Task<ActionResult<object>> SearchArtistsCatalog([FromQuery] string q, [FromQuery] int limit = 20)
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return BadRequest("Parametr 'q' jest wymagany.");
+
+            var artists = await _spotifyApiService.SearchArtistsAsync(q, limit);
+            return Ok(artists);
+        }
+
         [HttpGet("artists/followed")]
         public async Task<ActionResult<object>> GetFollowedArtists([FromQuery] int limit = 50)
         {

@@ -1640,6 +1640,119 @@ code {
     transform: translateX(-50%);
 }
 
+.related-artists-panel {
+    position: fixed;
+    left: 50%;
+    bottom: 64px;
+    z-index: 2000;
+    width: min(58rem, calc(100vw - 1rem));
+    max-height: min(70dvh, 46rem);
+    overflow: hidden;
+    padding: 1rem;
+    color: #f8fafc;
+    background: #101319;
+    border: 1px solid #3d4654;
+    border-radius: 0.75rem;
+    transform: translateX(-50%);
+}
+
+@media (min-width: 641px) {
+    .related-artists-panel {
+        left: calc(50% + 125px);
+        width: min(58rem, calc(100vw - 250px - 5rem));
+    }
+}
+
+.related-artists-panel-subtitle {
+    margin-top: 0.2rem;
+    color: #aeb7c4;
+    font-size: 0.8rem;
+    font-weight: 400;
+}
+
+.related-artists-error {
+    margin-bottom: 0.75rem;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.85rem;
+}
+
+.related-artists-search,
+.related-artists-bulk-actions,
+.related-artist-item,
+.related-artists-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.related-artists-search {
+    margin-bottom: 0.75rem;
+}
+
+.related-artists-search .form-control {
+    min-width: 0;
+}
+
+.related-artists-bulk-actions {
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.related-artists-list {
+    display: grid;
+    gap: 0.45rem;
+    max-height: min(45dvh, 30rem);
+    overflow-y: auto;
+    padding-right: 0.2rem;
+}
+
+.related-artist-item {
+    align-items: flex-start;
+    min-height: 3.5rem;
+    padding: 0.55rem 0.65rem;
+    background: rgba(31, 37, 47, 0.82);
+    border: 1px solid #3b4555;
+    border-radius: 0.55rem;
+}
+
+.related-artist-checkbox {
+    padding-top: 0.2rem;
+}
+
+.related-artist-details {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.related-artist-name {
+    font-weight: 600;
+}
+
+.related-artist-meta,
+.related-artist-result {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+    color: #aeb7c4;
+    font-size: 0.78rem;
+}
+
+.related-artist-result {
+    color: #86efac;
+}
+
+.related-artist-result.is-warning {
+    color: #fcd34d;
+}
+
+.related-artists-loading {
+    justify-content: center;
+    min-height: 8rem;
+    color: #cbd5e1;
+}
+
 @media (min-width: 641px) {
     .item-note-panel {
         left: calc(50% + 125px);

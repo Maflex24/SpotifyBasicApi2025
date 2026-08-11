@@ -338,6 +338,7 @@
                     {
                         <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @group.Name" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @group.Name" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
+                        <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @group.Name" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
                     }
                 </header>
                 @if (!IsArtistGroupCollapsed(group.Id))
@@ -455,6 +456,17 @@
     private string? noteItemName;
     private string? noteContent;
     private string ItemNoteTitle => $"Notatka: {noteItemName}";
+    private bool showRelatedArtistsPanel;
+    private bool isLoadingRelatedArtists;
+    private bool isAddingRelatedArtists;
+    private string? relatedSourceArtistId;
+    private string? relatedSourceArtistName;
+    private string? relatedArtistError;
+    private string? relatedArtistSearch;
+    private List<RelatedArtist> relatedArtists = new();
+    private readonly HashSet<string> selectedRelatedArtistIds = new(StringComparer.Ordinal);
+    private Dictionary<string, ArtistDiscoveryResult> relatedArtistResults = new(StringComparer.Ordinal);
+    private string RelatedArtistsTitle => $"Fani lubią też: {relatedSourceArtistName}";
     private List<TagItem> artistTagItems = new();
     private readonly HashSet<string> collapsedArtistGroupIds = new(StringComparer.Ordinal);
     private Dictionary<long, int> tagCounts = new();
@@ -1039,6 +1051,171 @@
             await InvokeAsync(StateHasChanged);
     }
 
+    private async Task OpenRelatedArtistsAsync(ArtistAlbumGroup artist)
+    {
+        if (string.IsNullOrWhiteSpace(artist.Id))
+            return;
+
+        relatedSourceArtistId = artist.Id;
+        relatedSourceArtistName = artist.Name;
+        relatedArtistError = null;
+        relatedArtistSearch = null;
+        relatedArtists = new List<RelatedArtist>();
+        selectedRelatedArtistIds.Clear();
+        relatedArtistResults = new Dictionary<string, ArtistDiscoveryResult>(StringComparer.Ordinal);
+        showRelatedArtistsPanel = true;
+        isLoadingRelatedArtists = true;
+
+        try
+        {
+            var response = await Http.GetAsync($"api/spotify/artists/{Uri.EscapeDataString(artist.Id)}/related");
+            if (!response.IsSuccessStatusCode)
+            {
+                relatedArtistError = "Spotify nie udostępnił listy podobnych wykonawców. Możesz wyszukać ich w katalogu poniżej.";
+                return;
+            }
+
+            var lookup = await response.Content.ReadFromJsonAsync<RelatedArtistLookup>() ?? new RelatedArtistLookup();
+            relatedArtists = lookup.Artists;
+            relatedArtistError = lookup.Notice;
+            if (relatedArtists.Count == 0)
+            {
+                relatedArtistError ??= "Spotify nie zwrócił podobnych wykonawców. Możesz wyszukać ich w katalogu poniżej.";
+                return;
+            }
+
+            await RefreshRelatedArtistLibraryStatesAsync();
+        }
+        finally
+        {
+            isLoadingRelatedArtists = false;
+        }
+    }
+
+    private void CloseRelatedArtists()
+    {
+        showRelatedArtistsPanel = false;
+        relatedSourceArtistId = null;
+        relatedSourceArtistName = null;
+        relatedArtistError = null;
+        relatedArtistSearch = null;
+        relatedArtists = new List<RelatedArtist>();
+        selectedRelatedArtistIds.Clear();
+        relatedArtistResults = new Dictionary<string, ArtistDiscoveryResult>(StringComparer.Ordinal);
+    }
+
+    private async Task SearchRelatedArtistsFallbackAsync()
+    {
+        if (string.IsNullOrWhiteSpace(relatedArtistSearch))
+            return;
+
+        isLoadingRelatedArtists = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/spotify/artists/catalog-search?q={Uri.EscapeDataString(relatedArtistSearch)}&limit=20");
+            if (!response.IsSuccessStatusCode)
+            {
+                relatedArtistError = "Nie udało się wyszukać wykonawców w katalogu Spotify.";
+                return;
+            }
+
+            relatedArtists = await response.Content.ReadFromJsonAsync<List<RelatedArtist>>() ?? new List<RelatedArtist>();
+            selectedRelatedArtistIds.Clear();
+            relatedArtistResults = new Dictionary<string, ArtistDiscoveryResult>(StringComparer.Ordinal);
+            relatedArtistError = relatedArtists.Count == 0 ? "Nie znaleziono wykonawców." : null;
+            await RefreshRelatedArtistLibraryStatesAsync();
+        }
+        finally
+        {
+            isLoadingRelatedArtists = false;
+        }
+    }
+
+    private async Task RefreshRelatedArtistLibraryStatesAsync()
+    {
+        if (relatedArtists.Count == 0)
+            return;
+
+        var response = await Http.PostAsJsonAsync("api/library/items/status", new ItemStatusesRequest
+        {
+            ItemType = "artist",
+            SpotifyItemIds = relatedArtists.Select(artist => artist.Id).ToList()
+        });
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        var states = await response.Content.ReadFromJsonAsync<List<LibraryItemStatus>>() ?? new List<LibraryItemStatus>();
+        var inLibrary = states.ToDictionary(state => state.SpotifyItemId, state => state.IsInLibrary, StringComparer.Ordinal);
+        foreach (var artist in relatedArtists)
+            artist.IsInLibrary = inLibrary.TryGetValue(artist.Id, out var value) && value;
+    }
+
+    private void ToggleRelatedArtistSelection(string artistId)
+    {
+        if (!selectedRelatedArtistIds.Add(artistId))
+            selectedRelatedArtistIds.Remove(artistId);
+    }
+
+    private void SelectAllRelatedArtists()
+    {
+        selectedRelatedArtistIds.Clear();
+        selectedRelatedArtistIds.UnionWith(relatedArtists.Select(artist => artist.Id));
+    }
+
+    private void ClearRelatedArtistSelection() => selectedRelatedArtistIds.Clear();
+
+    private Task AddSingleRelatedArtistAsync(string artistId) => AddRelatedArtistsAsync(new[] { artistId });
+
+    private Task AddSelectedRelatedArtistsAsync() => AddRelatedArtistsAsync(selectedRelatedArtistIds);
+
+    private async Task AddRelatedArtistsAsync(IEnumerable<string> artistIds)
+    {
+        var ids = artistIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Take(20).ToList();
+        if (ids.Count == 0 || isAddingRelatedArtists)
+            return;
+
+        isAddingRelatedArtists = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/library/artists/discovery-add", new ArtistDiscoveryRequest { ArtistIds = ids });
+            if (!response.IsSuccessStatusCode)
+            {
+                relatedArtistError = "Nie udało się dodać wybranych wykonawców do biblioteki.";
+                return;
+            }
+
+            var results = await response.Content.ReadFromJsonAsync<List<ArtistDiscoveryResult>>() ?? new List<ArtistDiscoveryResult>();
+            foreach (var result in results)
+                relatedArtistResults[result.ArtistId] = result;
+
+            var importedArtistIds = results.Where(result => result.AddedToLibrary).Select(result => result.ArtistId).ToList();
+            if (importedArtistIds.Count == 0)
+                return;
+
+            foreach (var artistId in importedArtistIds)
+            {
+                includeArtistIds.Add(artistId);
+                excludeArtistIds.Remove(artistId);
+                selectedRelatedArtistIds.Remove(artistId);
+                var artist = relatedArtists.FirstOrDefault(item => item.Id == artistId);
+                if (artist != null)
+                    artist.IsInLibrary = true;
+            }
+
+            await ApplyFiltersAsync();
+        }
+        finally
+        {
+            isAddingRelatedArtists = false;
+        }
+    }
+
+    private static string GetRelatedArtistResultText(ArtistDiscoveryResult result)
+    {
+        var summary = $"Dodano albumy: {result.AlbumsAdded}; już w bibliotece: {result.AlbumsAlreadyInLibrary}.";
+        return string.IsNullOrWhiteSpace(result.Error) ? summary : $"{summary} {result.Error}";
+    }
+
     private List<TagBadge> GetArtistTagBadges() => string.IsNullOrWhiteSpace(taggingArtistId)
         ? new List<TagBadge>()
         : albums.SelectMany(album => album.Artists)
@@ -1471,6 +1648,33 @@
         public string TagGroupName { get; set; } = string.Empty;
         public float Strength { get; set; }
     }
+
+    private sealed class RelatedArtist
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int Popularity { get; set; }
+        public List<string> Genres { get; set; } = new();
+        public bool IsInLibrary { get; set; }
+    }
+    private sealed class RelatedArtistLookup
+    {
+        public List<RelatedArtist> Artists { get; set; } = new();
+        public bool IsGenreFallback { get; set; }
+        public string? Notice { get; set; }
+    }
+    private sealed class ArtistDiscoveryRequest { public List<string> ArtistIds { get; set; } = new(); }
+    private sealed class ArtistDiscoveryResult
+    {
+        public string ArtistId { get; set; } = string.Empty;
+        public bool AddedToLibrary { get; set; }
+        public int AlbumsAdded { get; set; }
+        public int AlbumsAlreadyInLibrary { get; set; }
+        public int AlbumsFailed { get; set; }
+        public string? Error { get; set; }
+    }
+    private sealed class ItemStatusesRequest { public string ItemType { get; set; } = string.Empty; public List<string> SpotifyItemIds { get; set; } = new(); }
+    private sealed class LibraryItemStatus { public string SpotifyItemId { get; set; } = string.Empty; public bool IsInLibrary { get; set; } }
 
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
@@ -2209,6 +2413,77 @@
                   Placeholder="Taguj artystę..."
                   OnChanged="ApplyTaggedArtistState"
                   OnClose="CloseArtistTagging" />
+}
+
+@if (showRelatedArtistsPanel)
+{
+    <section class="related-artists-panel shadow" aria-label="@RelatedArtistsTitle">
+        <div class="tagging-panel-header">
+            <div>
+                <strong>@RelatedArtistsTitle</strong>
+                <div class="related-artists-panel-subtitle">Dodaj do biblioteki albumy studyjne i bieżącego filtra wykonawców.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-light" disabled="@isAddingRelatedArtists" title="Zamknij" aria-label="Zamknij" @onclick="CloseRelatedArtists">&times;</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(relatedArtistError))
+        {
+            <div class="alert alert-warning related-artists-error" role="status">@relatedArtistError</div>
+        }
+
+        <div class="related-artists-search">
+            <input class="form-control" placeholder="Wyszukaj wykonawcę w katalogu Spotify..." @bind="relatedArtistSearch" @bind:event="oninput" disabled="@isLoadingRelatedArtists" />
+            <button type="button" class="btn btn-outline-light" disabled="@(isLoadingRelatedArtists || string.IsNullOrWhiteSpace(relatedArtistSearch))" @onclick="SearchRelatedArtistsFallbackAsync">Szukaj</button>
+        </div>
+
+        @if (isLoadingRelatedArtists)
+        {
+            <div class="related-artists-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Wczytywanie wykonawców...</span></div>
+        }
+        else if (relatedArtists.Count > 0)
+        {
+            <div class="related-artists-bulk-actions">
+                <button type="button" class="btn btn-sm btn-outline-light" disabled="@isAddingRelatedArtists" @onclick="SelectAllRelatedArtists">Zaznacz wszystkie</button>
+                <button type="button" class="btn btn-sm btn-outline-light" disabled="@(isAddingRelatedArtists || selectedRelatedArtistIds.Count == 0)" @onclick="ClearRelatedArtistSelection">Wyczyść wybór</button>
+                <button type="button" class="btn btn-sm btn-primary" disabled="@(isAddingRelatedArtists || selectedRelatedArtistIds.Count == 0)" @onclick="AddSelectedRelatedArtistsAsync">Dodaj wybranych (@selectedRelatedArtistIds.Count)</button>
+            </div>
+
+            <div class="related-artists-list">
+                @foreach (var artist in relatedArtists)
+                {
+                    var isSelected = selectedRelatedArtistIds.Contains(artist.Id);
+                    <article class="related-artist-item">
+                        <label class="related-artist-checkbox">
+                            <input type="checkbox" checked="@isSelected" disabled="@isAddingRelatedArtists" @onchange="() => ToggleRelatedArtistSelection(artist.Id)" />
+                            <span class="visually-hidden">Zaznacz @artist.Name</span>
+                        </label>
+                        <div class="related-artist-details">
+                            <a href="/artist/@artist.Id" class="link-light text-decoration-none related-artist-name">@artist.Name</a>
+                            <div class="related-artist-meta">
+                                @if (artist.IsInLibrary)
+                                {
+                                    <span class="badge bg-outline-primary text-primary">W bibliotece</span>
+                                }
+                                @if (artist.Genres.Count > 0)
+                                {
+                                    <span>@string.Join(", ", artist.Genres.Take(3))</span>
+                                }
+                            </div>
+                            @if (relatedArtistResults.TryGetValue(artist.Id, out var result))
+                            {
+                                <div class="related-artist-result @(string.IsNullOrWhiteSpace(result.Error) ? string.Empty : "is-warning")">
+                                    @GetRelatedArtistResultText(result)
+                                </div>
+                            }
+                        </div>
+                        <button type="button" class="btn btn-sm album-card-tag" disabled="@isAddingRelatedArtists" @onclick="() => AddSingleRelatedArtistAsync(artist.Id)">
+                            <AppIcon Name="save" /><span>Dodaj</span>
+                        </button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
 }
 
 @if (showItemNotePanel && !string.IsNullOrWhiteSpace(noteItemType) && !string.IsNullOrWhiteSpace(noteItemId))

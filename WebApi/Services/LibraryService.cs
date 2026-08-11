@@ -685,6 +685,79 @@ namespace SpotifyBasicApi2025.Services
             }
         }
 
+        public async Task<List<ArtistDiscoveryImportResult>> AddArtistsForAlbumDiscoveryAsync(IEnumerable<string>? artistIds)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var ids = (artistIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (ids.Count == 0)
+                throw new ArgumentException("Wybierz co najmniej jednego wykonawcę.");
+            if (ids.Count > 20)
+                throw new ArgumentException("Jednorazowo można dodać maksymalnie 20 wykonawców.");
+
+            var results = new List<ArtistDiscoveryImportResult>();
+            foreach (var artistId in ids)
+            {
+                var result = new ArtistDiscoveryImportResult { ArtistId = artistId };
+                try
+                {
+                    result.AddedToLibrary = await AddArtistToLibraryAsync(artistId);
+                    if (!result.AddedToLibrary)
+                    {
+                        result.Error = "Nie udało się dodać wykonawcy do biblioteki Spotify.";
+                        results.Add(result);
+                        continue;
+                    }
+
+                    var albumIds = (await spotifyApiService.GetArtistAlbumsAsync(artistId, includeGroups: "album"))
+                        .Select(album => album.Id)
+                        .Where(albumId => !string.IsNullOrWhiteSpace(albumId))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList();
+
+                    var existingAlbumIds = (await context.LibAlbumUserAssigns
+                        .Where(assign => assign.UserId == userId && albumIds.Contains(assign.AlbumId))
+                        .Select(assign => assign.AlbumId)
+                        .ToListAsync())
+                        .ToHashSet(StringComparer.Ordinal);
+
+                    result.AlbumsAlreadyInLibrary = existingAlbumIds.Count;
+                    foreach (var albumId in albumIds.Where(albumId => !existingAlbumIds.Contains(albumId)))
+                    {
+                        try
+                        {
+                            if (await AddAlbumSynchronouslyAsync(albumId))
+                                result.AlbumsAdded++;
+                            else
+                                result.AlbumsFailed++;
+                        }
+                        catch
+                        {
+                            result.AlbumsFailed++;
+                        }
+                    }
+
+                    if (result.AlbumsFailed > 0)
+                        result.Error = $"Nie udało się dodać {result.AlbumsFailed} albumów.";
+                }
+                catch (Exception ex)
+                {
+                    result.Error = ex.Message;
+                }
+
+                results.Add(result);
+            }
+
+            return results;
+        }
+
         private static List<long> ParseTagIds(string? value) => string.IsNullOrWhiteSpace(value)
             ? new List<long>()
             : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

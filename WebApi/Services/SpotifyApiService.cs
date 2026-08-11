@@ -47,6 +47,86 @@ namespace SpotifyBasicApi2025.Services
             return model;
         }
 
+        public async Task<RelatedArtistsLookupResult> GetRelatedArtistsAsync(string artistId)
+        {
+            try
+            {
+                var response = await requestService.MakeSpotifyRequestAsync($"artists/{Uri.EscapeDataString(artistId)}/related-artists");
+                if (response != null)
+                {
+                    var result = JsonSerializer.Deserialize<RelatedArtistsResponse>(response.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (result?.Artists.Count > 0)
+                    {
+                        return new RelatedArtistsLookupResult
+                        {
+                            Artists = result.Artists
+                        };
+                    }
+                }
+            }
+            catch
+            {
+                // Spotify oznacza ten endpoint jako deprecated i dla części aplikacji
+                // przestaje go udostępniać. Niżej próbujemy bezpiecznego fallbacku.
+            }
+
+            var fallbackArtists = await FindArtistsBySharedGenresAsync(artistId);
+            return new RelatedArtistsLookupResult
+            {
+                Artists = fallbackArtists,
+                IsGenreFallback = true,
+                Notice = fallbackArtists.Count > 0
+                    ? "Spotify nie udostępniło listy „Fani lubią też”. Pokazujemy wykonawców z tych samych gatunków."
+                    : "Spotify nie udostępniło listy „Fani lubią też”. Użyj wyszukiwarki katalogu poniżej."
+            };
+        }
+
+        private async Task<List<SpotifyArtistObject>> FindArtistsBySharedGenresAsync(string artistId)
+        {
+            var storedGenres = await context.SpArtists
+                .AsNoTracking()
+                .Where(artist => artist.Id == artistId)
+                .Select(artist => artist.Genres)
+                .FirstOrDefaultAsync();
+
+            var genres = string.IsNullOrWhiteSpace(storedGenres)
+                ? new List<string>()
+                : storedGenres.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+            if (genres.Count == 0)
+            {
+                try
+                {
+                    genres = (await GetArtist(artistId))?.Genres ?? new List<string>();
+                }
+                catch
+                {
+                    return new List<SpotifyArtistObject>();
+                }
+            }
+
+            var candidates = new List<SpotifyArtistObject>();
+            foreach (var genre in genres.Where(genre => !string.IsNullOrWhiteSpace(genre)).Distinct(StringComparer.OrdinalIgnoreCase).Take(3))
+            {
+                try
+                {
+                    var matches = await SearchArtistsAsync($"genre:\"{genre}\"", 20);
+                    candidates.AddRange(matches);
+                }
+                catch
+                {
+                    // Jeden gatunek może nie być wspierany w wyszukiwarce Spotify.
+                }
+            }
+
+            return candidates
+                .Where(artist => !string.Equals(artist.Id, artistId, StringComparison.Ordinal))
+                .GroupBy(artist => artist.Id, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .Take(20)
+                .ToList();
+        }
+
         public async Task<SpArtist> SaveOrUpdateArtistAsync(SpotifyArtistObject model)
         {
             var artist = context.SpArtists.FirstOrDefault(a => a.Id == model.Id);
@@ -239,6 +319,11 @@ namespace SpotifyBasicApi2025.Services
             var encodedQuery = Uri.EscapeDataString(query);
 
             return await requestService.MakeSpotifyRequestAsync($"search?q={encodedQuery}&type=track&limit={limit}");
+        }
+
+        private sealed class RelatedArtistsResponse
+        {
+            public List<SpotifyArtistObject> Artists { get; set; } = new();
         }
 
         public async Task<List<SpotifyArtistObject>> SearchArtistsAsync(string query, int limit = 50)

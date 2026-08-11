@@ -279,6 +279,23 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
+        public sealed class ArtistDiscoveryRequest
+        {
+            public List<string> ArtistIds { get; set; } = new();
+        }
+
+        [HttpPost("artists/discovery-add")]
+        public async Task<IActionResult> AddArtistsForAlbumDiscovery([FromBody] ArtistDiscoveryRequest request)
+        {
+            try
+            {
+                return Ok(await libraryService.AddArtistsForAlbumDiscoveryAsync(request.ArtistIds));
+            }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (InvalidOperationException ex) { return Unauthorized(ex.Message); }
+            catch (Exception ex) { return StatusCode(500, ex.Message); }
+        }
+
         [HttpDelete("albums/{id}")]
         public async Task<IActionResult> RemoveAlbum(string id)
         {
