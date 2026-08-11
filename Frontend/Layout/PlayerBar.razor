@@ -10,6 +10,7 @@
 
     private PlaybackState? state;
     private System.Timers.Timer? timer;
+    private bool isSeeking;
 
     protected override async Task OnInitializedAsync()
     {
@@ -424,6 +425,31 @@
         return $"{p}%";
     }
 
+    private int GetDurationMs() => Math.Max(state?.item?.duration_ms ?? 0, 0);
+
+    private int GetProgressMs() => Math.Clamp(state?.progress_ms ?? 0, 0, GetDurationMs());
+
+    private async Task SeekAsync(ChangeEventArgs args)
+    {
+        var duration = GetDurationMs();
+        if (duration <= 0 || isSeeking || !int.TryParse(args.Value?.ToString(), out var requestedPosition))
+            return;
+
+        var position = Math.Clamp(requestedPosition, 0, duration);
+        isSeeking = true;
+        try
+        {
+            var response = await Http.PutAsync($"api/player/seek?positionMs={position}", null);
+            if (response.IsSuccessStatusCode && state != null)
+                state.progress_ms = position;
+        }
+        finally
+        {
+            isSeeking = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private string FormatTime(int ms)
     {
         if (ms <= 0) return "0:00";
@@ -487,9 +513,17 @@
         <div class="flex-grow-1" style="max-width: 40%; min-width: 150px;">
             <div class="d-flex align-items-center gap-2">
                 <small class="text-secondary">@FormatTime(state?.progress_ms ?? 0)</small>
-                <div class="progress w-100" style="height:4px;">
-                    <div class="progress-bar bg-success" role="progressbar" style="width: @GetProgressPercent();"></div>
-                </div>
+                <input class="player-progress-slider w-100"
+                       type="range"
+                       min="0"
+                       max="@GetDurationMs()"
+                       value="@GetProgressMs()"
+                       step="1"
+                       style="--progress-percent: @GetProgressPercent();"
+                       aria-label="Pozycja odtwarzania"
+                       aria-valuetext="@($"{FormatTime(GetProgressMs())} z {FormatTime(GetDurationMs())}")"
+                       disabled="@(GetDurationMs() <= 0 || isSeeking)"
+                       @onchange="SeekAsync" />
                 <small class="text-secondary">@FormatTime(state?.item?.duration_ms ?? 0)</small>
             </div>
             

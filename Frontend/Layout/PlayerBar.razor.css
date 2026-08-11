@@ -31,4 +31,59 @@
 	overflow-wrap: anywhere;
 }
 
+.player-progress-slider {
+	--progress-percent: 0%;
+	height: 0.75rem;
+	margin: 0;
+	appearance: none;
+	background: transparent;
+	cursor: pointer;
+}
+
+.player-progress-slider:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.player-progress-slider::-webkit-slider-runnable-track {
+	height: 0.3rem;
+	background: linear-gradient(to right, #22c55e var(--progress-percent), #334155 var(--progress-percent));
+	border-radius: 999px;
+}
+
+.player-progress-slider::-webkit-slider-thumb {
+	width: 0.8rem;
+	height: 0.8rem;
+	margin-top: -0.25rem;
+	appearance: none;
+	background: #22c55e;
+	border: 2px solid #dcfce7;
+	border-radius: 50%;
+}
+
+.player-progress-slider::-moz-range-track {
+	height: 0.3rem;
+	background: #334155;
+	border-radius: 999px;
+}
+
+.player-progress-slider::-moz-range-progress {
+	height: 0.3rem;
+	background: #22c55e;
+	border-radius: 999px;
+}
+
+.player-progress-slider::-moz-range-thumb {
+	width: 0.65rem;
+	height: 0.65rem;
+	background: #22c55e;
+	border: 2px solid #dcfce7;
+	border-radius: 50%;
+}
+
+.player-progress-slider:focus-visible {
+	outline: 2px solid #86efac;
+	outline-offset: 3px;
+}
+
 
