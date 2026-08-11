@@ -83,6 +83,9 @@
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry wykonawców" aria-label="Wykonawcy: @(showArtistFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showArtistFilters" @onclick="ToggleArtistFilters">
                 <AppIcon Name="filters" /><span class="album-action-label">Wykonawcy</span><span class="album-action-state" aria-hidden="true">@(showArtistFilters ? "▼" : "▶")</span>
             </button>
+            <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry gatunków" aria-label="Gatunki: @(showGenreFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showGenreFilters" @onclick="ToggleGenreFilters">
+                <AppIcon Name="filters" /><span class="album-action-label">Gatunki</span><span class="album-action-state" aria-hidden="true">@(showGenreFilters ? "▼" : "▶")</span>
+            </button>
         </div>
 
         <div class="albums-playback-actions" aria-label="Szybkie akcje wyników">
@@ -111,6 +114,7 @@
                     <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie tagów" aria-label="Wyczyść wyszukiwanie tagów" @onclick="ClearTagSearch">×</button>
                 }
             </div>
+            <label class="tag-visibility-toggle album-artist-tags-toggle"><input type="checkbox" @bind="includeArtistTags" @bind:after="ArtistTagVisibilityChangedAsync" /> <span>Wyświetl i szukaj tagów artystów</span></label>
             @if (showTagsGrouped)
             {
                 <div class="tag-groups-container">
@@ -201,6 +205,41 @@
         </section>
     }
 
+    @if (showGenreFilters)
+    {
+        <section class="albums-tag-filters albums-artist-filters mb-3" aria-label="Filtry gatunków">
+            <div class="input-group input-group-sm tag-filter-search">
+                <input class="form-control input-dark" type="search" placeholder="Szukaj gatunku" aria-label="Szukaj w filtrach gatunków" @bind="genreSearch" @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(genreSearch))
+                {
+                    <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie gatunków" aria-label="Wyczyść wyszukiwanie gatunków" @onclick="ClearGenreSearch">×</button>
+                }
+            </div>
+            <div class="tag-filter-controls">
+                <button type="button" class="tag-mode-chip tag-include" @onclick="SelectAllAlbumGenresAsync"><span>Wszystkie</span></button>
+                <button type="button" class="tag-mode-chip tag-none" @onclick="ClearAlbumGenreFiltersAsync"><span>Żadne</span></button>
+            </div>
+            <div class="album-artist-filter-groups" aria-label="Lista gatunków">
+                @foreach (var group in GetGroupedAlbumGenres())
+                {
+                    <section class="tag-group" aria-label="Gatunki na literę @group.Name">
+                        <h6 class="tag-group-heading">@group.Name</h6>
+                        <div class="tag-chips-container">
+                            @foreach (var genre in group.Genres)
+                            {
+                                var state = GetGenreFilterState(genre);
+                                var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
+                                <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleGenreFilterStateAsync(genre)">
+                                    <span class="tag-chip-label">@genre</span>
+                                </button>
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+        </section>
+    }
+
     <section class="saved-filters-panel mb-3" aria-labelledby="saved-filters-heading">
         <h5 id="saved-filters-heading" class="saved-filters-heading">Zapisane filtry</h5>
         <div class="saved-filters-fields">
@@ -271,13 +310,36 @@
         @foreach (var group in GetArtistAlbumGroups())
         {
             <section class="album-artist-group" aria-label="Albumy wykonawcy @group.Name">
-                <h5 class="album-artist-group-heading">@group.Name</h5>
-                <div class="library-card-grid">
-                    @foreach (var album in group.Albums)
+                <header class="album-artist-group-heading">
+                    <button type="button" class="album-artist-group-toggle" aria-expanded="@(!IsArtistGroupCollapsed(group.Id))" @onclick="() => ToggleArtistGroupAsync(group.Id)">
+                        <span aria-hidden="true">@(IsArtistGroupCollapsed(group.Id) ? "▶" : "▼")</span>
+                        <span class="album-artist-group-name">@group.Name</span>
+                        <span class="library-results-count">@group.Albums.Count</span>
+                    </button>
+                    <div class="album-artist-group-meta">
+                        @foreach (var genre in group.Genres)
+                        {
+                            <span class="badge bg-outline-light text-light album-artist-genre">@genre</span>
+                        }
+                        @foreach (var tag in group.Tags)
+                        {
+                            <span class="badge badge-tag album-artist-tag">@tag.TagName (@tag.Strength)</span>
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(group.Id))
                     {
-                        @RenderAlbumCard(album)
+                        <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @group.Name" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
                     }
-                </div>
+                </header>
+                @if (!IsArtistGroupCollapsed(group.Id))
+                {
+                    <div class="library-card-grid">
+                        @foreach (var album in group.Albums)
+                        {
+                            @RenderAlbumCard(album)
+                        }
+                    </div>
+                }
             </section>
         }
         </div>
@@ -324,23 +386,30 @@
     private bool isQueueingAllAlbums;
     private AlbumFilterSnapshot? appliedFilters;
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
+    private List<TagDto> allTags = new();
     private List<TagDto> availableTags = new();
     private List<TagGroupDto> tagGroups = new();
     private List<AlbumArtistOption> availableAlbumArtists = new();
     private HashSet<string> includeArtistIds = new(StringComparer.Ordinal);
     private HashSet<string> excludeArtistIds = new(StringComparer.Ordinal);
+    private List<string> availableAlbumGenres = new();
+    private HashSet<string> includeGenres = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> excludeGenres = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<long> includeTagIds = new();
     private HashSet<long> excludeTagIds = new();
     private string includeMode = "or";
     private string excludeMode = "or";
     private bool showTagFilters = true;
     private bool showArtistFilters;
+    private bool showGenreFilters;
+    private bool includeArtistTags;
     private bool showTagsGrouped;
     private const string TagLayoutStoreKey = "tag-layout:grouped";
     private const string TagVisibilityStoreKey = "tag-visibility:show-unassigned";
     private bool showUnassignedTags;
     private string? tagSearch;
     private string? artistSearch;
+    private string? genreSearch;
     private ElementReference controlsSentinel;
     private ElementReference albumsSentinel;
     private DotNetObjectReference<Albums>? controlsObserverRef;
@@ -352,6 +421,10 @@
     private Dictionary<string, long?> selectedTagByAlbum = new();
     private bool showAlbumTagging = false;
     private string? taggingAlbumId;
+    private bool showArtistTagging;
+    private string? taggingArtistId;
+    private List<TagItem> artistTagItems = new();
+    private readonly HashSet<string> collapsedArtistGroupIds = new(StringComparer.Ordinal);
     private Dictionary<long, int> tagCounts = new();
     private int? fromYear = null;
     private int? toYear = null;
@@ -429,6 +502,9 @@
         excludeTagIds.OrderBy(id => id).ToArray(),
         includeArtistIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(),
         excludeArtistIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+        includeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase).ToArray(),
+        excludeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase).ToArray(),
+        includeArtistTags,
         fromYear,
         toYear);
 
@@ -492,7 +568,7 @@
         filteredAlbums = albums.ToList();
         if (reset)
         {
-            await Task.WhenAll(LoadAlbumTagCounts(filters), LoadAlbumArtists(filters));
+            await Task.WhenAll(LoadAlbumTagCounts(filters), LoadAlbumArtists(filters), LoadAlbumGenres(filters));
             await SaveToStore();
         }
 
@@ -520,48 +596,44 @@
             $"order={filters.SortOrder}"
         };
 
-        if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
-            query.Add($"tags={filters.SelectedTagFilter}");
-
-        if (!string.IsNullOrEmpty(filters.SelectedTagSort))
-            query.Add($"sortTagId={filters.SelectedTagSort}");
-
-        if (filters.IncludeArtistIds.Length > 0)
-            query.Add($"includeArtists={string.Join(',', filters.IncludeArtistIds.Select(Uri.EscapeDataString))}");
-
-        if (filters.ExcludeArtistIds.Length > 0)
-            query.Add($"excludeArtists={string.Join(',', filters.ExcludeArtistIds.Select(Uri.EscapeDataString))}");
-
-        if (filters.FromYear.HasValue)
-            query.Add($"fromYear={filters.FromYear.Value}");
-
-        if (filters.ToYear.HasValue)
-            query.Add($"toYear={filters.ToYear.Value}");
-
-        if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
-            query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
-
-        if (filters.IncludeTagIds.Length > 0)
-        {
-            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
-            query.Add($"includeMode={filters.IncludeMode}");
-        }
-
-        if (filters.ExcludeTagIds.Length > 0)
-        {
-            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
-            query.Add($"excludeMode={filters.ExcludeMode}");
-        }
-
+        AppendAlbumScopeQuery(query, filters, includeArtists: true, includeGenres: true);
         return query;
     }
 
     private static List<string> BuildAlbumArtistQuery(AlbumFilterSnapshot filters)
     {
         var query = new List<string>();
+        AppendAlbumScopeQuery(query, filters, includeArtists: false, includeGenres: true);
+        return query;
+    }
+
+    private static List<string> BuildAlbumGenreQuery(AlbumFilterSnapshot filters)
+    {
+        var query = new List<string>();
+        AppendAlbumScopeQuery(query, filters, includeArtists: true, includeGenres: false);
+        return query;
+    }
+
+    private static void AppendAlbumScopeQuery(List<string> query, AlbumFilterSnapshot filters, bool includeArtists, bool includeGenres)
+    {
 
         if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
             query.Add($"tags={filters.SelectedTagFilter}");
+
+        if (!string.IsNullOrEmpty(filters.SelectedTagSort))
+            query.Add($"sortTagId={filters.SelectedTagSort}");
+
+        if (includeArtists && filters.IncludeArtistIds.Length > 0)
+            query.Add($"includeArtists={string.Join(',', filters.IncludeArtistIds.Select(Uri.EscapeDataString))}");
+
+        if (includeArtists && filters.ExcludeArtistIds.Length > 0)
+            query.Add($"excludeArtists={string.Join(',', filters.ExcludeArtistIds.Select(Uri.EscapeDataString))}");
+
+        if (includeGenres && filters.IncludeGenres.Length > 0)
+            query.Add($"includeGenres={string.Join(',', filters.IncludeGenres.Select(Uri.EscapeDataString))}");
+
+        if (includeGenres && filters.ExcludeGenres.Length > 0)
+            query.Add($"excludeGenres={string.Join(',', filters.ExcludeGenres.Select(Uri.EscapeDataString))}");
 
         if (filters.FromYear.HasValue)
             query.Add($"fromYear={filters.FromYear.Value}");
@@ -583,14 +655,15 @@
             query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
             query.Add($"excludeMode={filters.ExcludeMode}");
         }
-
-        return query;
+        if (filters.IncludeArtistTags)
+            query.Add("includeArtistTags=true");
     }
 
     private AlbumsState BuildCurrentState() => new AlbumsState
     {
         sortKey = sortKey,
         sortOrder = sortOrder,
+        groupByArtist = groupByArtist,
         selectedTagFilter = selectedTagFilter,
         selectedTagSort = selectedTagSort,
         localSearch = localSearch,
@@ -600,8 +673,13 @@
         excludeTagIds = excludeTagIds.ToArray(),
         includeArtistIds = includeArtistIds.ToArray(),
         excludeArtistIds = excludeArtistIds.ToArray(),
+        includeGenres = includeGenres.ToArray(),
+        excludeGenres = excludeGenres.ToArray(),
+        includeArtistTags = includeArtistTags,
         showTagFilters = showTagFilters,
         showArtistFilters = showArtistFilters,
+        showGenreFilters = showGenreFilters,
+        collapsedArtistGroupIds = collapsedArtistGroupIds.ToArray(),
         fromYear = fromYear,
         toYear = toYear,
     };
@@ -631,6 +709,7 @@
         ClearRandomSelection();
         sortKey = state.sortKey ?? sortKey;
         sortOrder = state.sortOrder ?? sortOrder;
+        groupByArtist = state.groupByArtist ?? groupByArtist;
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
         localSearch = state.localSearch;
@@ -642,8 +721,15 @@
             ? new HashSet<string>(state.includeArtistIds, StringComparer.Ordinal)
             : string.IsNullOrWhiteSpace(state.selectedArtistId) ? new HashSet<string>(StringComparer.Ordinal) : new HashSet<string>(new[] { state.selectedArtistId }, StringComparer.Ordinal);
         excludeArtistIds = state.excludeArtistIds != null ? new HashSet<string>(state.excludeArtistIds, StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+        includeGenres = state.includeGenres != null ? new HashSet<string>(state.includeGenres, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        excludeGenres = state.excludeGenres != null ? new HashSet<string>(state.excludeGenres, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        includeArtistTags = state.includeArtistTags ?? false;
         showTagFilters = state.showTagFilters ?? showTagFilters;
         showArtistFilters = state.showArtistFilters ?? showArtistFilters;
+        showGenreFilters = state.showGenreFilters ?? showGenreFilters;
+        collapsedArtistGroupIds.Clear();
+        if (state.collapsedArtistGroupIds != null)
+            collapsedArtistGroupIds.UnionWith(state.collapsedArtistGroupIds);
         fromYear = state.fromYear;
         toYear = state.toYear;
 
@@ -688,6 +774,16 @@
         availableAlbumArtists = list;
     }
 
+    private async Task LoadAlbumGenres(AlbumFilterSnapshot filters)
+    {
+        var query = BuildAlbumGenreQuery(filters);
+        var response = await Http.GetAsync($"api/library/albums/genres?{string.Join('&', query)}");
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        availableAlbumGenres = await response.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>();
+    }
+
     private async Task LoadAvailableTags()
     {
         var tagsRequest = Http.GetAsync("api/tags");
@@ -698,15 +794,35 @@
         if (!res.IsSuccessStatusCode)
             return;
 
-        var allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
+        allTags = await res.Content.ReadFromJsonAsync<List<TagDto>>() ?? new List<TagDto>();
         var groupsResponse = await groupsRequest;
         tagGroups = groupsResponse.IsSuccessStatusCode
             ? await groupsResponse.Content.ReadFromJsonAsync<List<TagGroupDto>>() ?? new List<TagGroupDto>()
             : new List<TagGroupDto>();
-        availableTags = allTags.Where(t => t.ForAlbum).OrderBy(t => t.Name).ToList();
-        albumTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
+        RefreshAvailableTags();
+        albumTagItems = allTags.Where(t => t.ForAlbum).OrderBy(t => t.Name).Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
+        artistTagItems = allTags.Where(t => t.ForArtist).OrderBy(t => t.Name).Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
         if (appliedFilters is not null)
             await LoadAlbumTagCounts(appliedFilters);
+    }
+
+    private void RefreshAvailableTags() => availableTags = allTags
+        .Where(tag => tag.ForAlbum || (includeArtistTags && tag.ForArtist))
+        .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private async Task ArtistTagVisibilityChangedAsync()
+    {
+        if (!includeArtistTags)
+        {
+            var albumTagIds = allTags.Where(tag => tag.ForAlbum).Select(tag => tag.Id).ToHashSet();
+            includeTagIds.RemoveWhere(tagId => !albumTagIds.Contains(tagId));
+            excludeTagIds.RemoveWhere(tagId => !albumTagIds.Contains(tagId));
+        }
+
+        RefreshAvailableTags();
+        await MarkFiltersDirtyAsync();
+        await LoadAlbumTagCounts(CaptureCurrentFilters());
     }
 
     private RenderFragment StarRating(string key, float value, Func<float, Task> onChange) => builder =>
@@ -799,6 +915,33 @@
         taggingAlbumId = null;
     }
 
+    private void OpenArtistTagging(string artistId)
+    {
+        taggingArtistId = artistId;
+        showArtistTagging = true;
+    }
+
+    private void CloseArtistTagging()
+    {
+        showArtistTagging = false;
+        taggingArtistId = null;
+    }
+
+    private List<TagBadge> GetArtistTagBadges() => string.IsNullOrWhiteSpace(taggingArtistId)
+        ? new List<TagBadge>()
+        : albums.SelectMany(album => album.Artists)
+            .FirstOrDefault(artist => artist.Id == taggingArtistId)?.Tags
+            .Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength })
+            .ToList() ?? new List<TagBadge>();
+
+    private async Task ApplyTaggedArtistState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        await ReloadAppliedAlbumsAsync();
+    }
+
     private async Task RefreshAlbumTags(string albumId)
     {
         var response = await Http.GetAsync($"api/tags/assign/album/{Uri.EscapeDataString(albumId)}");
@@ -828,6 +971,12 @@
         }).ToList();
 
         var filters = appliedFilters ?? CaptureCurrentFilters();
+        if (filters.IncludeArtistTags)
+        {
+            await ReloadAppliedAlbumsAsync();
+            return;
+        }
+
         if (!MatchesAlbumTagFilters(album, filters))
             albums.Remove(album);
 
@@ -964,6 +1113,10 @@
         selectedTagSort = null;
         includeArtistIds.Clear();
         excludeArtistIds.Clear();
+        includeGenres.Clear();
+        excludeGenres.Clear();
+        includeArtistTags = false;
+        collapsedArtistGroupIds.Clear();
         localSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
@@ -1007,6 +1160,12 @@
 
         foreach (var artistId in excludeArtistIds.OrderBy(id => GetArtistName(id), StringComparer.OrdinalIgnoreCase))
             chips.Add(new ActiveFilterChip($"− {GetArtistName(artistId)}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedArtistAsync(artistId)));
+
+        foreach (var genre in includeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase))
+            chips.Add(new ActiveFilterChip($"+ Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedGenreAsync(genre)));
+
+        foreach (var genre in excludeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase))
+            chips.Add(new ActiveFilterChip($"− Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedGenreAsync(genre)));
 
         if (fromYear.HasValue)
             chips.Add(new ActiveFilterChip($"Rok od: {fromYear.Value}", "active-library-filter-chip", ClearFromYearFilterAsync));
@@ -1136,6 +1295,9 @@
         long[] ExcludeTagIds,
         string[] IncludeArtistIds,
         string[] ExcludeArtistIds,
+        string[] IncludeGenres,
+        string[] ExcludeGenres,
+        bool IncludeArtistTags,
         int? FromYear,
         int? ToYear)
     {
@@ -1151,6 +1313,9 @@
             && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds)
             && IncludeArtistIds.SequenceEqual(other.IncludeArtistIds, StringComparer.Ordinal)
             && ExcludeArtistIds.SequenceEqual(other.ExcludeArtistIds, StringComparer.Ordinal)
+            && IncludeGenres.SequenceEqual(other.IncludeGenres, StringComparer.OrdinalIgnoreCase)
+            && ExcludeGenres.SequenceEqual(other.ExcludeGenres, StringComparer.OrdinalIgnoreCase)
+            && IncludeArtistTags == other.IncludeArtistTags
             && FromYear == other.FromYear
             && ToYear == other.ToYear;
     }
@@ -1171,7 +1336,10 @@
 
     private sealed class ArtistAlbumGroup
     {
+        public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public List<string> Genres { get; set; } = new();
+        public List<ArtistTag> Tags { get; set; } = new();
         public List<Album> Albums { get; set; } = new();
     }
 
@@ -1190,17 +1358,32 @@
         public float Strength { get; set; }
     }
 
-    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForAlbum { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
+    private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForAlbum { get; set; } public bool ForArtist { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
     private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public bool IsPinnedGroup { get; set; } public List<TagDto> Tags { get; set; } = new(); }
     private List<TagItem> albumTagItems = new();
 
     private sealed class AlbumArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class ArtistFilterGroup { public string Name { get; set; } = string.Empty; public List<AlbumArtistOption> Artists { get; set; } = new(); }
+    private sealed class GenreFilterGroup { public string Name { get; set; } = string.Empty; public List<string> Genres { get; set; } = new(); }
 
-    private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
+    private sealed class ArtistTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
+    private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public List<string> Genres { get; set; } = new(); public List<ArtistTag> Tags { get; set; } = new(); }
 
     private bool IsArtistGroupingEnabled => groupByArtist && string.Equals(sortKey, "artist", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsArtistGroupCollapsed(string artistId) => !string.IsNullOrWhiteSpace(artistId) && collapsedArtistGroupIds.Contains(artistId);
+
+    private async Task ToggleArtistGroupAsync(string artistId)
+    {
+        if (string.IsNullOrWhiteSpace(artistId))
+            return;
+
+        if (!collapsedArtistGroupIds.Add(artistId))
+            collapsedArtistGroupIds.Remove(artistId);
+
+        await SaveToStore();
+    }
 
     private List<ArtistAlbumGroup> GetArtistAlbumGroups()
     {
@@ -1216,14 +1399,14 @@
 
             if (artists.Count == 0)
             {
-                AddAlbumToArtistGroup("unknown", "Nieznany wykonawca", album);
+                AddAlbumToArtistGroup("unknown", "Nieznany wykonawca", null, album);
                 continue;
             }
 
             foreach (var artist in artists)
             {
                 var key = !string.IsNullOrWhiteSpace(artist.Id) ? $"artist:{artist.Id}" : $"name:{artist.Name.Trim()}";
-                AddAlbumToArtistGroup(key, artist.Name.Trim(), album);
+                AddAlbumToArtistGroup(key, artist.Name.Trim(), artist, album);
             }
         }
 
@@ -1243,11 +1426,17 @@
             ? groups.Values.OrderByDescending(group => group.Name, StringComparer.CurrentCultureIgnoreCase).ToList()
             : groups.Values.OrderBy(group => group.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 
-        void AddAlbumToArtistGroup(string key, string name, Album album)
+        void AddAlbumToArtistGroup(string key, string name, SimpleArtist? artist, Album album)
         {
             if (!groups.TryGetValue(key, out var group))
             {
-                group = new ArtistAlbumGroup { Name = name };
+                group = new ArtistAlbumGroup
+                {
+                    Id = artist?.Id ?? string.Empty,
+                    Name = name,
+                    Genres = artist?.Genres?.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>(),
+                    Tags = artist?.Tags?.OrderBy(tag => tag.TagName, StringComparer.OrdinalIgnoreCase).ToList() ?? new List<ArtistTag>()
+                };
                 groups[key] = group;
             }
 
@@ -1278,10 +1467,15 @@
             excludeTagIds = excludeTagIds.ToArray(),
             includeArtistIds = includeArtistIds.ToArray(),
             excludeArtistIds = excludeArtistIds.ToArray(),
+            includeGenres = includeGenres.ToArray(),
+            excludeGenres = excludeGenres.ToArray(),
             includeMode,
             excludeMode,
+            includeArtistTags,
             showTagFilters,
             showArtistFilters,
+            showGenreFilters,
+            collapsedArtistGroupIds = collapsedArtistGroupIds.ToArray(),
             fromYear,
             toYear,
             isRandomSelection,
@@ -1313,10 +1507,16 @@
             ? new HashSet<string>(state.includeArtistIds, StringComparer.Ordinal)
             : string.IsNullOrWhiteSpace(state.selectedArtistId) ? includeArtistIds : new HashSet<string>(new[] { state.selectedArtistId }, StringComparer.Ordinal);
         excludeArtistIds = state.excludeArtistIds != null ? new HashSet<string>(state.excludeArtistIds, StringComparer.Ordinal) : excludeArtistIds;
+        includeGenres = state.includeGenres != null ? new HashSet<string>(state.includeGenres, StringComparer.OrdinalIgnoreCase) : includeGenres;
+        excludeGenres = state.excludeGenres != null ? new HashSet<string>(state.excludeGenres, StringComparer.OrdinalIgnoreCase) : excludeGenres;
+        includeArtistTags = state.includeArtistTags ?? false;
         fromYear = state.fromYear;
         toYear = state.toYear;
         showTagFilters = state.showTagFilters ?? showTagFilters;
         showArtistFilters = state.showArtistFilters ?? showArtistFilters;
+        showGenreFilters = state.showGenreFilters ?? showGenreFilters;
+        if (state.collapsedArtistGroupIds != null)
+            collapsedArtistGroupIds.UnionWith(state.collapsedArtistGroupIds);
         isRandomSelection = state.isRandomSelection ?? false;
         randomSourceSearch = state.randomSourceSearch;
 
@@ -1337,8 +1537,13 @@
         public long[]? excludeTagIds { get; set; }
         public string[]? includeArtistIds { get; set; }
         public string[]? excludeArtistIds { get; set; }
+        public string[]? includeGenres { get; set; }
+        public string[]? excludeGenres { get; set; }
+        public bool? includeArtistTags { get; set; }
         public bool? showTagFilters { get; set; }
         public bool? showArtistFilters { get; set; }
+        public bool? showGenreFilters { get; set; }
+        public string[]? collapsedArtistGroupIds { get; set; }
         public int? fromYear { get; set; }
         public int? toYear { get; set; }
         public bool? isRandomSelection { get; set; }
@@ -1511,6 +1716,12 @@
         await SaveToStore();
     }
 
+    private async Task ToggleGenreFilters()
+    {
+        showGenreFilters = !showGenreFilters;
+        await SaveToStore();
+    }
+
     private int GetArtistFilterState(string artistId)
     {
         if (includeArtistIds.Contains(artistId))
@@ -1579,6 +1790,70 @@
 
     private void ClearArtistSearch() => artistSearch = null;
 
+    private int GetGenreFilterState(string genre)
+    {
+        if (includeGenres.Contains(genre))
+            return 1;
+        return excludeGenres.Contains(genre) ? 2 : 0;
+    }
+
+    private async Task CycleGenreFilterStateAsync(string genre)
+    {
+        var state = GetGenreFilterState(genre);
+        if (state == 0)
+            includeGenres.Add(genre);
+        else if (state == 1)
+        {
+            includeGenres.Remove(genre);
+            excludeGenres.Add(genre);
+        }
+        else
+            excludeGenres.Remove(genre);
+
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task SelectAllAlbumGenresAsync()
+    {
+        includeGenres = GetVisibleAlbumGenres().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        excludeGenres.Clear();
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearAlbumGenreFiltersAsync()
+    {
+        includeGenres.Clear();
+        excludeGenres.Clear();
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearIncludedGenreAsync(string genre)
+    {
+        includeGenres.Remove(genre);
+        await MarkFiltersDirtyAsync();
+    }
+
+    private async Task ClearExcludedGenreAsync(string genre)
+    {
+        excludeGenres.Remove(genre);
+        await MarkFiltersDirtyAsync();
+    }
+
+    private IEnumerable<string> GetVisibleAlbumGenres() => availableAlbumGenres
+        .Where(genre => string.IsNullOrWhiteSpace(genreSearch) || genre.Contains(genreSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<GenreFilterGroup> GetGroupedAlbumGenres()
+    {
+        var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("pl-PL"), ignoreCase: true);
+        return GetVisibleAlbumGenres()
+            .GroupBy(GetArtistGroupName, StringComparer.Ordinal)
+            .OrderBy(group => group.Key == "#")
+            .ThenBy(group => group.Key, comparer)
+            .Select(group => new GenreFilterGroup { Name = group.Key, Genres = group.OrderBy(genre => genre, comparer).ToList() });
+    }
+
+    private void ClearGenreSearch() => genreSearch = null;
+
     private async Task LoadTagLayout()
     {
         showTagsGrouped = await Store.GetItemAsync<bool?>(TagLayoutStoreKey) ?? false;
@@ -1611,9 +1886,9 @@
     private static IEnumerable<TagDto> ExpandTagVariants(IEnumerable<TagDto> tags) => tags.SelectMany(tag => new[] { tag }.Concat(tag.Aliases
         .Where(alias => !string.Equals(alias, tag.Name, StringComparison.OrdinalIgnoreCase))
         .Distinct(StringComparer.OrdinalIgnoreCase)
-        .Select(alias => new TagDto { Id = tag.Id, Name = alias, ForAlbum = tag.ForAlbum, IsPinned = tag.IsPinned, TagGroupId = tag.TagGroupId })));
+        .Select(alias => new TagDto { Id = tag.Id, Name = alias, ForAlbum = tag.ForAlbum, ForArtist = tag.ForArtist, IsPinned = tag.IsPinned, TagGroupId = tag.TagGroupId })));
 
-    private static TagDto CreatePinnedShortcut(TagDto tag) => new() { Id = tag.Id, Name = tag.Name, ForAlbum = tag.ForAlbum, IsPinned = true, IsPinnedShortcut = true, TagGroupId = tag.TagGroupId };
+    private static TagDto CreatePinnedShortcut(TagDto tag) => new() { Id = tag.Id, Name = tag.Name, ForAlbum = tag.ForAlbum, ForArtist = tag.ForArtist, IsPinned = true, IsPinnedShortcut = true, TagGroupId = tag.TagGroupId };
 
     private void ClearTagSearch() => tagSearch = null;
 
@@ -1797,4 +2072,16 @@
                              Placeholder="Taguj album..."
                              OnChanged="ApplyTaggedAlbumState"
                              OnClose="CloseAlbumTagging" />
+}
+
+@if (showArtistTagging && taggingArtistId != null)
+{
+    <TaggingPanel Title="Tagowanie artysty"
+                  ItemType="artist"
+                  SpotifyItemId="@taggingArtistId"
+                  Items="artistTagItems"
+                  Tags="GetArtistTagBadges()"
+                  Placeholder="Taguj artystę..."
+                  OnChanged="ApplyTaggedArtistState"
+                  OnClose="CloseArtistTagging" />
 }

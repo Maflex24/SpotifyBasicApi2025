@@ -154,6 +154,56 @@ code {
     font-weight: 600;
 }
 
+.album-artist-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.album-artist-group-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+}
+
+.album-artist-group-toggle:hover,
+.album-artist-group-toggle:focus-visible {
+    color: #fff;
+}
+
+.album-artist-group-name { font-weight: 700; }
+
+.album-artist-group-meta {
+    display: flex;
+    flex: 1 1 18rem;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+    font-size: 0.78rem;
+}
+
+.album-artist-genre {
+    font-size: 0.95rem;
+}
+
+.album-artist-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.65rem;
+    line-height: 1;
+}
+
+.album-artist-tags-toggle {
+    margin: 0.55rem 0 0;
+}
+
 /* Square image container for artist cards */
 .artist-image-square {
     position: relative;
