@@ -1534,7 +1534,7 @@ namespace SpotifyBasicApi2025.Services
             {
                 var randomTotalRows = await query.CountAsync();
                 if (randomTotalRows == 0)
-                    return new { randomSearch = (string?)null };
+                    return new { randomSearch = (string?)null, randomAlbumId = (string?)null };
 
                 var randomOffset = Random.Shared.Next(randomTotalRows);
                 var randomAlbum = await query
@@ -1545,7 +1545,7 @@ namespace SpotifyBasicApi2025.Services
                     .FirstOrDefaultAsync();
 
                 if (randomAlbum == null)
-                    return new { randomSearch = (string?)null };
+                    return new { randomSearch = (string?)null, randomAlbumId = (string?)null };
 
                 var artistNames = await context.SpAlbumArtistAssigns
                     .AsNoTracking()
@@ -1563,7 +1563,7 @@ namespace SpotifyBasicApi2025.Services
                     }
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
 
-                return new { randomSearch };
+                return new { randomSearch, randomAlbumId = randomAlbum.Id };
             }
 
             var sortKey = (sort ?? "name").ToLowerInvariant();
