@@ -2,6 +2,7 @@
 @using Frontend.Components
 @inject LocalStorageService Store
 @inject BlindModeService BlindMode
+@inject ActivePlaybackService ActivePlayback
 @inject IJSRuntime JS
 @inject HttpClient Http
 @using System.Globalization
@@ -514,10 +515,14 @@
     private int? fromYear = null;
     private int? toYear = null;
     private bool IsBlindMode => BlindMode.IsEnabled;
+    private bool IsPlayingAlbum(string albumId) => IsBlindMode && string.Equals(albumId, ActivePlayback.CurrentAlbumId, StringComparison.Ordinal);
 
     protected override async Task OnInitializedAsync()
     {
         BlindMode.Changed += HandleBlindModeChanged;
+        ActivePlayback.CurrentAlbumChanged += HandleActiveAlbumChanged;
+        ActivePlayback.AlbumTagsChanged += HandleActiveAlbumTagsChanged;
+        ActivePlayback.AlbumNoteChanged += HandleActiveAlbumNoteChanged;
         await BlindMode.InitializeAsync();
         await LoadTagLayout();
         await LoadTagVisibility();
@@ -534,6 +539,32 @@
 
     private void HandleBlindModeChanged()
     {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleActiveAlbumChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void HandleActiveAlbumTagsChanged(string albumId, IReadOnlyList<TagBadge> tags)
+    {
+        foreach (var album in albums.Where(album => string.Equals(album.Id, albumId, StringComparison.Ordinal)))
+        {
+            album.Tags = tags.Select(tag => new AlbumTag
+            {
+                TagId = tag.TagId,
+                TagName = tag.TagName,
+                TagGroupName = tag.TagGroupName,
+                Strength = tag.Strength
+            }).ToList();
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleActiveAlbumNoteChanged(string albumId, string? content)
+    {
+        foreach (var album in albums.Where(album => string.Equals(album.Id, albumId, StringComparison.Ordinal)))
+            album.Note = content;
+
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -609,6 +640,9 @@
     public async ValueTask DisposeAsync()
     {
         BlindMode.Changed -= HandleBlindModeChanged;
+        ActivePlayback.CurrentAlbumChanged -= HandleActiveAlbumChanged;
+        ActivePlayback.AlbumTagsChanged -= HandleActiveAlbumTagsChanged;
+        ActivePlayback.AlbumNoteChanged -= HandleActiveAlbumNoteChanged;
         try
         {
             await JS.InvokeVoidAsync("libraryControls.disconnect");
@@ -1419,15 +1453,16 @@
         await SetAlbumTagStrength(taggingAlbumId, tagId.Value, 3.0f);
     }
 
-    private async Task PlayAlbum(string? uri)
+    private async Task PlayAlbum(string albumId, string? uri)
     {
         if (string.IsNullOrWhiteSpace(uri))
             return;
 
         var body = new { context_uri = uri };
         var res = await Http.PutAsJsonAsync("api/player/play", body);
+        var started = res.IsSuccessStatusCode;
 
-        if (!res.IsSuccessStatusCode)
+        if (!started)
         {
             var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
             var first = devices?.Devices?.FirstOrDefault();
@@ -1435,9 +1470,12 @@
             if (first != null)
             {
                 await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
+                started = (await Http.PutAsJsonAsync("api/player/play", body)).IsSuccessStatusCode;
             }
         }
+
+        if (started)
+            ActivePlayback.SetCurrentAlbumId(albumId);
     }
 
     private async Task QueueAlbum(string albumId)
@@ -1968,14 +2006,14 @@
         public string? randomSourceSearch { get; set; }
     }
 
-    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item">
+    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty)">
         <div class="card bg-dark text-light h-100">
             @if (IsBlindMode)
             {
                 <div class="artist-image-square blind-artwork" aria-label="Anonimowa okładka albumu">
                     <span>@album.Id</span>
                     <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @album.Id"
-                            @onclick="() => PlayAlbum(album.Uri)"><AppIcon Name="play" /></button>
+                            @onclick="() => PlayAlbum(album.Id, album.Uri)"><AppIcon Name="play" /></button>
                     <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Id"
                             disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
                     <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Id"
@@ -1989,7 +2027,7 @@
                 <div class="artist-image-square" style="position:relative;">
                     <img src="@GetBestImageUrl(album.Images)" alt="@album.Name">
                     <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @album.Name"
-                            @onclick="() => PlayAlbum(album.Uri)"><AppIcon Name="play" /></button>
+                            @onclick="() => PlayAlbum(album.Id, album.Uri)"><AppIcon Name="play" /></button>
                     <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Name"
                             disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
                     <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Name"
@@ -1999,6 +2037,10 @@
                 </div>
             }
             <div class="card-body">
+                @if (IsPlayingAlbum(album.Id))
+                {
+                    <span class="blind-playing-indicator" aria-label="Odtwarzany album: @album.Id"><AppIcon Name="play" /> Odtwarzany</span>
+                }
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <h6 class="card-title mb-1">
                         @if (IsBlindMode)

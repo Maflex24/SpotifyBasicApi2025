@@ -3,6 +3,7 @@
 @inject IJSRuntime JS
 @inject HttpClient Http
 @inject BlindModeService BlindMode
+@inject ActivePlaybackService ActivePlayback
 @inject NavigationManager Navigation
 @implements IDisposable
 @code {
@@ -51,6 +52,7 @@
             if (!res.IsSuccessStatusCode)
                 return;
             state = await res.Content.ReadFromJsonAsync<PlaybackState>();
+            ActivePlayback.SetCurrentAlbumId(GetCurrentAlbumId());
             await RefreshLibraryFlags();
             StateHasChanged();
         }
@@ -70,15 +72,24 @@
     private async Task Prev() { await Http.PostAsync("api/player/previous", null); await RefreshState(); }
 
     private bool isCurrentInLibrary = false;
+    private bool isCurrentAlbumInLibrary = false;
     private bool showTagging = false;
+    private bool showAlbumTagging = false;
+    private bool showAlbumNote = false;
     private List<TagItem> userTrackTags = new();
+    private List<TagItem> userAlbumTags = new();
     private List<TagBadge> currentTrackAssigns = new();
+    private List<TagBadge> currentAlbumAssigns = new();
     private string? lastAssignsTrackId;
+    private string? lastCheckedAlbumId;
+    private string? currentAlbumNote;
 
     private string? GetCurrentTrackId()
     {
         return state?.item?.id;
     }
+
+    private string? GetCurrentAlbumId() => state?.item?.album?.id;
 
     private async Task RefreshLibraryFlags()
     {
@@ -89,6 +100,7 @@
             isCurrentInLibrary = false;
             currentTrackAssigns = new();
             lastAssignsTrackId = null;
+            await RefreshCurrentAlbumLibraryFlag();
             return;
         }
 
@@ -111,6 +123,43 @@
         {
             currentTrackAssigns = new();
             lastAssignsTrackId = null;
+        }
+
+        await RefreshCurrentAlbumLibraryFlag();
+    }
+
+    private async Task RefreshCurrentAlbumLibraryFlag()
+    {
+        var albumId = GetCurrentAlbumId();
+        if (string.Equals(lastCheckedAlbumId, albumId, StringComparison.Ordinal))
+            return;
+
+        lastCheckedAlbumId = albumId;
+        isCurrentAlbumInLibrary = false;
+        currentAlbumAssigns = new();
+        currentAlbumNote = null;
+        showAlbumTagging = false;
+        showAlbumNote = false;
+
+        if (string.IsNullOrWhiteSpace(albumId))
+            return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/library/items/status", new ItemStatusesRequest
+            {
+                ItemType = "album",
+                SpotifyItemIds = new List<string> { albumId }
+            });
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            var statuses = await response.Content.ReadFromJsonAsync<List<LibraryItemStatus>>() ?? new List<LibraryItemStatus>();
+            isCurrentAlbumInLibrary = statuses.Any(status => string.Equals(status.SpotifyItemId, albumId, StringComparison.Ordinal) && status.IsInLibrary);
+        }
+        catch
+        {
+            isCurrentAlbumInLibrary = false;
         }
     }
 
@@ -148,7 +197,52 @@
         showTagging = !showTagging;
 
         if (showTagging)
+        {
+            showAlbumTagging = false;
+            showAlbumNote = false;
             await LoadTagsForTrack();
+        }
+    }
+
+    private async Task ToggleAlbumTagging()
+    {
+        var albumId = GetCurrentAlbumId();
+        if (!isCurrentAlbumInLibrary || string.IsNullOrWhiteSpace(albumId))
+            return;
+
+        showAlbumTagging = !showAlbumTagging;
+        showTagging = false;
+        showAlbumNote = false;
+
+        if (showAlbumTagging)
+            await LoadTagsForAlbum(albumId);
+    }
+
+    private async Task ToggleAlbumNote()
+    {
+        var albumId = GetCurrentAlbumId();
+        if (!isCurrentAlbumInLibrary || string.IsNullOrWhiteSpace(albumId))
+            return;
+
+        showAlbumNote = !showAlbumNote;
+        showTagging = false;
+        showAlbumTagging = false;
+
+        if (!showAlbumNote)
+            return;
+
+        try
+        {
+            var response = await Http.GetAsync($"api/library/notes/album/{Uri.EscapeDataString(albumId)}");
+            var note = response.IsSuccessStatusCode
+                ? await response.Content.ReadFromJsonAsync<ItemNoteState>()
+                : null;
+            currentAlbumNote = note?.Content;
+        }
+        catch
+        {
+            currentAlbumNote = null;
+        }
     }
 
     private async Task LoadTagsForTrack()
@@ -165,6 +259,15 @@
         currentTrackAssigns = assigns ?? new List<TagBadge>();
     }
 
+    private async Task LoadTagsForAlbum(string albumId)
+    {
+        var tags = await Http.GetFromJsonAsync<List<TagItem>>("api/tags");
+        userAlbumTags = tags ?? new List<TagItem>();
+
+        var assigns = await Http.GetFromJsonAsync<List<TagBadge>>($"api/tags/assign/album/{Uri.EscapeDataString(albumId)}");
+        currentAlbumAssigns = assigns ?? new List<TagBadge>();
+    }
+
     private async Task RefreshCurrentTrackAssigns(string trackId)
     {
         var assigns = await Http.GetFromJsonAsync<List<TagBadge>>($"api/tags/assign/track/{Uri.EscapeDataString(trackId)}");
@@ -178,6 +281,28 @@
             return Task.CompletedTask;
 
         currentTrackAssigns = state.Tags;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task ApplyCurrentAlbumTagState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "album", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(state.SpotifyItemId, GetCurrentAlbumId(), StringComparison.Ordinal))
+            return Task.CompletedTask;
+
+        currentAlbumAssigns = state.Tags;
+        ActivePlayback.NotifyAlbumTagsChanged(state.SpotifyItemId, state.Tags);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task ApplyCurrentAlbumNoteState(ItemNoteState state)
+    {
+        if (!string.Equals(state.ItemType, "album", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(state.SpotifyItemId, GetCurrentAlbumId(), StringComparison.Ordinal))
+            return Task.CompletedTask;
+
+        currentAlbumNote = state.Content;
+        ActivePlayback.NotifyAlbumNoteChanged(state.SpotifyItemId, state.Content);
         return InvokeAsync(StateHasChanged);
     }
 
@@ -256,6 +381,14 @@
             Strength = assign.Strength
         }).ToList();
     }
+
+    private List<TagBadge> GetCurrentAlbumTagBadges() => currentAlbumAssigns.Select(assign => new TagBadge
+    {
+        TagId = assign.TagId,
+        TagName = assign.TagName,
+        TagGroupName = assign.TagGroupName,
+        Strength = assign.Strength
+    }).ToList();
 
     private string? GetItemImageUrl()
     {
@@ -338,6 +471,11 @@
             {
                 <button class="btn btn-sm btn-outline-light" title="Taguj utwór" @onclick="ToggleTagging">🏷 Taguj</button>
             }
+            @if (IsBlindMode && isCurrentAlbumInLibrary)
+            {
+                <button class="btn btn-sm btn-outline-light" title="Taguj odtwarzany album" aria-label="Taguj odtwarzany album: @GetCurrentAlbumId()" @onclick="ToggleAlbumTagging">Taguj album</button>
+                <button class="btn btn-sm btn-outline-light" title="Edytuj notatkę odtwarzanego albumu" aria-label="Edytuj notatkę odtwarzanego albumu: @GetCurrentAlbumId()" @onclick="ToggleAlbumNote">Notatka albumu</button>
+            }
         </div>
         <div class="flex-grow-1" style="max-width: 40%; min-width: 150px;">
             <div class="d-flex align-items-center gap-2">
@@ -362,6 +500,28 @@
                   Placeholder="Taguj utwór..."
                   OnChanged="ApplyCurrentTrackTagState"
                   OnClose="ToggleTagging" />
+}
+
+@if (showAlbumTagging && IsBlindMode && isCurrentAlbumInLibrary && !string.IsNullOrWhiteSpace(GetCurrentAlbumId()))
+{
+    <TaggingPanel Title="@($"Tagowanie albumu: {GetCurrentAlbumId()}")"
+                  ItemType="album"
+                  SpotifyItemId="@GetCurrentAlbumId()"
+                  Items="userAlbumTags"
+                  Tags="GetCurrentAlbumTagBadges()"
+                  Placeholder="Taguj album..."
+                  OnChanged="ApplyCurrentAlbumTagState"
+                  OnClose="ToggleAlbumTagging" />
+}
+
+@if (showAlbumNote && IsBlindMode && isCurrentAlbumInLibrary && !string.IsNullOrWhiteSpace(GetCurrentAlbumId()))
+{
+    <ItemNotePanel Title="@($"Notatka: {GetCurrentAlbumId()}")"
+                   ItemType="album"
+                   SpotifyItemId="@GetCurrentAlbumId()"
+                   Content="currentAlbumNote"
+                   OnChanged="ApplyCurrentAlbumNoteState"
+                   OnClose="ToggleAlbumNote" />
 }
 
 @code {
@@ -403,6 +563,9 @@
     }
 
     private sealed class ExistsResponse { public bool exists { get; set; } }
+
+    private sealed class ItemStatusesRequest { public string ItemType { get; set; } = string.Empty; public List<string> SpotifyItemIds { get; set; } = new(); }
+    private sealed class LibraryItemStatus { public string SpotifyItemId { get; set; } = string.Empty; public bool IsInLibrary { get; set; } }
 
     private sealed class AssignDto { public long TagId { get; set; } public float Strength { get; set; } }
 
