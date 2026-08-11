@@ -2,6 +2,9 @@
 @using System.Net.Http.Json
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject BlindModeService BlindMode
+@inject NavigationManager Navigation
+@implements IDisposable
 @code {
 
     private PlaybackState? state;
@@ -9,12 +12,35 @@
 
     protected override async Task OnInitializedAsync()
     {
+        BlindMode.Changed += HandleBlindModeChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
+        await BlindMode.InitializeAsync();
         await RefreshState();
 
         timer = new System.Timers.Timer(5000);
         timer.Elapsed += async (_, __) => await InvokeAsync(RefreshState);
         timer.AutoReset = true;
         timer.Enabled = true;
+    }
+
+    private bool IsBlindMode => BlindMode.IsEnabled && IsAlbumsRoute();
+
+    private bool IsAlbumsRoute()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+        return path.Equals("albums", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("albums/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void HandleBlindModeChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        BlindMode.Changed -= HandleBlindModeChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
+        timer?.Dispose();
     }
 
     private async Task RefreshState()
@@ -245,6 +271,10 @@
         return string.Join(", ", artists.Select(a => a.name));
     }
 
+    private string GetBlindTrackLabel() => state?.item?.id ?? "Brak odtwarzanego utworu";
+
+    private string GetBlindAlbumLabel() => state?.item?.album?.id ?? "Brak identyfikatora albumu";
+
     private string GetProgressPercent()
     {
         var duration = state?.item?.duration_ms ?? 0;
@@ -265,13 +295,25 @@
 <div class="player-bar bg-dark text-light">
     <div class="container d-flex align-items-center justify-content-between py-2 gap-3">
         <div class="d-flex align-items-center gap-2 text-truncate" style="min-width: 0;">
-            @if (!string.IsNullOrEmpty(GetItemImageUrl()))
+            @if (IsBlindMode)
+            {
+                <div class="player-blind-artwork" aria-label="Anonimowa okładka">@GetBlindAlbumLabel()</div>
+            }
+            else if (!string.IsNullOrEmpty(GetItemImageUrl()))
             {
                 <img src="@GetItemImageUrl()" alt="cover" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" />
             }
             <div class="text-truncate" style="min-width:0;">
-                <div class="small text-light text-truncate">@state?.item?.name</div>
-                <div class="small text-secondary text-truncate">@GetArtists()</div>
+                @if (IsBlindMode)
+                {
+                    <div class="small text-light text-truncate">Utwór: @GetBlindTrackLabel()</div>
+                    <div class="small text-secondary text-truncate">Album: @GetBlindAlbumLabel()</div>
+                }
+                else
+                {
+                    <div class="small text-light text-truncate">@state?.item?.name</div>
+                    <div class="small text-secondary text-truncate">@GetArtists()</div>
+                }
                 @if (isCurrentInLibrary && currentTrackAssigns.Count > 0)
                 {
                     <div class="d-flex flex-wrap gap-1 mt-1">
@@ -351,7 +393,7 @@
 
     private sealed class Artist { public string name { get; set; } = string.Empty; }
 
-    private sealed class Album { public Img[]? images { get; set; } }
+    private sealed class Album { public string? id { get; set; } public Img[]? images { get; set; } }
 
     private sealed class Img
     {

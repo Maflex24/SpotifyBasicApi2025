@@ -1,6 +1,7 @@
 @page "/albums"
 @using Frontend.Components
 @inject LocalStorageService Store
+@inject BlindModeService BlindMode
 @inject IJSRuntime JS
 @inject HttpClient Http
 @using System.Globalization
@@ -32,16 +33,33 @@
     <section class="albums-toolbar mb-3" aria-label="Filtry i akcje albumów">
         <div class="albums-toolbar-heading">
             <h4 class="mb-0 albums-results-heading"><span>Albumy</span><span class="library-results-count">@($"{filteredAlbums.Count}/{totalRows} albumów")</span></h4>
+            <label class="album-blind-mode-toggle">
+                <input type="checkbox" checked="@IsBlindMode" @onchange="ToggleBlindModeAsync" />
+                <span>Tryb Blind</span>
+            </label>
         </div>
 
-        <div class="albums-search-group input-group input-group-sm">
-            <label class="visually-hidden" for="albums-search">Szukaj albumu lub wykonawcy</label>
-            @if (!string.IsNullOrWhiteSpace(LocalSearch))
-            {
-                <button type="button" class="btn btn-outline-light albums-search-clear" title="Wyczyść wyszukiwanie albumów" aria-label="Wyczyść wyszukiwanie albumów" @onclick="ClearSearchFilterAsync">×</button>
-            }
-            <input id="albums-search" class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
-        </div>
+        @if (IsBlindMode)
+        {
+            <div class="albums-search-group input-group input-group-sm">
+                <span class="form-control form-control-sm input-dark">Wyszukiwanie tekstowe ukryte</span>
+                @if (!string.IsNullOrWhiteSpace(LocalSearch))
+                {
+                    <button type="button" class="btn btn-outline-light albums-search-clear" title="Wyczyść ukryte wyszukiwanie" aria-label="Wyczyść ukryte wyszukiwanie" @onclick="ClearSearchFilterAsync">×</button>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="albums-search-group input-group input-group-sm">
+                <label class="visually-hidden" for="albums-search">Szukaj albumu lub wykonawcy</label>
+                @if (!string.IsNullOrWhiteSpace(LocalSearch))
+                {
+                    <button type="button" class="btn btn-outline-light albums-search-clear" title="Wyczyść wyszukiwanie albumów" aria-label="Wyczyść wyszukiwanie albumów" @onclick="ClearSearchFilterAsync">×</button>
+                }
+                <input id="albums-search" class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj albumu/wyk. (AND)" @bind="LocalSearch" @bind:event="oninput" />
+            </div>
+        }
 
         <div class="albums-filter-fields" aria-label="Ustawienia filtrowania">
             <select class="form-select form-select-sm select-dark" aria-label="Sortuj według" @bind="sortKey" @bind:after="MarkFiltersDirtyAsync">
@@ -62,12 +80,15 @@
                     <span>Grupuj</span>
                 </label>
             }
-            <div class="albums-year-fields">
-                <label class="visually-hidden" for="albums-year-from">Rok od</label>
-                <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" @bind:after="MarkFiltersDirtyAsync" />
-                <label class="visually-hidden" for="albums-year-to">Rok do</label>
-                <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" @bind:after="MarkFiltersDirtyAsync" />
-            </div>
+            @if (!IsBlindMode)
+            {
+                <div class="albums-year-fields">
+                    <label class="visually-hidden" for="albums-year-from">Rok od</label>
+                    <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" @bind:after="MarkFiltersDirtyAsync" />
+                    <label class="visually-hidden" for="albums-year-to">Rok do</label>
+                    <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" @bind:after="MarkFiltersDirtyAsync" />
+                </div>
+            }
         </div>
 
         <div class="albums-toolbar-actions" aria-label="Akcje filtrowania">
@@ -83,9 +104,12 @@
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry wykonawców" aria-label="Wykonawcy: @(showArtistFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showArtistFilters" @onclick="ToggleArtistFilters">
                 <AppIcon Name="filters" /><span class="album-action-label">Wykonawcy</span><span class="album-action-state" aria-hidden="true">@(showArtistFilters ? "▼" : "▶")</span>
             </button>
-            <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry gatunków" aria-label="Gatunki: @(showGenreFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showGenreFilters" @onclick="ToggleGenreFilters">
-                <AppIcon Name="filters" /><span class="album-action-label">Gatunki</span><span class="album-action-state" aria-hidden="true">@(showGenreFilters ? "▼" : "▶")</span>
-            </button>
+            @if (!IsBlindMode)
+            {
+                <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry gatunków" aria-label="Gatunki: @(showGenreFilters ? "ukryj filtry" : "pokaż filtry")" aria-expanded="@showGenreFilters" @onclick="ToggleGenreFilters">
+                    <AppIcon Name="filters" /><span class="album-action-label">Gatunki</span><span class="album-action-state" aria-hidden="true">@(showGenreFilters ? "▼" : "▶")</span>
+                </button>
+            }
         </div>
 
         <div class="albums-playback-actions" aria-label="Szybkie akcje wyników">
@@ -173,13 +197,26 @@
     @if (showArtistFilters)
     {
         <section class="albums-tag-filters albums-artist-filters mb-3" aria-label="Filtry wykonawców">
-            <div class="input-group input-group-sm tag-filter-search">
-                <input class="form-control input-dark" type="search" placeholder="Szukaj wykonawcy" aria-label="Szukaj w filtrach wykonawców" @bind="artistSearch" @bind:event="oninput" />
-                @if (!string.IsNullOrWhiteSpace(artistSearch))
-                {
-                    <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie wykonawców" aria-label="Wyczyść wyszukiwanie wykonawców" @onclick="ClearArtistSearch">×</button>
-                }
-            </div>
+            @if (IsBlindMode)
+            {
+                <div class="input-group input-group-sm tag-filter-search">
+                    <span class="form-control input-dark">Wyszukiwanie wykonawców ukryte</span>
+                    @if (!string.IsNullOrWhiteSpace(artistSearch))
+                    {
+                        <button type="button" class="btn btn-outline-light" title="Wyczyść ukryte wyszukiwanie wykonawców" aria-label="Wyczyść ukryte wyszukiwanie wykonawców" @onclick="ClearArtistSearch">×</button>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="input-group input-group-sm tag-filter-search">
+                    <input class="form-control input-dark" type="search" placeholder="Szukaj wykonawcy" aria-label="Szukaj w filtrach wykonawców" @bind="artistSearch" @bind:event="oninput" />
+                    @if (!string.IsNullOrWhiteSpace(artistSearch))
+                    {
+                        <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie wykonawców" aria-label="Wyczyść wyszukiwanie wykonawców" @onclick="ClearArtistSearch">×</button>
+                    }
+                </div>
+            }
             <div class="tag-filter-controls">
                 <button type="button" class="tag-mode-chip tag-include" @onclick="SelectAllAlbumArtistsAsync"><span>Wszyscy</span></button>
                 <button type="button" class="tag-mode-chip tag-none" @onclick="ClearAlbumArtistFiltersAsync"><span>Żadni</span></button>
@@ -195,7 +232,7 @@
                                 var state = GetArtistFilterState(artist.Id);
                                 var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                                 <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleArtistFilterStateAsync(artist.Id)">
-                                    <span class="tag-chip-label">@artist.Name</span>
+                            <span class="tag-chip-label">@(IsBlindMode ? artist.Id : artist.Name)</span>
                                 </button>
                             }
                         </div>
@@ -205,7 +242,7 @@
         </section>
     }
 
-    @if (showGenreFilters)
+    @if (showGenreFilters && !IsBlindMode)
     {
         <section class="albums-tag-filters albums-artist-filters mb-3" aria-label="Filtry gatunków">
             <div class="input-group input-group-sm tag-filter-search">
@@ -313,17 +350,20 @@
         <div class="album-artist-groups">
         @foreach (var group in artistAlbumGroups)
         {
-            <section class="album-artist-group" data-artist-group-id="@group.Id" aria-label="Albumy wykonawcy @group.Name">
+            <section class="album-artist-group" data-artist-group-id="@group.Id" aria-label="@(IsBlindMode ? $"Albumy wykonawcy {group.Id}" : $"Albumy wykonawcy {group.Name}")">
                 <header class="album-artist-group-heading">
                     <button type="button" class="album-artist-group-toggle" aria-expanded="@(!IsArtistGroupCollapsed(group.Id))" @onclick="() => ToggleArtistGroupAsync(group.Id)">
                         <span aria-hidden="true">@(IsArtistGroupCollapsed(group.Id) ? "▶" : "▼")</span>
-                        <span class="album-artist-group-name">@group.Name</span>
+                        <span class="album-artist-group-name">@(IsBlindMode ? group.Id : group.Name)</span>
                         <span class="library-results-count">@group.Albums.Count</span>
                     </button>
                     <div class="album-artist-group-meta">
-                        @foreach (var genre in group.Genres)
+                        @if (!IsBlindMode)
                         {
-                            <span class="badge bg-outline-light text-light album-artist-genre">@genre</span>
+                            @foreach (var genre in group.Genres)
+                            {
+                                <span class="badge bg-outline-light text-light album-artist-genre">@genre</span>
+                            }
                         }
                         @foreach (var tag in group.Tags)
                         {
@@ -336,9 +376,9 @@
                     }
                     @if (!string.IsNullOrWhiteSpace(group.Id))
                     {
-                        <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @group.Name" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
-                        <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @group.Name" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
-                        <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @group.Name" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
+                        <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
+                        <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
+                        <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
                     }
                 </header>
                 @if (!IsArtistGroupCollapsed(group.Id))
@@ -473,15 +513,28 @@
     private Dictionary<long, int> tagCounts = new();
     private int? fromYear = null;
     private int? toYear = null;
+    private bool IsBlindMode => BlindMode.IsEnabled;
 
     protected override async Task OnInitializedAsync()
     {
+        BlindMode.Changed += HandleBlindModeChanged;
+        await BlindMode.InitializeAsync();
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadFromStore();
         await LoadAvailableTags();
         await ApplyFiltersAsync();
         await LoadSavedFilters();
+    }
+
+    private async Task ToggleBlindModeAsync(ChangeEventArgs args)
+    {
+        await BlindMode.SetEnabledAsync(args.Value is bool enabled && enabled);
+    }
+
+    private void HandleBlindModeChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -555,6 +608,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        BlindMode.Changed -= HandleBlindModeChanged;
         try
         {
             await JS.InvokeVoidAsync("libraryControls.disconnect");
@@ -1013,9 +1067,9 @@
         taggingArtistId = null;
     }
 
-    private void OpenAlbumNote(Album album) => OpenItemNote("album", album.Id, album.Name, album.Note);
+    private void OpenAlbumNote(Album album) => OpenItemNote("album", album.Id, IsBlindMode ? album.Id : album.Name, album.Note);
 
-    private void OpenArtistNote(ArtistAlbumGroup artist) => OpenItemNote("artist", artist.Id, artist.Name, artist.Note);
+    private void OpenArtistNote(ArtistAlbumGroup artist) => OpenItemNote("artist", artist.Id, IsBlindMode ? artist.Id : artist.Name, artist.Note);
 
     private void OpenItemNote(string itemType, string itemId, string itemName, string? content)
     {
@@ -1058,7 +1112,7 @@
             return;
 
         relatedSourceArtistId = artist.Id;
-        relatedSourceArtistName = artist.Name;
+        relatedSourceArtistName = IsBlindMode ? artist.Id : artist.Name;
         relatedArtistError = null;
         relatedArtistSearch = null;
         relatedArtists = new List<RelatedArtist>();
@@ -1250,6 +1304,12 @@
     {
         var summary = $"Dodano albumy: {result.AlbumsAdded}; już w bibliotece: {result.AlbumsAlreadyInLibrary}.";
         return string.IsNullOrWhiteSpace(result.Error) ? summary : $"{summary} {result.Error}";
+    }
+
+    private static string GetBlindRelatedArtistResultText(ArtistDiscoveryResult result)
+    {
+        var summary = $"Dodano albumy: {result.AlbumsAdded}; już w bibliotece: {result.AlbumsAlreadyInLibrary}.";
+        return string.IsNullOrWhiteSpace(result.Error) ? summary : $"{summary} Część operacji nie powiodła się.";
     }
 
     private List<TagBadge> GetArtistTagBadges() => string.IsNullOrWhiteSpace(taggingArtistId)
@@ -1478,25 +1538,25 @@
         var chips = new List<ActiveFilterChip>();
 
         if (!string.IsNullOrWhiteSpace(localSearch))
-            chips.Add(new ActiveFilterChip($"Szukaj: {localSearch}", "active-library-filter-chip", ClearSearchFilterAsync));
+            chips.Add(new ActiveFilterChip(IsBlindMode ? "Wyszukiwanie tekstowe aktywne" : $"Szukaj: {localSearch}", "active-library-filter-chip", ClearSearchFilterAsync));
 
-        foreach (var artistId in includeArtistIds.OrderBy(id => GetArtistName(id), StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"+ {GetArtistName(artistId)}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedArtistAsync(artistId)));
+        foreach (var artistId in includeArtistIds.OrderBy(id => IsBlindMode ? id : GetArtistName(id), StringComparer.OrdinalIgnoreCase))
+            chips.Add(new ActiveFilterChip($"+ {(IsBlindMode ? artistId : GetArtistName(artistId))}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedArtistAsync(artistId)));
 
-        foreach (var artistId in excludeArtistIds.OrderBy(id => GetArtistName(id), StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"− {GetArtistName(artistId)}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedArtistAsync(artistId)));
+        foreach (var artistId in excludeArtistIds.OrderBy(id => IsBlindMode ? id : GetArtistName(id), StringComparer.OrdinalIgnoreCase))
+            chips.Add(new ActiveFilterChip($"− {(IsBlindMode ? artistId : GetArtistName(artistId))}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedArtistAsync(artistId)));
 
         foreach (var genre in includeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"+ Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedGenreAsync(genre)));
+            chips.Add(new ActiveFilterChip(IsBlindMode ? "+ Gatunek ukryty" : $"+ Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedGenreAsync(genre)));
 
         foreach (var genre in excludeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"− Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedGenreAsync(genre)));
+            chips.Add(new ActiveFilterChip(IsBlindMode ? "− Gatunek ukryty" : $"− Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedGenreAsync(genre)));
 
         if (fromYear.HasValue)
-            chips.Add(new ActiveFilterChip($"Rok od: {fromYear.Value}", "active-library-filter-chip", ClearFromYearFilterAsync));
+            chips.Add(new ActiveFilterChip(IsBlindMode ? "Rok od ukryty" : $"Rok od: {fromYear.Value}", "active-library-filter-chip", ClearFromYearFilterAsync));
 
         if (toYear.HasValue)
-            chips.Add(new ActiveFilterChip($"Rok do: {toYear.Value}", "active-library-filter-chip", ClearToYearFilterAsync));
+            chips.Add(new ActiveFilterChip(IsBlindMode ? "Rok do ukryty" : $"Rok do: {toYear.Value}", "active-library-filter-chip", ClearToYearFilterAsync));
 
         if (long.TryParse(selectedTagFilter, out var selectedTagId))
             chips.Add(new ActiveFilterChip($"Tag: {GetTagName(selectedTagId)}", "active-library-filter-chip active-library-filter-chip-include", ClearSelectedTagFilterAsync));
@@ -1910,7 +1970,21 @@
 
     private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item">
         <div class="card bg-dark text-light h-100">
-            @if (album.Images?.Any() == true)
+            @if (IsBlindMode)
+            {
+                <div class="artist-image-square blind-artwork" aria-label="Anonimowa okładka albumu">
+                    <span>@album.Id</span>
+                    <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @album.Id"
+                            @onclick="() => PlayAlbum(album.Uri)"><AppIcon Name="play" /></button>
+                    <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Id"
+                            disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
+                    <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Id"
+                            @onclick="() => OpenAlbumNote(album)"><AppIcon Name="edit" /></button>
+                    <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Id"
+                            @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
+                </div>
+            }
+            else if (album.Images?.Any() == true)
             {
                 <div class="artist-image-square" style="position:relative;">
                     <img src="@GetBestImageUrl(album.Images)" alt="@album.Name">
@@ -1926,7 +2000,16 @@
             }
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                    <h6 class="card-title mb-1"><a href="/album/@album.Id" class="link-light text-decoration-none">@album.Name</a> @if (album.ReleaseYear.HasValue) { <text> (@album.ReleaseYear)</text> }</h6>
+                    <h6 class="card-title mb-1">
+                        @if (IsBlindMode)
+                        {
+                            @album.Id
+                        }
+                        else
+                        {
+                            <a href="/album/@album.Id" class="link-light text-decoration-none">@album.Name</a> @if (album.ReleaseYear.HasValue) { <text> (@album.ReleaseYear)</text> }
+                        }
+                    </h6>
                     <span class="badge bg-secondary">@album.Popularity</span>
                 </div>
 
@@ -1936,7 +2019,14 @@
                         <div class="d-flex flex-wrap gap-1 mt-1">
                             @foreach (var artist in album.Artists)
                             {
-                                <a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>
+                                @if (IsBlindMode)
+                                {
+                                    <span class="badge bg-outline-light text-light" style="font-size: 0.8rem;">@artist.Id</span>
+                                }
+                                else
+                                {
+                                    <a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>
+                                }
                             }
                         </div>
                     </div>
@@ -1966,10 +2056,10 @@
 
                 <div class="mt-2">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @album.Name" @onclick="() => OpenAlbumTagging(album.Id)">
+                        <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumTagging(album.Id)">
                             <AppIcon Name="tag" /><span>Taguj</span>
                         </button>
-                        <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Name" @onclick="() => OpenAlbumNote(album)">
+                        <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumNote(album)">
                             <AppIcon Name="edit" /><span>Notatka</span>
                         </button>
                         <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
@@ -2137,7 +2227,7 @@
         var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("pl-PL"), ignoreCase: true);
 
         return GetVisibleAlbumArtists()
-            .GroupBy(artist => GetArtistGroupName(artist.Name), StringComparer.Ordinal)
+            .GroupBy(artist => GetArtistGroupName(IsBlindMode ? artist.Id : artist.Name), StringComparer.Ordinal)
             .OrderBy(group => group.Key == "#")
             .ThenBy(group => group.Key, comparer)
             .Select(group => new ArtistFilterGroup
@@ -2456,10 +2546,10 @@
 
 @if (showRelatedArtistsPanel)
 {
-    <section class="related-artists-panel shadow" aria-label="@RelatedArtistsTitle">
+    <section class="related-artists-panel shadow" aria-label="@(IsBlindMode ? "Podobni wykonawcy (anonimowo)" : RelatedArtistsTitle)">
         <div class="tagging-panel-header">
             <div>
-                <strong>@RelatedArtistsTitle</strong>
+                <strong>@(IsBlindMode ? $"Podobni wykonawcy: {relatedSourceArtistId}" : RelatedArtistsTitle)</strong>
                 <div class="related-artists-panel-subtitle">Dodaj do biblioteki albumy studyjne i bieżącego filtra wykonawców.</div>
             </div>
             <button type="button" class="btn btn-sm btn-outline-light" disabled="@isAddingRelatedArtists" title="Zamknij" aria-label="Zamknij" @onclick="CloseRelatedArtists">&times;</button>
@@ -2467,13 +2557,16 @@
 
         @if (!string.IsNullOrWhiteSpace(relatedArtistError))
         {
-            <div class="alert alert-warning related-artists-error" role="status">@relatedArtistError</div>
+            <div class="alert alert-warning related-artists-error" role="status">@(IsBlindMode ? "Nie udało się ukończyć jednej z operacji podobnych wykonawców." : relatedArtistError)</div>
         }
 
-        <div class="related-artists-search">
-            <input class="form-control" placeholder="Wyszukaj wykonawcę w katalogu Spotify..." @bind="relatedArtistSearch" @bind:event="oninput" disabled="@isLoadingRelatedArtists" />
-            <button type="button" class="btn btn-outline-light" disabled="@(isLoadingRelatedArtists || string.IsNullOrWhiteSpace(relatedArtistSearch))" @onclick="SearchRelatedArtistsFallbackAsync">Szukaj</button>
-        </div>
+        @if (!IsBlindMode)
+        {
+            <div class="related-artists-search">
+                <input class="form-control" placeholder="Wyszukaj wykonawcę w katalogu Spotify..." @bind="relatedArtistSearch" @bind:event="oninput" disabled="@isLoadingRelatedArtists" />
+                <button type="button" class="btn btn-outline-light" disabled="@(isLoadingRelatedArtists || string.IsNullOrWhiteSpace(relatedArtistSearch))" @onclick="SearchRelatedArtistsFallbackAsync">Szukaj</button>
+            </div>
+        }
 
         @if (isLoadingRelatedArtists)
         {
@@ -2494,10 +2587,14 @@
                     <article class="related-artist-item">
                         <label class="related-artist-checkbox">
                             <input type="checkbox" checked="@isSelected" disabled="@isAddingRelatedArtists" @onchange="() => ToggleRelatedArtistSelection(artist.Id)" />
-                            <span class="visually-hidden">Zaznacz @artist.Name</span>
+                            <span class="visually-hidden">Zaznacz @(IsBlindMode ? artist.Id : artist.Name)</span>
                         </label>
                         <div class="related-artist-artwork" aria-hidden="true">
-                            @if (artist.Images.Count > 0 && !string.IsNullOrWhiteSpace(GetBestImageUrl(artist.Images)))
+                            @if (IsBlindMode)
+                            {
+                                <span class="blind-related-artwork">@artist.Id</span>
+                            }
+                            else if (artist.Images.Count > 0 && !string.IsNullOrWhiteSpace(GetBestImageUrl(artist.Images)))
                             {
                                 <img src="@GetBestImageUrl(artist.Images)" alt="" />
                             }
@@ -2507,13 +2604,20 @@
                             }
                         </div>
                         <div class="related-artist-details">
-                            <a href="/artist/@artist.Id" class="link-light text-decoration-none related-artist-name">@artist.Name</a>
+                            @if (IsBlindMode)
+                            {
+                                <span class="related-artist-name">@artist.Id</span>
+                            }
+                            else
+                            {
+                                <a href="/artist/@artist.Id" class="link-light text-decoration-none related-artist-name">@artist.Name</a>
+                            }
                             <div class="related-artist-meta">
                                 @if (artist.IsInLibrary)
                                 {
                                     <span class="badge bg-outline-primary text-primary">W bibliotece</span>
                                 }
-                                @if (artist.Genres.Count > 0)
+                                @if (!IsBlindMode && artist.Genres.Count > 0)
                                 {
                                     <span>@string.Join(", ", artist.Genres.Take(3))</span>
                                 }
@@ -2521,12 +2625,12 @@
                             @if (relatedArtistResults.TryGetValue(artist.Id, out var result))
                             {
                                 <div class="related-artist-result @(string.IsNullOrWhiteSpace(result.Error) ? string.Empty : "is-warning")">
-                                    @GetRelatedArtistResultText(result)
+                                    @(IsBlindMode ? GetBlindRelatedArtistResultText(result) : GetRelatedArtistResultText(result))
                                 </div>
                             }
                         </div>
                         <div class="related-artist-actions">
-                            <button type="button" class="btn btn-sm album-card-tag related-artist-play" title="Odtwórz top utwory" aria-label="Odtwórz top utwory: @artist.Name" disabled="@playingRelatedArtistIds.Contains(artist.Id)" @onclick="() => PlayRelatedArtistTopTracksAsync(artist.Id)">
+                            <button type="button" class="btn btn-sm album-card-tag related-artist-play" title="Odtwórz top utwory" aria-label="Odtwórz top utwory: @(IsBlindMode ? artist.Id : artist.Name)" disabled="@playingRelatedArtistIds.Contains(artist.Id)" @onclick="() => PlayRelatedArtistTopTracksAsync(artist.Id)">
                                 <AppIcon Name="play" />
                             </button>
                             <button type="button" class="btn btn-sm album-card-tag" disabled="@isAddingRelatedArtists" @onclick="() => AddSingleRelatedArtistAsync(artist.Id)">

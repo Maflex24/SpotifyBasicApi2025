@@ -18,5 +18,6 @@ builder.Services.AddSingleton(new FrontendTheme
 });
 
 builder.Services.AddScoped<LocalStorageService>();
+builder.Services.AddScoped<BlindModeService>();
 
 await builder.Build().RunAsync();
