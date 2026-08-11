@@ -115,6 +115,9 @@
             <button class="btn btn-sm album-action-button album-action-random" title="Wylosuj album z zastosowanych wyników" aria-label="Wylosuj album z zastosowanych wyników" disabled="@isLoadingAlbums" @onclick="PickRandomAlbumAsync">
                 <AppIcon Name="shuffle" /><span class="album-action-label">@(isRandomSelection ? "Losuj ponownie" : "Losuj")</span>
             </button>
+            <button class="btn btn-sm album-action-button album-action-random" title="Wylosuj album z aktualnie wczytanych wyników" aria-label="Wylosuj album z aktualnie wczytanych wyników" disabled="@(isLoadingAlbums || filteredAlbums.Count == 0)" @onclick="PickLoadedAlbumAsync">
+                <AppIcon Name="shuffle" /><span class="album-action-label">Losuj z wczytanych</span>
+            </button>
             @if (isRandomSelection)
             {
                 <button class="btn btn-sm album-action-button album-action-muted" title="Wróć do wyników przed losowaniem" aria-label="Wróć do wyników przed losowaniem" disabled="@isLoadingAlbums" @onclick="ReturnToRandomSourceAsync">
@@ -445,6 +448,8 @@
     private bool isRandomSelection;
     private string? randomSourceSearch;
     private string? randomAlbumId;
+    private string? localRandomAlbumId;
+    private string? pendingLocalRandomScrollId;
     private bool HasMoreAlbums => albums.Count < totalRows;
     private readonly HashSet<string> queuingAlbumIds = new();
     private bool isQueueingAllAlbums;
@@ -515,6 +520,7 @@
     private int? toYear = null;
     private bool IsBlindMode => BlindMode.IsEnabled;
     private bool IsPlayingAlbum(string albumId) => string.Equals(albumId, ActivePlayback.CurrentAlbumId, StringComparison.Ordinal);
+    private bool IsLocallyRandomAlbum(string albumId) => string.Equals(albumId, localRandomAlbumId, StringComparison.Ordinal);
 
     protected override async Task OnInitializedAsync()
     {
@@ -528,6 +534,7 @@
         await LoadFromStore();
         await LoadAvailableTags();
         await ApplyFiltersAsync();
+        await RestoreLocalRandomSelectionAsync();
         await LoadSavedFilters();
     }
 
@@ -595,6 +602,20 @@
             artistNavigationObserved = false;
             canNavigateToPreviousArtist = false;
             canNavigateToNextArtist = false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(pendingLocalRandomScrollId))
+        {
+            var albumId = pendingLocalRandomScrollId;
+            pendingLocalRandomScrollId = null;
+            try
+            {
+                await JS.InvokeAsync<bool>("albumsLocalSelection.scrollToAlbum", albumId);
+            }
+            catch (JSException)
+            {
+                // Brak przewinięcia nie blokuje zachowania lokalnego wyboru.
+            }
         }
     }
 
@@ -1935,7 +1956,8 @@
             toYear,
             isRandomSelection,
             randomSourceSearch,
-            randomAlbumId
+            randomAlbumId,
+            localRandomAlbumId
         };
 
         await Store.SetItemAsync(StoreKey, state);
@@ -1976,6 +1998,7 @@
         isRandomSelection = state.isRandomSelection ?? false;
         randomSourceSearch = state.randomSourceSearch;
         randomAlbumId = state.randomAlbumId;
+        localRandomAlbumId = state.localRandomAlbumId;
 
     }
 
@@ -2006,9 +2029,10 @@
         public bool? isRandomSelection { get; set; }
         public string? randomSourceSearch { get; set; }
         public string? randomAlbumId { get; set; }
+        public string? localRandomAlbumId { get; set; }
     }
 
-    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty)">
+    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty) @(IsLocallyRandomAlbum(album.Id) ? "is-locally-random-album" : string.Empty)" data-album-card-id="@album.Id">
         <div class="card bg-dark text-light h-100">
             @if (IsBlindMode)
             {
@@ -2042,6 +2066,10 @@
                 @if (IsPlayingAlbum(album.Id))
                 {
                     <span class="blind-playing-indicator" aria-label="Odtwarzany album: @album.Id"><AppIcon Name="play" /> Odtwarzany</span>
+                }
+                @if (IsLocallyRandomAlbum(album.Id))
+                {
+                    <span class="local-random-indicator" aria-label="Lokalnie wylosowany album: @album.Id"><AppIcon Name="shuffle" /> Wylosowany</span>
                 }
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <h6 class="card-title mb-1">
@@ -2428,6 +2456,52 @@
             localSearch = value;
             _ = MarkFiltersDirtyAsync();
         }
+    }
+
+    private async Task PickLoadedAlbumAsync()
+    {
+        var candidates = filteredAlbums
+            .Where(album => !string.IsNullOrWhiteSpace(album.Id))
+            .GroupBy(album => album.Id, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+
+        if (candidates.Count == 0)
+            return;
+
+        localRandomAlbumId = candidates[Random.Shared.Next(candidates.Count)].Id;
+        ExpandGroupsForLocalRandomAlbum();
+        pendingLocalRandomScrollId = localRandomAlbumId;
+        await SaveToStore();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RestoreLocalRandomSelectionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(localRandomAlbumId))
+            return;
+
+        var filters = appliedFilters ?? CaptureCurrentFilters();
+        while (!filteredAlbums.Any(album => string.Equals(album.Id, localRandomAlbumId, StringComparison.Ordinal)) && HasMoreAlbums)
+        {
+            if (!await LoadAlbumsAsync(filters, reset: false))
+                break;
+        }
+
+        if (!filteredAlbums.Any(album => string.Equals(album.Id, localRandomAlbumId, StringComparison.Ordinal)))
+            return;
+
+        ExpandGroupsForLocalRandomAlbum();
+        pendingLocalRandomScrollId = localRandomAlbumId;
+    }
+
+    private void ExpandGroupsForLocalRandomAlbum()
+    {
+        if (!IsArtistGroupingEnabled || string.IsNullOrWhiteSpace(localRandomAlbumId))
+            return;
+
+        foreach (var group in GetArtistAlbumGroups().Where(group => group.Albums.Any(album => string.Equals(album.Id, localRandomAlbumId, StringComparison.Ordinal))))
+            collapsedArtistGroupIds.Remove(group.Id);
     }
 
     private async Task PickRandomAlbumAsync()
