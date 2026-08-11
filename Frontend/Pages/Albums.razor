@@ -514,7 +514,7 @@
     private int? fromYear = null;
     private int? toYear = null;
     private bool IsBlindMode => BlindMode.IsEnabled;
-    private bool IsPlayingAlbum(string albumId) => IsBlindMode && string.Equals(albumId, ActivePlayback.CurrentAlbumId, StringComparison.Ordinal);
+    private bool IsPlayingAlbum(string albumId) => string.Equals(albumId, ActivePlayback.CurrentAlbumId, StringComparison.Ordinal);
 
     protected override async Task OnInitializedAsync()
     {
