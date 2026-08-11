@@ -408,6 +408,13 @@
 
     private string GetBlindAlbumLabel() => state?.item?.album?.id ?? "Brak identyfikatora albumu";
 
+    private string? GetBlindTrackPosition()
+    {
+        var trackNumber = state?.item?.track_number ?? 0;
+        var totalTracks = state?.item?.album?.total_tracks ?? 0;
+        return trackNumber > 0 && totalTracks > 0 ? $"Utwór {trackNumber}/{totalTracks}" : null;
+    }
+
     private string GetProgressPercent()
     {
         var duration = state?.item?.duration_ms ?? 0;
@@ -439,7 +446,7 @@
             <div class="text-truncate" style="min-width:0;">
                 @if (IsBlindMode)
                 {
-                    <div class="small text-light text-truncate">Utwór: @GetBlindTrackLabel()</div>
+                    <div class="small text-light text-truncate">@(GetBlindTrackPosition() ?? "Utwór") · @GetBlindTrackLabel()</div>
                     <div class="small text-secondary text-truncate">Album: @GetBlindAlbumLabel()</div>
                 }
                 else
@@ -546,6 +553,7 @@
     {
         public string name { get; set; } = string.Empty;
         public int duration_ms { get; set; }
+        public int? track_number { get; set; }
         public Artist[]? artists { get; set; }
         public Album? album { get; set; }
         public string? id { get; set; }
@@ -553,7 +561,7 @@
 
     private sealed class Artist { public string name { get; set; } = string.Empty; }
 
-    private sealed class Album { public string? id { get; set; } public Img[]? images { get; set; } }
+    private sealed class Album { public string? id { get; set; } public int? total_tracks { get; set; } public Img[]? images { get; set; } }
 
     private sealed class Img
     {
