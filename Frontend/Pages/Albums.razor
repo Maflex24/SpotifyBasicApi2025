@@ -124,7 +124,7 @@
                     <AppIcon Name="reset" /><span class="album-action-label">Wróć do wyników</span>
                 </button>
             }
-            <button class="btn btn-sm album-action-button album-action-play-all" title="Dodaj wszystkie wyświetlone albumy do kolejki" aria-label="Odtwórz wszystkie wyświetlone albumy" disabled="@(isQueueingAllAlbums || filteredAlbums.Count == 0)" @onclick="PlayAllAlbums">
+            <button class="btn btn-sm album-action-button album-action-play-all" title="@PlayAllAlbumsTitle" aria-label="@PlayAllAlbumsAriaLabel" disabled="@(isQueueingAllAlbums || !CanPlayAllAlbums)" @onclick="PlayAllAlbums">
                 <AppIcon Name="play" /><span class="album-action-label">Odtwórz wszystko</span>
             </button>
         </div>
@@ -442,6 +442,7 @@
     private List<Album> albums = new();
     private List<Album> filteredAlbums = new();
     private const int AlbumPageSize = 500;
+    private const int MaxAlbumsForPlayAll = 5;
     private int currentPage;
     private int totalRows;
     private bool isLoadingAlbums;
@@ -521,6 +522,21 @@
     private bool IsBlindMode => BlindMode.IsEnabled;
     private bool IsPlayingAlbum(string albumId) => string.Equals(albumId, ActivePlayback.CurrentAlbumId, StringComparison.Ordinal);
     private bool IsLocallyRandomAlbum(string albumId) => string.Equals(albumId, localRandomAlbumId, StringComparison.Ordinal);
+    private int QueueableAlbumCount => GetQueueableAlbumIds().Count;
+    private bool CanPlayAllAlbums => QueueableAlbumCount is > 0 and <= MaxAlbumsForPlayAll;
+    private bool IsPlayAllAlbumLimitExceeded => QueueableAlbumCount > MaxAlbumsForPlayAll;
+    private string PlayAllAlbumsTitle => IsPlayAllAlbumLimitExceeded
+        ? $"Odtwarzanie wszystkiego jest dostępne dla maksymalnie {MaxAlbumsForPlayAll} albumów"
+        : "Dodaj wszystkie wyświetlone albumy do kolejki";
+    private string PlayAllAlbumsAriaLabel => IsPlayAllAlbumLimitExceeded
+        ? $"Odtwórz wszystko jest dostępne dla maksymalnie {MaxAlbumsForPlayAll} albumów"
+        : "Odtwórz wszystkie wyświetlone albumy";
+
+    private List<string> GetQueueableAlbumIds() => filteredAlbums
+        .Select(album => album.Id)
+        .Where(id => !string.IsNullOrWhiteSpace(id))
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -1515,18 +1531,13 @@
 
     private async Task PlayAllAlbums()
     {
-        if (isQueueingAllAlbums || filteredAlbums.Count == 0)
+        var albumIds = GetQueueableAlbumIds();
+        if (isQueueingAllAlbums || albumIds.Count == 0 || albumIds.Count > MaxAlbumsForPlayAll)
             return;
 
         isQueueingAllAlbums = true;
         try
         {
-            var albumIds = filteredAlbums
-                .Select(album => album.Id)
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
             await Http.PostAsJsonAsync("api/player/queue/albums", new { albumIds });
         }
         finally
