@@ -81,15 +81,12 @@
                     <span>Grupuj</span>
                 </label>
             }
-            @if (!IsBlindMode)
-            {
-                <div class="albums-year-fields">
-                    <label class="visually-hidden" for="albums-year-from">Rok od</label>
-                    <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" @bind:after="MarkFiltersDirtyAsync" />
-                    <label class="visually-hidden" for="albums-year-to">Rok do</label>
-                    <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" @bind:after="MarkFiltersDirtyAsync" />
-                </div>
-            }
+            <div class="albums-year-fields">
+                <label class="visually-hidden" for="albums-year-from">Rok od</label>
+                <input id="albums-year-from" type="number" class="form-control form-control-sm input-dark" placeholder="Rok od" @bind="fromYear" @bind:after="MarkFiltersDirtyAsync" />
+                <label class="visually-hidden" for="albums-year-to">Rok do</label>
+                <input id="albums-year-to" type="number" class="form-control form-control-sm input-dark" placeholder="Rok do" @bind="toYear" @bind:after="MarkFiltersDirtyAsync" />
+            </div>
         </div>
 
         <div class="albums-toolbar-actions" aria-label="Akcje filtrowania">
@@ -1591,10 +1588,10 @@
             chips.Add(new ActiveFilterChip(IsBlindMode ? "− Gatunek ukryty" : $"− Gatunek: {genre}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedGenreAsync(genre)));
 
         if (fromYear.HasValue)
-            chips.Add(new ActiveFilterChip(IsBlindMode ? "Rok od ukryty" : $"Rok od: {fromYear.Value}", "active-library-filter-chip", ClearFromYearFilterAsync));
+            chips.Add(new ActiveFilterChip($"Rok od: {fromYear.Value}", "active-library-filter-chip", ClearFromYearFilterAsync));
 
         if (toYear.HasValue)
-            chips.Add(new ActiveFilterChip(IsBlindMode ? "Rok do ukryty" : $"Rok do: {toYear.Value}", "active-library-filter-chip", ClearToYearFilterAsync));
+            chips.Add(new ActiveFilterChip($"Rok do: {toYear.Value}", "active-library-filter-chip", ClearToYearFilterAsync));
 
         if (long.TryParse(selectedTagFilter, out var selectedTagId))
             chips.Add(new ActiveFilterChip($"Tag: {GetTagName(selectedTagId)}", "active-library-filter-chip active-library-filter-chip-include", ClearSelectedTagFilterAsync));
