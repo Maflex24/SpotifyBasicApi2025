@@ -459,6 +459,7 @@
     private bool showRelatedArtistsPanel;
     private bool isLoadingRelatedArtists;
     private bool isAddingRelatedArtists;
+    private readonly HashSet<string> playingRelatedArtistIds = new(StringComparer.Ordinal);
     private string? relatedSourceArtistId;
     private string? relatedSourceArtistName;
     private string? relatedArtistError;
@@ -1210,6 +1211,41 @@
         }
     }
 
+    private async Task PlayRelatedArtistTopTracksAsync(string artistId)
+    {
+        if (string.IsNullOrWhiteSpace(artistId) || !playingRelatedArtistIds.Add(artistId))
+            return;
+
+        try
+        {
+            var top = await Http.GetFromJsonAsync<TopTracksResponse>($"api/spotify/artists/{Uri.EscapeDataString(artistId)}/top-tracks");
+            var uris = top?.Items
+                .Where(track => !string.IsNullOrWhiteSpace(track.Uri))
+                .Select(track => track.Uri)
+                .ToList() ?? new List<string>();
+
+            if (uris.Count == 0)
+                return;
+
+            var body = new { uris };
+            var response = await Http.PutAsJsonAsync("api/player/play", body);
+            if (response.IsSuccessStatusCode)
+                return;
+
+            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
+            var firstDevice = devices?.Devices.FirstOrDefault();
+            if (firstDevice != null)
+            {
+                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(firstDevice.Id)}&play=true", null);
+                await Http.PutAsJsonAsync("api/player/play", body);
+            }
+        }
+        finally
+        {
+            playingRelatedArtistIds.Remove(artistId);
+        }
+    }
+
     private static string GetRelatedArtistResultText(ArtistDiscoveryResult result)
     {
         var summary = $"Dodano albumy: {result.AlbumsAdded}; już w bibliotece: {result.AlbumsAlreadyInLibrary}.";
@@ -1654,6 +1690,7 @@
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public int Popularity { get; set; }
+        public List<SpotifyImage> Images { get; set; } = new();
         public List<string> Genres { get; set; } = new();
         public bool IsInLibrary { get; set; }
     }
@@ -1767,6 +1804,8 @@
 
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
+    private sealed class TopTracksResponse { public List<TopTrackItem> Items { get; set; } = new(); }
+    private sealed class TopTrackItem { public string Uri { get; set; } = string.Empty; }
 
     
 
@@ -2457,6 +2496,16 @@
                             <input type="checkbox" checked="@isSelected" disabled="@isAddingRelatedArtists" @onchange="() => ToggleRelatedArtistSelection(artist.Id)" />
                             <span class="visually-hidden">Zaznacz @artist.Name</span>
                         </label>
+                        <div class="related-artist-artwork" aria-hidden="true">
+                            @if (artist.Images.Count > 0 && !string.IsNullOrWhiteSpace(GetBestImageUrl(artist.Images)))
+                            {
+                                <img src="@GetBestImageUrl(artist.Images)" alt="" />
+                            }
+                            else
+                            {
+                                <span>@artist.Name.FirstOrDefault()</span>
+                            }
+                        </div>
                         <div class="related-artist-details">
                             <a href="/artist/@artist.Id" class="link-light text-decoration-none related-artist-name">@artist.Name</a>
                             <div class="related-artist-meta">
@@ -2476,9 +2525,14 @@
                                 </div>
                             }
                         </div>
-                        <button type="button" class="btn btn-sm album-card-tag" disabled="@isAddingRelatedArtists" @onclick="() => AddSingleRelatedArtistAsync(artist.Id)">
-                            <AppIcon Name="save" /><span>Dodaj</span>
-                        </button>
+                        <div class="related-artist-actions">
+                            <button type="button" class="btn btn-sm album-card-tag related-artist-play" title="Odtwórz top utwory" aria-label="Odtwórz top utwory: @artist.Name" disabled="@playingRelatedArtistIds.Contains(artist.Id)" @onclick="() => PlayRelatedArtistTopTracksAsync(artist.Id)">
+                                <AppIcon Name="play" />
+                            </button>
+                            <button type="button" class="btn btn-sm album-card-tag" disabled="@isAddingRelatedArtists" @onclick="() => AddSingleRelatedArtistAsync(artist.Id)">
+                                <AppIcon Name="save" /><span>Dodaj</span>
+                            </button>
+                        </div>
                     </article>
                 }
             </div>

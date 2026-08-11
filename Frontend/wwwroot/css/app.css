@@ -1719,6 +1719,29 @@ code {
     padding-top: 0.2rem;
 }
 
+.related-artist-artwork {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2.7rem;
+    height: 2.7rem;
+    overflow: hidden;
+    color: #cbd5e1;
+    background: #303a49;
+    border-radius: 50%;
+    place-items: center;
+}
+
+.related-artist-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.related-artist-artwork span {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
 .related-artist-details {
     flex: 1 1 auto;
     min-width: 0;
@@ -1745,6 +1768,27 @@ code {
 
 .related-artist-result.is-warning {
     color: #fcd34d;
+}
+
+.related-artist-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.related-artist-play {
+    display: grid;
+    width: 2.45rem;
+    min-width: 2.45rem;
+    height: 2.45rem;
+    padding: 0;
+    place-items: center;
+}
+
+.related-artist-play .app-icon {
+    width: 1rem;
+    height: 1rem;
 }
 
 .related-artists-loading {
