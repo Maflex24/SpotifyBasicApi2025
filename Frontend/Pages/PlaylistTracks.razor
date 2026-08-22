@@ -177,14 +177,7 @@
                         </td>
                         <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
                         <td>
-                            @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
-                            {
-                                <span class="badge bg-primary me-1" style="font-size: 0.7rem;">@tag.TagName (@tag.Strength)</span>
-                            }
-                            @if ((t.Tags?.Count ?? 0) > 3)
-                            {
-                                <span class="badge bg-outline-primary text-primary" style="font-size: 0.7rem;">+@((t.Tags?.Count ?? 0) - 3)</span>
-                            }
+                            <TagPreview Tags="@((t.Tags ?? new List<TrackTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" BadgeClass="badge bg-primary" OverflowClass="badge bg-outline-primary text-primary" />
                         </td>
                         <td>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
