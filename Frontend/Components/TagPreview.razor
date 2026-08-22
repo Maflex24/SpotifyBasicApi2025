@@ -1,0 +1,40 @@
+<div class="tag-preview" aria-label="Tagi">
+    @foreach (var tag in VisibleTags)
+    {
+        @if (OnTagClick.HasDelegate)
+        {
+            <button type="button" class="@BadgeClass tag-preview-tag" title="Kliknij, aby edytować" @onclick="() => OnTagClick.InvokeAsync(tag.TagId)">@tag.TagName (@tag.Strength)</button>
+        }
+        else
+        {
+            <span class="@BadgeClass tag-preview-tag">@tag.TagName (@tag.Strength)</span>
+        }
+    }
+    @if (HiddenTags.Count > 0)
+    {
+        <span class="tag-preview-overflow">
+            <button type="button" class="@OverflowClass tag-preview-toggle" aria-expanded="@expanded" aria-label="@(expanded ? "Pokaż mniej tagów" : $"Pokaż wszystkie tagi; ukryto {HiddenTags.Count}")" @onclick="Toggle">@(expanded ? "Pokaż mniej" : $"+{HiddenTags.Count}")</button>
+            @if (!expanded)
+            {
+                <span class="tag-preview-tooltip" role="tooltip">
+                    @foreach (var tag in HiddenTags)
+                    {
+                        <span>@tag.TagName (@tag.Strength)</span>
+                    }
+                </span>
+            }
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TagBadge> Tags { get; set; } = Array.Empty<TagBadge>();
+    [Parameter] public string BadgeClass { get; set; } = "badge badge-tag";
+    [Parameter] public string OverflowClass { get; set; } = "badge bg-outline-primary text-primary badge-tag";
+    [Parameter] public EventCallback<long> OnTagClick { get; set; }
+
+    private bool expanded;
+    private IReadOnlyList<TagBadge> VisibleTags => expanded ? Tags : Tags.Take(3).ToList();
+    private IReadOnlyList<TagBadge> HiddenTags => expanded ? Array.Empty<TagBadge>() : Tags.Skip(3).ToList();
+    private void Toggle() => expanded = !expanded;
+}

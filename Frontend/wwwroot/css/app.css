@@ -134,6 +134,54 @@ code {
 
 .library-card-grid-item {
     min-width: 0;
+    align-self: stretch;
+}
+
+.tag-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+button.tag-preview-tag {
+    cursor: pointer;
+}
+
+.tag-preview-overflow {
+    position: relative;
+    display: inline-flex;
+}
+
+.tag-preview-toggle {
+    cursor: pointer;
+}
+
+.tag-preview-tooltip {
+    position: absolute;
+    z-index: 20;
+    bottom: calc(100% + 0.45rem);
+    left: 0;
+    display: none;
+    min-width: max-content;
+    max-width: min(18rem, 75vw);
+    padding: 0.45rem 0.6rem;
+    border: 1px solid rgba(255,255,255,0.24);
+    border-radius: 0.4rem;
+    background: #172033;
+    color: #f8fafc;
+    box-shadow: 0 0.45rem 1rem rgba(0,0,0,0.42);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.tag-preview-tooltip span {
+    display: block;
+}
+
+.tag-preview-overflow:hover .tag-preview-tooltip,
+.tag-preview-overflow:focus-within .tag-preview-tooltip {
+    display: block;
 }
 
 .album-blind-mode-toggle {

@@ -214,17 +214,8 @@
                         {
                             <div class="mb-2">
                                 <small class="text-muted">Tagi:</small>
-                                <div class="d-flex flex-wrap gap-1 mt-1">
-                                    @foreach (var tag in a.Tags.Take(3))
-                                    {
-                                        <span class="badge badge-tag" style="cursor:pointer;" title="Kliknij, aby edytować" @onclick="() => SelectArtistTag(a.Id, tag.TagId)">
-                                            @tag.TagName (@tag.Strength)
-                                        </span>
-                                    }
-                                    @if (a.Tags.Count > 3)
-                                    {
-                                        <span class="badge bg-outline-primary text-primary badge-tag">+@(a.Tags.Count - 3)</span>
-                                    }
+                                <div class="mt-1">
+                                    <TagPreview Tags="@(a.Tags.Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" OnTagClick="@(tagId => SelectArtistTag(a.Id, tagId))" />
                                 </div>
                             </div>
                         }
