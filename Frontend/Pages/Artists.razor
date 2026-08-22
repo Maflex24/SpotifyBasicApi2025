@@ -5,6 +5,8 @@
 @using System.Text.Json
 @implements IAsyncDisposable
 
+<PageTitle>Library Manager - Artyści</PageTitle>
+
 <div class="container-fluid py-3">
     <div class="library-controls-sentinel" @ref="controlsSentinel" aria-hidden="true"></div>
     <div class="library-controls-dock @(ControlsCollapsed ? "is-collapsed" : string.Empty)">
