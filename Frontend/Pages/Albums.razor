@@ -508,6 +508,10 @@
     private Dictionary<long, int> tagCounts = new();
     private int? fromYear = null;
     private int? toYear = null;
+    private enum BlindRevealField { AlbumName, ArtistName, ReleaseYear, Artwork }
+    private readonly record struct BlindRevealKey(string AlbumId, BlindRevealField Field, string? ArtistId);
+    private readonly HashSet<BlindRevealKey> revealedBlindFields = new();
+    private bool wasBlindMode;
     private bool IsBlindMode => BlindMode.IsEnabled;
     private bool IsPlayingAlbum(string albumId) => string.Equals(albumId, ActivePlayback.CurrentAlbumId, StringComparison.Ordinal);
     private bool IsLocallyRandomAlbum(string albumId) => string.Equals(albumId, localRandomAlbumId, StringComparison.Ordinal);
@@ -534,6 +538,7 @@
         ActivePlayback.AlbumTagsChanged += HandleActiveAlbumTagsChanged;
         ActivePlayback.AlbumNoteChanged += HandleActiveAlbumNoteChanged;
         await BlindMode.InitializeAsync();
+        wasBlindMode = IsBlindMode;
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadFromStore();
@@ -550,6 +555,10 @@
 
     private void HandleBlindModeChanged()
     {
+        if (wasBlindMode != IsBlindMode)
+            revealedBlindFields.Clear();
+
+        wasBlindMode = IsBlindMode;
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -2054,12 +2063,49 @@
         public string? localRandomAlbumId { get; set; }
     }
 
+    private bool IsBlindFieldRevealed(Album album, BlindRevealField field, string? artistId = null) =>
+        revealedBlindFields.Contains(new BlindRevealKey(album.Id, field, artistId));
+
+    private async Task RevealBlindFieldAsync(Album album, BlindRevealField field, string? artistId = null)
+    {
+        if (!IsBlindMode || IsBlindFieldRevealed(album, field, artistId))
+            return;
+
+        var fieldName = field switch
+        {
+            BlindRevealField.AlbumName => "nazwę albumu",
+            BlindRevealField.ArtistName => "wykonawcę",
+            BlindRevealField.ReleaseYear => "rok wydania",
+            BlindRevealField.Artwork => "okładkę albumu",
+            _ => "tę informację"
+        };
+
+        if (!await JS.InvokeAsync<bool>("confirm", $"Czy na pewno chcesz poznać {fieldName}?"))
+            return;
+
+        revealedBlindFields.Add(new BlindRevealKey(album.Id, field, artistId));
+    }
+
     private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty) @(IsLocallyRandomAlbum(album.Id) ? "is-locally-random-album" : string.Empty)" data-album-card-id="@album.Id">
         <div class="card bg-dark text-light h-100">
             @if (IsBlindMode)
             {
-                <div class="artist-image-square blind-artwork" aria-label="Anonimowa okładka albumu">
-                    <span>@album.Id</span>
+                <div class="artist-image-square @(IsBlindFieldRevealed(album, BlindRevealField.Artwork) ? "blind-artwork-revealed" : "blind-artwork")" aria-label="@(IsBlindFieldRevealed(album, BlindRevealField.Artwork) ? "Ujawniona okładka albumu" : "Ukryta okładka albumu")">
+                    @if (IsBlindFieldRevealed(album, BlindRevealField.Artwork))
+                    {
+                        @if (!string.IsNullOrWhiteSpace(GetBestImageUrl(album.Images)))
+                        {
+                            <img src="@GetBestImageUrl(album.Images)" alt="Okładka albumu" />
+                        }
+                        else
+                        {
+                            <span class="blind-artwork-unavailable">Brak okładki</span>
+                        }
+                    }
+                    else
+                    {
+                        <button type="button" class="blind-reveal-button blind-artwork-reveal" title="Pokaż okładkę albumu" aria-label="Pokaż okładkę albumu" @onclick="() => RevealBlindFieldAsync(album, BlindRevealField.Artwork)">Okładka</button>
+                    }
                     <button class="artist-play-overlay album-card-play" title="Odtwórz album" aria-label="Odtwórz album: @album.Id"
                             @onclick="() => PlayAlbum(album.Id, album.Uri)"><AppIcon Name="play" /></button>
                     <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Id"
@@ -2097,7 +2143,14 @@
                     <h6 class="card-title mb-1">
                         @if (IsBlindMode)
                         {
-                            @album.Id
+                            @if (IsBlindFieldRevealed(album, BlindRevealField.AlbumName))
+                            {
+                                <a href="/album/@album.Id" class="link-light text-decoration-none">@album.Name</a>
+                            }
+                            else
+                            {
+                                <button type="button" class="blind-reveal-button" title="Pokaż nazwę albumu" aria-label="Pokaż nazwę albumu" @onclick="() => RevealBlindFieldAsync(album, BlindRevealField.AlbumName)">Nazwa albumu</button>
+                            }
                         }
                         else
                         {
@@ -2107,6 +2160,20 @@
                     <span class="badge bg-secondary">@album.Popularity</span>
                 </div>
 
+                @if (IsBlindMode)
+                {
+                    <div class="blind-album-year mb-2">
+                        @if (IsBlindFieldRevealed(album, BlindRevealField.ReleaseYear))
+                        {
+                            <span class="text-secondary">Rok: @(album.ReleaseYear?.ToString() ?? "brak danych")</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="blind-reveal-button" title="Pokaż rok wydania" aria-label="Pokaż rok wydania" @onclick="() => RevealBlindFieldAsync(album, BlindRevealField.ReleaseYear)">Rok</button>
+                        }
+                    </div>
+                }
+
                 @if (album.Artists?.Any() == true)
                 {
                     <div class="mb-2">
@@ -2115,7 +2182,14 @@
                             {
                                 @if (IsBlindMode)
                                 {
-                                    <span class="badge bg-outline-light text-light" style="font-size: 0.8rem;">@artist.Id</span>
+                                    @if (IsBlindFieldRevealed(album, BlindRevealField.ArtistName, artist.Id))
+                                    {
+                                        <a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="blind-reveal-button blind-artist-reveal" title="Pokaż wykonawcę" aria-label="Pokaż wykonawcę" @onclick="() => RevealBlindFieldAsync(album, BlindRevealField.ArtistName, artist.Id)">Wykonawca</button>
+                                    }
                                 }
                                 else
                                 {

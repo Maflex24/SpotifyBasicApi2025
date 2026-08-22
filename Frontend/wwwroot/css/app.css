@@ -210,6 +210,71 @@ button.tag-preview-tag {
     text-align: center;
 }
 
+.blind-artwork-revealed {
+    position: relative;
+    min-height: 200px;
+    overflow: hidden;
+    background: #0f172a;
+    border-bottom: 1px solid #334155;
+}
+
+.blind-artwork-revealed img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.blind-artwork-unavailable {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    padding: 1rem;
+    color: #cbd5e1;
+    text-align: center;
+}
+
+.blind-reveal-button {
+    min-height: 1.9rem;
+    padding: 0.3rem 0.55rem;
+    color: #e5efff;
+    background: rgba(112, 165, 255, 0.16);
+    border: 1px solid rgba(147, 197, 253, 0.7);
+    border-radius: 0.35rem;
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.blind-reveal-button:hover {
+    background: rgba(112, 165, 255, 0.3);
+    border-color: #bfdbfe;
+    transform: translateY(-1px);
+}
+
+.blind-reveal-button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(112, 165, 255, 0.35);
+}
+
+.blind-artwork-reveal {
+    z-index: 1;
+}
+
+.blind-artist-reveal {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.blind-album-year {
+    min-height: 1.9rem;
+}
+
 .blind-related-artwork {
     display: grid;
     width: 100%;
