@@ -1704,6 +1704,61 @@ code {
     gap: 0.35rem;
 }
 
+.tag-filter-chip {
+    display: inline-flex;
+    align-items: stretch;
+    min-height: 2.125rem;
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    border-radius: 999px;
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.tag-filter-chip-none { background: #2a3442; }
+.tag-filter-chip-include { background: #087a4a; }
+.tag-filter-chip-exclude { background: #b42333; }
+
+.tag-filter-chip-name,
+.tag-filter-chip-operator,
+.tag-filter-chip-strength {
+    border: 0;
+    color: inherit;
+    background: transparent;
+}
+
+.tag-filter-chip-name,
+.tag-filter-chip-operator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+}
+
+.tag-filter-chip-name { padding: 0.15rem 0.4rem; }
+.tag-filter-chip-operator {
+    min-width: 2rem;
+    justify-content: center;
+    padding: 0.15rem 0.45rem;
+    border-left: 1px solid rgba(255,255,255,0.42);
+    font-size: 1rem;
+}
+
+.tag-filter-chip-strength {
+    width: 3.4rem;
+    padding: 0.1rem 0.35rem;
+    border-left: 1px solid rgba(255,255,255,0.42);
+    text-align: center;
+    outline: none;
+}
+
+.tag-filter-chip-name:hover,
+.tag-filter-chip-operator:hover { background: rgba(255,255,255,0.12); }
+.tag-filter-chip-name:focus-visible,
+.tag-filter-chip-operator:focus-visible,
+.tag-filter-chip-strength:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+
 .artist-image-square .album-card-note {
     right: 7.55rem;
 }

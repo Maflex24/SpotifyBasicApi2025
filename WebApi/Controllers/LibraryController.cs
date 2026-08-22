@@ -218,14 +218,16 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? genre = null,
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
+            [FromQuery] string? includeTagStrengths = null,
             [FromQuery] string? excludeTags = null,
             [FromQuery] string? excludeMode = null,
+            [FromQuery] string? excludeTagStrengths = null,
             [FromQuery] string? search = null,
             [FromQuery] bool includeExternal = false)
         {
             try
             {
-                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, excludeTags, excludeMode, search, includeExternal);
+                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, search, includeExternal);
 
                 return Ok(result);
             }
@@ -272,6 +274,10 @@ namespace SpotifyBasicApi2025.Controllers
             catch (InvalidOperationException ex)
             {
                 return Unauthorized(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
@@ -502,8 +508,10 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] int? year = null,
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
+            [FromQuery] string? includeTagStrengths = null,
             [FromQuery] string? excludeTags = null,
             [FromQuery] string? excludeMode = null,
+            [FromQuery] string? excludeTagStrengths = null,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 100,
             [FromQuery] string? search = null)
@@ -512,7 +520,7 @@ namespace SpotifyBasicApi2025.Controllers
             {
                 var result = await libraryService.GetUserTracksAsync(
                     sort, order, tags, sortTagId, artistId, albumId, year,
-                    includeTags, includeMode, excludeTags, excludeMode,
+                    includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths,
                     page, pageSize, search);
                 return Ok(result);
             }
@@ -585,8 +593,10 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] int? toYear = null,
             [FromQuery] string? includeTags = null,
             [FromQuery] string? includeMode = null,
+            [FromQuery] string? includeTagStrengths = null,
             [FromQuery] string? excludeTags = null,
             [FromQuery] string? excludeMode = null,
+            [FromQuery] string? excludeTagStrengths = null,
             [FromQuery] string? includeGenres = null,
             [FromQuery] string? excludeGenres = null,
             [FromQuery] bool includeArtistTags = false,
@@ -597,7 +607,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, excludeTags, excludeMode, includeGenres, excludeGenres, includeArtistTags, search, random, page, pageSize);
+                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, includeGenres, excludeGenres, includeArtistTags, search, random, page, pageSize);
 
                 return Ok(result);
             }
@@ -715,6 +725,10 @@ namespace SpotifyBasicApi2025.Controllers
             catch (InvalidOperationException ex)
             {
                 return Unauthorized(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {

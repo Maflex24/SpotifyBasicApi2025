@@ -154,14 +154,7 @@
                             var state = GetTagState(t.Id);
                             var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                             var count = GetTagCount(t.Id);
-                            <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
-                                @if (group.IsPinnedGroup) { <AppIcon Name="pin" Class="tag-pin-icon" /> }
-                                <span class="tag-chip-label">@t.Name</span>
-                            @if (count > 0)
-                            {
-                                <span class="tag-count-info">@count</span>
-                            }
-                            </button>
+                            <TagFilterChip TagId="@t.Id" Name="@t.Name" Count="@count" State="@state" IsPinnedShortcut="@group.IsPinnedGroup" Rule="@GetTagStrengthRule(t.Id)" CycleState="CycleTagState" CycleOperator="CycleTagStrengthOperator" StrengthChanged="SetTagStrength" />
                         }
                         </div>
                     </section>
@@ -176,14 +169,7 @@
                     var state = GetTagState(t.Id);
                     var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                     var count = GetTagCount(t.Id);
-                    <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
-                        @if (t.IsPinnedShortcut) { <AppIcon Name="pin" Class="tag-pin-icon" /> }
-                        <span class="tag-chip-label">@t.Name</span>
-                    @if (count > 0)
-                    {
-                        <span class="tag-count-info">@count</span>
-                    }
-                    </button>
+                    <TagFilterChip TagId="@t.Id" Name="@t.Name" Count="@count" State="@state" IsPinnedShortcut="@t.IsPinnedShortcut" Rule="@GetTagStrengthRule(t.Id)" CycleState="CycleTagState" CycleOperator="CycleTagStrengthOperator" StrengthChanged="SetTagStrength" />
                 }
             </div>
             }
@@ -467,6 +453,7 @@
     private HashSet<string> excludeGenres = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<long> includeTagIds = new();
     private HashSet<long> excludeTagIds = new();
+    private Dictionary<long, TagStrengthFilterState> tagStrengthFilters = new();
     private string includeMode = "or";
     private string excludeMode = "or";
     private bool showTagFilters = true;
@@ -710,6 +697,8 @@
         excludeMode,
         includeTagIds.OrderBy(id => id).ToArray(),
         excludeTagIds.OrderBy(id => id).ToArray(),
+        CaptureTagStrengthRules(includeTagIds),
+        CaptureTagStrengthRules(excludeTagIds),
         includeArtistIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(),
         excludeArtistIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(),
         includeGenres.OrderBy(genre => genre, StringComparer.OrdinalIgnoreCase).ToArray(),
@@ -717,6 +706,12 @@
         includeArtistTags,
         fromYear,
         toYear);
+
+    private TagStrengthFilterRule[] CaptureTagStrengthRules(IEnumerable<long> tagIds) => tagIds.OrderBy(id => id).Select(id =>
+    {
+        var rule = tagStrengthFilters.GetValueOrDefault(id) ?? new TagStrengthFilterState();
+        return new TagStrengthFilterRule { TagId = id, Operator = rule.Operator, Value = rule.Value };
+    }).ToArray();
 
     private async Task ApplyFiltersAsync()
     {
@@ -858,12 +853,16 @@
         {
             query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
             query.Add($"includeMode={filters.IncludeMode}");
+            var strengths = TagStrengthFilters.ToQuery(filters.IncludeTagStrengths);
+            if (!string.IsNullOrEmpty(strengths)) query.Add($"includeTagStrengths={Uri.EscapeDataString(strengths)}");
         }
 
         if (filters.ExcludeTagIds.Length > 0)
         {
             query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
             query.Add($"excludeMode={filters.ExcludeMode}");
+            var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
+            if (!string.IsNullOrEmpty(strengths)) query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
         }
         if (filters.IncludeArtistTags)
             query.Add("includeArtistTags=true");
@@ -1574,6 +1573,7 @@
         localSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
+        tagStrengthFilters.Clear();
         includeMode = "or";
         excludeMode = "or";
         fromYear = null;
@@ -1632,16 +1632,21 @@
 
         var includeModeLabel = includeMode.Equals("and", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
         foreach (var tagId in includeTagIds.OrderBy(id => GetTagName(id), StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"+ {GetTagName(tagId)} · {includeModeLabel}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedTagAsync(tagId)));
+            chips.Add(new ActiveFilterChip($"+ {GetTagName(tagId)}{GetTagStrengthLabel(tagId)} · {includeModeLabel}", "active-library-filter-chip active-library-filter-chip-include", () => ClearIncludedTagAsync(tagId)));
 
         var excludeModeLabel = excludeMode.Equals("and", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
         foreach (var tagId in excludeTagIds.OrderBy(id => GetTagName(id), StringComparer.OrdinalIgnoreCase))
-            chips.Add(new ActiveFilterChip($"− {GetTagName(tagId)} · {excludeModeLabel}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedTagAsync(tagId)));
+            chips.Add(new ActiveFilterChip($"− {GetTagName(tagId)}{GetTagStrengthLabel(tagId)} · {excludeModeLabel}", "active-library-filter-chip active-library-filter-chip-exclude", () => ClearExcludedTagAsync(tagId)));
 
         return chips;
     }
 
     private string GetTagName(long tagId) => availableTags.FirstOrDefault(tag => tag.Id == tagId)?.Name ?? $"Tag {tagId}";
+    private string GetTagStrengthLabel(long tagId)
+    {
+        var rule = tagStrengthFilters.GetValueOrDefault(tagId);
+        return rule is null || rule.Operator == "all" ? string.Empty : $" · {(rule.Operator == "lte" ? "≤" : "≥")} {rule.Value:0.#}";
+    }
 
     private async Task ClearSearchFilterAsync()
     {
@@ -1747,6 +1752,8 @@
         string ExcludeMode,
         long[] IncludeTagIds,
         long[] ExcludeTagIds,
+        TagStrengthFilterRule[] IncludeTagStrengths,
+        TagStrengthFilterRule[] ExcludeTagStrengths,
         string[] IncludeArtistIds,
         string[] ExcludeArtistIds,
         string[] IncludeGenres,
@@ -1765,6 +1772,8 @@
             && string.Equals(ExcludeMode, other.ExcludeMode, StringComparison.Ordinal)
             && IncludeTagIds.SequenceEqual(other.IncludeTagIds)
             && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds)
+            && TagStrengthFilters.Equal(IncludeTagStrengths, other.IncludeTagStrengths)
+            && TagStrengthFilters.Equal(ExcludeTagStrengths, other.ExcludeTagStrengths)
             && IncludeArtistIds.SequenceEqual(other.IncludeArtistIds, StringComparer.Ordinal)
             && ExcludeArtistIds.SequenceEqual(other.ExcludeArtistIds, StringComparer.Ordinal)
             && IncludeGenres.SequenceEqual(other.IncludeGenres, StringComparer.OrdinalIgnoreCase)
@@ -2218,6 +2227,7 @@
         if (state == 0)
         {
             includeTagIds.Add(tagId);
+            tagStrengthFilters.TryAdd(tagId, new TagStrengthFilterState());
             await MarkFiltersDirtyAsync();
             return;
         }
@@ -2231,8 +2241,13 @@
         }
 
         excludeTagIds.Remove(tagId);
+        tagStrengthFilters.Remove(tagId);
         await MarkFiltersDirtyAsync();
     }
+
+    private TagStrengthFilterState? GetTagStrengthRule(long tagId) => GetTagState(tagId) == 0 ? null : tagStrengthFilters.GetValueOrDefault(tagId) ?? (tagStrengthFilters[tagId] = new TagStrengthFilterState());
+    private async Task CycleTagStrengthOperator(long tagId) { var rule = GetTagStrengthRule(tagId); if (rule is null) return; rule.Operator = rule.Operator == "gte" ? "lte" : rule.Operator == "lte" ? "all" : "gte"; await MarkFiltersDirtyAsync(); }
+    private async Task SetTagStrength(TagStrengthValueChanged change) { var rule = GetTagStrengthRule(change.TagId); if (rule is null) return; rule.Value = change.Value; await MarkFiltersDirtyAsync(); }
 
     private async Task ToggleIncludeMode()
     {

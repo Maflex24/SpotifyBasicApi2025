@@ -76,14 +76,7 @@
                                 var state = GetTagState(t.Id);
                                 var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                                 var count = GetTagCount(t.Id);
-                                <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
-                                    @if (group.IsPinnedGroup) { <AppIcon Name="pin" Class="tag-pin-icon" /> }
-                                    <span class="tag-chip-label">@t.Name</span>
-                                @if (count > 0)
-                                {
-                                    <span class="tag-count-info">@count</span>
-                                }
-                                </button>
+                                <TagFilterChip TagId="@t.Id" Name="@t.Name" Count="@count" State="@state" IsPinnedShortcut="@group.IsPinnedGroup" Rule="@GetTagStrengthRule(t.Id)" CycleState="CycleTagState" CycleOperator="CycleTagStrengthOperator" StrengthChanged="SetTagStrength" />
                             }
                             </div>
                         </section>
@@ -98,14 +91,7 @@
                         var state = GetTagState(t.Id);
                         var css = state == 1 ? "tag-include" : state == 2 ? "tag-exclude" : "tag-none";
                         var count = GetTagCount(t.Id);
-                        <button type="button" class="tag-chip @css" aria-pressed="@(state != 0)" @onclick="() => CycleTagState(t.Id)">
-                            @if (t.IsPinnedShortcut) { <AppIcon Name="pin" Class="tag-pin-icon" /> }
-                            <span class="tag-chip-label">@t.Name</span>
-                        @if (count > 0)
-                        {
-                            <span class="tag-count-info">@count</span>
-                        }
-                        </button>
+                        <TagFilterChip TagId="@t.Id" Name="@t.Name" Count="@count" State="@state" IsPinnedShortcut="@t.IsPinnedShortcut" Rule="@GetTagStrengthRule(t.Id)" CycleState="CycleTagState" CycleOperator="CycleTagStrengthOperator" StrengthChanged="SetTagStrength" />
                     }
                 </div>
                 }
@@ -259,6 +245,7 @@
 
     private HashSet<long> includeTagIds = new();
     private HashSet<long> excludeTagIds = new();
+    private Dictionary<long, TagStrengthFilterState> tagStrengthFilters = new();
     private string includeMode = "or";
     private string excludeMode = "or";
 
@@ -329,6 +316,7 @@
         localSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
+        tagStrengthFilters.Clear();
         includeMode = "or";
         excludeMode = "or";
         clientSortColumn = "name";
@@ -917,10 +905,15 @@
     private void CycleTagState(long tagId)
     {
         var state = GetTagState(tagId);
-        if (state == 0) { includeTagIds.Add(tagId); return; }
+        if (state == 0) { includeTagIds.Add(tagId); tagStrengthFilters.TryAdd(tagId, new TagStrengthFilterState()); return; }
         if (state == 1) { includeTagIds.Remove(tagId); excludeTagIds.Add(tagId); return; }
         excludeTagIds.Remove(tagId);
+        tagStrengthFilters.Remove(tagId);
     }
+
+    private TagStrengthFilterState? GetTagStrengthRule(long tagId) => GetTagState(tagId) == 0 ? null : tagStrengthFilters.GetValueOrDefault(tagId) ?? (tagStrengthFilters[tagId] = new TagStrengthFilterState());
+    private void CycleTagStrengthOperator(long tagId) { var rule = GetTagStrengthRule(tagId); if (rule is not null) rule.Operator = rule.Operator == "gte" ? "lte" : rule.Operator == "lte" ? "all" : "gte"; }
+    private void SetTagStrength(TagStrengthValueChanged change) { var rule = GetTagStrengthRule(change.TagId); if (rule is not null) rule.Value = change.Value; }
 
     private async Task PlayTrack(string? uri)
     {

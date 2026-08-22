@@ -1,0 +1,51 @@
+@using System.Globalization
+
+<div class="tag-filter-chip tag-filter-chip-@StateClass" role="group" aria-label="Filtr taga: @Name">
+    <button type="button" class="tag-filter-chip-name" aria-pressed="@(State != 0)" @onclick="() => CycleState.InvokeAsync(TagId)">
+        @if (IsPinnedShortcut)
+        {
+            <AppIcon Name="pin" Class="tag-pin-icon" />
+        }
+        <span class="tag-chip-label">@Name</span>
+        @if (Count > 0)
+        {
+            <span class="tag-count-info">@Count</span>
+        }
+    </button>
+    @if (State != 0 && Rule is not null)
+    {
+        <button type="button" class="tag-filter-chip-operator" title="Warunek wagi: @OperatorLabel" aria-label="Warunek wagi: @OperatorLabel. Kliknij, aby zmienić" @onclick="() => CycleOperator.InvokeAsync(TagId)">@OperatorSymbol</button>
+        @if (!string.Equals(Rule.Operator, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            <input class="tag-filter-chip-strength" type="number" min="0.5" max="6" step="0.5" aria-label="Waga taga @Name" value="@Rule.Value.ToString(CultureInfo.InvariantCulture)" @onchange="SetStrength" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public long TagId { get; set; }
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+    [Parameter] public int Count { get; set; }
+    [Parameter] public int State { get; set; }
+    [Parameter] public bool IsPinnedShortcut { get; set; }
+    [Parameter] public TagStrengthFilterState? Rule { get; set; }
+    [Parameter, EditorRequired] public EventCallback<long> CycleState { get; set; }
+    [Parameter, EditorRequired] public EventCallback<long> CycleOperator { get; set; }
+    [Parameter, EditorRequired] public EventCallback<TagStrengthValueChanged> StrengthChanged { get; set; }
+
+    private string StateClass => State == 1 ? "include" : State == 2 ? "exclude" : "none";
+    private string OperatorSymbol => Rule?.Operator?.ToLowerInvariant() switch { "gte" => "≥", "lte" => "≤", _ => "∞" };
+    private string OperatorLabel => Rule?.Operator?.ToLowerInvariant() switch { "gte" => "większa lub równa", "lte" => "mniejsza lub równa", _ => "wszystkie wagi" };
+
+    private Task SetStrength(ChangeEventArgs args)
+    {
+        if (float.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            value = Math.Clamp(value, 0.5f, 6f);
+            value = MathF.Round(value * 2f, MidpointRounding.AwayFromZero) / 2f;
+            return StrengthChanged.InvokeAsync(new TagStrengthValueChanged(TagId, value));
+        }
+
+        return Task.CompletedTask;
+    }
+}

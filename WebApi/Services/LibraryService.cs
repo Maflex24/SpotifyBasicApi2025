@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Linq.Expressions;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
 
@@ -246,8 +248,10 @@ namespace SpotifyBasicApi2025.Services
             string? genre = null,
             string? includeTags = null,
             string? includeMode = null,
+            string? includeTagStrengths = null,
             string? excludeTags = null,
             string? excludeMode = null,
+            string? excludeTagStrengths = null,
             string? search = null,
             bool includeExternal = false)
         {
@@ -266,6 +270,8 @@ namespace SpotifyBasicApi2025.Services
                 .Where(a => a.UserId == userId)
                 .Select(a => a.Artist)
                 .AsQueryable();
+
+            query = ApplyArtistTagFilters(query, userId, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths);
 
             // Wsteczna kompatybilność: Filtrowanie po tagach (ANY)
             if (!string.IsNullOrWhiteSpace(tags))
@@ -765,6 +771,104 @@ namespace SpotifyBasicApi2025.Services
                 .Distinct()
                 .ToList();
 
+        private sealed record TagStrengthRule(long TagId, string Operator, float Value);
+
+        private static Dictionary<long, TagStrengthRule> ParseTagStrengthRules(string? value, IReadOnlyCollection<long> selectedTagIds, string parameterName)
+        {
+            var rules = new Dictionary<long, TagStrengthRule>();
+            if (string.IsNullOrWhiteSpace(value)) return rules;
+
+            foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var pieces = part.Split(':', StringSplitOptions.TrimEntries);
+                if (pieces.Length != 3 || !long.TryParse(pieces[0], out var tagId)
+                    || (pieces[1] is not "gte" and not "lte")
+                    || !float.TryParse(pieces[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var strength)
+                    || float.IsNaN(strength) || float.IsInfinity(strength) || strength < 0f || strength > 6f
+                    || !selectedTagIds.Contains(tagId) || !rules.TryAdd(tagId, new TagStrengthRule(tagId, pieces[1], strength)))
+                    throw new ArgumentException($"Nieprawidłowy parametr {parameterName}.");
+            }
+            return rules;
+        }
+
+        private static Expression<Func<T, bool>> Combine<T>(IEnumerable<Expression<Func<T, bool>>> predicates, bool and)
+        {
+            var parameter = Expression.Parameter(typeof(T), "item");
+            Expression? body = null;
+            foreach (var predicate in predicates)
+            {
+                var replaced = new ParameterReplaceVisitor(predicate.Parameters[0], parameter).Visit(predicate.Body)!;
+                body = body is null ? replaced : and ? Expression.AndAlso(body, replaced) : Expression.OrElse(body, replaced);
+            }
+            return Expression.Lambda<Func<T, bool>>(body ?? Expression.Constant(true), parameter);
+        }
+
+        private static IQueryable<T> ApplyTagFilter<T>(IQueryable<T> query, IReadOnlyCollection<long> tagIds, string? mode, bool include, Dictionary<long, TagStrengthRule> rules, Func<long, TagStrengthRule?, Expression<Func<T, bool>>> hasTag)
+        {
+            if (tagIds.Count == 0) return query;
+            var predicate = Combine(tagIds.Select(id => hasTag(id, rules.GetValueOrDefault(id))), string.Equals(mode, "and", StringComparison.OrdinalIgnoreCase));
+            if (!include) predicate = Expression.Lambda<Func<T, bool>>(Expression.Not(predicate.Body), predicate.Parameters);
+            return query.Where(predicate);
+        }
+
+        private IQueryable<SpArtist> ApplyArtistTagFilters(IQueryable<SpArtist> query, string userId, string? includeTags, string? includeMode, string? includeTagStrengths, string? excludeTags, string? excludeMode, string? excludeTagStrengths)
+        {
+            var included = ParseTagIds(includeTags);
+            var excluded = ParseTagIds(excludeTags);
+            Expression<Func<SpArtist, bool>> Has(long tagId, TagStrengthRule? rule)
+            {
+                if (rule is { Operator: "gte" }) { var value = rule.Value; return artist => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && assign.TagId == tagId && assign.Strength >= value); }
+                if (rule is { Operator: "lte" }) { var value = rule.Value; return artist => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && assign.TagId == tagId && assign.Strength <= value); }
+                return artist => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == artist.Id && assign.TagId == tagId);
+            }
+            query = ApplyTagFilter(query, included, includeMode, true, ParseTagStrengthRules(includeTagStrengths, included, "includeTagStrengths"), Has);
+            return ApplyTagFilter(query, excluded, excludeMode, false, ParseTagStrengthRules(excludeTagStrengths, excluded, "excludeTagStrengths"), Has);
+        }
+
+        private IQueryable<SpTrack> ApplyTrackTagFilters(IQueryable<SpTrack> query, string userId, string? includeTags, string? includeMode, string? includeTagStrengths, string? excludeTags, string? excludeMode, string? excludeTagStrengths)
+        {
+            var included = ParseTagIds(includeTags);
+            var excluded = ParseTagIds(excludeTags);
+            Expression<Func<SpTrack, bool>> Has(long tagId, TagStrengthRule? rule)
+            {
+                if (rule is { Operator: "gte" }) { var value = rule.Value; return track => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "track" && assign.SpotifyItemId == track.Id && assign.TagId == tagId && assign.Strength >= value); }
+                if (rule is { Operator: "lte" }) { var value = rule.Value; return track => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "track" && assign.SpotifyItemId == track.Id && assign.TagId == tagId && assign.Strength <= value); }
+                return track => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "track" && assign.SpotifyItemId == track.Id && assign.TagId == tagId);
+            }
+            query = ApplyTagFilter(query, included, includeMode, true, ParseTagStrengthRules(includeTagStrengths, included, "includeTagStrengths"), Has);
+            return ApplyTagFilter(query, excluded, excludeMode, false, ParseTagStrengthRules(excludeTagStrengths, excluded, "excludeTagStrengths"), Has);
+        }
+
+        private IQueryable<SpAlbum> ApplyAlbumTagStrengthFilters(IQueryable<SpAlbum> query, string userId, string? includeTags, string? includeMode, string? includeTagStrengths, string? excludeTags, string? excludeMode, string? excludeTagStrengths, bool includeArtistTags)
+        {
+            var included = ParseTagIds(includeTags);
+            var excluded = ParseTagIds(excludeTags);
+            Expression<Func<SpAlbum, bool>> Has(long tagId, TagStrengthRule? rule)
+            {
+                Expression<Func<SpAlbum, bool>> direct = rule switch
+                {
+                    { Operator: "gte" } => album => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "album" && assign.SpotifyItemId == album.Id && assign.TagId == tagId && assign.Strength >= rule.Value),
+                    { Operator: "lte" } => album => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "album" && assign.SpotifyItemId == album.Id && assign.TagId == tagId && assign.Strength <= rule.Value),
+                    _ => album => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "album" && assign.SpotifyItemId == album.Id && assign.TagId == tagId)
+                };
+                if (!includeArtistTags) return direct;
+                var artist = rule switch
+                {
+                    { Operator: "gte" } => (Expression<Func<SpAlbum, bool>>)(album => album.AlbumArtistAssigns.Any(item => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == item.ArtistId && assign.TagId == tagId && assign.Strength >= rule.Value))),
+                    { Operator: "lte" } => album => album.AlbumArtistAssigns.Any(item => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == item.ArtistId && assign.TagId == tagId && assign.Strength <= rule.Value)),
+                    _ => album => album.AlbumArtistAssigns.Any(item => context.LibTagAssigns.Any(assign => assign.UserId == userId && assign.ItemType == "artist" && assign.SpotifyItemId == item.ArtistId && assign.TagId == tagId))
+                };
+                return Combine(new[] { direct, artist }, false);
+            }
+            query = ApplyTagFilter(query, included, includeMode, true, ParseTagStrengthRules(includeTagStrengths, included, "includeTagStrengths"), Has);
+            return ApplyTagFilter(query, excluded, excludeMode, false, ParseTagStrengthRules(excludeTagStrengths, excluded, "excludeTagStrengths"), Has);
+        }
+
+        private sealed class ParameterReplaceVisitor(ParameterExpression from, ParameterExpression to) : ExpressionVisitor
+        {
+            protected override Expression VisitParameter(ParameterExpression node) => node == from ? to : base.VisitParameter(node);
+        }
+
         private static List<string> ParseGenres(string? value) => string.IsNullOrWhiteSpace(value)
             ? new List<string>()
             : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -1146,8 +1250,10 @@ namespace SpotifyBasicApi2025.Services
             int? year = null,
             string? includeTags = null,
             string? includeMode = null,
+            string? includeTagStrengths = null,
             string? excludeTags = null,
             string? excludeMode = null,
+            string? excludeTagStrengths = null,
             int page = 1,
             int pageSize = 100,
             string? search = null)
@@ -1166,6 +1272,8 @@ namespace SpotifyBasicApi2025.Services
                         .ThenInclude(ta => ta.Artist)
                 .Select(a => a.Track)
                 .AsQueryable();
+
+            query = ApplyTrackTagFilters(query, userId, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths);
 
             if (!string.IsNullOrWhiteSpace(artistId))
             {
@@ -1472,8 +1580,10 @@ namespace SpotifyBasicApi2025.Services
             int? toYear = null,
             string? includeTags = null,
             string? includeMode = null,
+            string? includeTagStrengths = null,
             string? excludeTags = null,
             string? excludeMode = null,
+            string? excludeTagStrengths = null,
             string? includeGenres = null,
             string? excludeGenres = null,
             bool includeArtistTags = false,
@@ -1491,6 +1601,8 @@ namespace SpotifyBasicApi2025.Services
                 .Where(a => a.UserId == userId)
                 .Select(a => a.Album)
                 .AsQueryable();
+
+            query = ApplyAlbumTagStrengthFilters(query, userId, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, includeArtistTags);
 
             if (!string.IsNullOrWhiteSpace(artistId))
             {
