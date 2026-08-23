@@ -5,6 +5,7 @@
 @inject ActivePlaybackService ActivePlayback
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject AiChatDrawerService AiDrawer
 @using System.Globalization
 @using System.Text.Json
 @implements IAsyncDisposable
@@ -369,7 +370,7 @@
                         <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
-                        @if (!IsBlindMode)
+                        @if (!IsBlindMode && aiAvailable)
                         {
                             <AiContextButton ItemType="artist" SpotifyItemId="@group.Id" DisplayName="@group.Name" />
                         }
@@ -443,9 +444,11 @@
     private string? randomAlbumId;
     private string? localRandomAlbumId;
     private string? pendingLocalRandomScrollId;
+    private bool hasFocusedLocalRandomAlbum;
     private bool HasMoreAlbums => albums.Count < totalRows;
     private readonly HashSet<string> queuingAlbumIds = new();
     private bool isQueueingAllAlbums;
+    private bool aiAvailable;
     private AlbumFilterSnapshot? appliedFilters;
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
     private List<TagDto> allTags = new();
@@ -537,6 +540,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        AiDrawer.Changed += HandleAiAccessChanged;
+        aiAvailable = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
         BlindMode.Changed += HandleBlindModeChanged;
         ActivePlayback.CurrentAlbumChanged += HandleActiveAlbumChanged;
         ActivePlayback.AlbumTagsChanged += HandleActiveAlbumTagsChanged;
@@ -548,7 +553,6 @@
         await LoadFromStore();
         await LoadAvailableTags();
         await ApplyFiltersAsync();
-        await RestoreLocalRandomSelectionAsync();
         await LoadSavedFilters();
     }
 
@@ -677,6 +681,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        AiDrawer.Changed -= HandleAiAccessChanged;
         BlindMode.Changed -= HandleBlindModeChanged;
         ActivePlayback.CurrentAlbumChanged -= HandleActiveAlbumChanged;
         ActivePlayback.AlbumTagsChanged -= HandleActiveAlbumTagsChanged;
@@ -693,6 +698,14 @@
         }
 
         controlsObserverRef?.Dispose();
+    }
+
+    private void HandleAiAccessChanged()
+    {
+        var available = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
+        if (aiAvailable == available) return;
+        aiAvailable = available;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadSavedFilters()
@@ -747,6 +760,9 @@
         if (isLoadingAlbums || (!reset && !HasMoreAlbums))
             return false;
 
+        if (reset)
+            hasFocusedLocalRandomAlbum = false;
+
         var requestedPage = reset ? 1 : currentPage + 1;
         isLoadingAlbums = true;
         await InvokeAsync(StateHasChanged);
@@ -786,6 +802,7 @@
         }
 
         filteredAlbums = albums.ToList();
+        FocusLoadedLocalRandomAlbum();
         if (reset)
         {
             await Task.WhenAll(LoadAlbumTagCounts(filters), LoadAlbumArtists(filters), LoadAlbumGenres(filters));
@@ -2197,7 +2214,7 @@
                                 }
                                 else
                                 {
-                                    <span class="d-inline-flex align-items-center gap-1"><a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a><AiContextButton ItemType="artist" SpotifyItemId="@artist.Id" DisplayName="@artist.Name" /></span>
+                                    <span class="d-inline-flex align-items-center gap-1"><a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@artist.Id" DisplayName="@artist.Name" /> }</span>
                                 }
                             }
                         </div>
@@ -2227,7 +2244,7 @@
                         <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumNote(album)">
                             <AppIcon Name="edit" /><span>Notatka</span>
                         </button>
-                        @if (!IsBlindMode)
+                        @if (!IsBlindMode && aiAvailable)
                         {
                             <AiContextButton ItemType="album" SpotifyItemId="@album.Id" DisplayName="@album.Name" />
                         }
@@ -2573,27 +2590,22 @@
             return;
 
         localRandomAlbumId = candidates[Random.Shared.Next(candidates.Count)].Id;
+        hasFocusedLocalRandomAlbum = true;
         ExpandGroupsForLocalRandomAlbum();
         pendingLocalRandomScrollId = localRandomAlbumId;
         await SaveToStore();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task RestoreLocalRandomSelectionAsync()
+    private void FocusLoadedLocalRandomAlbum()
     {
-        if (string.IsNullOrWhiteSpace(localRandomAlbumId))
+        if (hasFocusedLocalRandomAlbum || string.IsNullOrWhiteSpace(localRandomAlbumId))
             return;
-
-        var filters = appliedFilters ?? CaptureCurrentFilters();
-        while (!filteredAlbums.Any(album => string.Equals(album.Id, localRandomAlbumId, StringComparison.Ordinal)) && HasMoreAlbums)
-        {
-            if (!await LoadAlbumsAsync(filters, reset: false))
-                break;
-        }
 
         if (!filteredAlbums.Any(album => string.Equals(album.Id, localRandomAlbumId, StringComparison.Ordinal)))
             return;
 
+        hasFocusedLocalRandomAlbum = true;
         ExpandGroupsForLocalRandomAlbum();
         pendingLocalRandomScrollId = localRandomAlbumId;
     }

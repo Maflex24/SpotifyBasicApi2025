@@ -2,6 +2,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject AiChatDrawerService AiDrawer
 @using System.Text.Json
 @implements IAsyncDisposable
 
@@ -230,7 +231,7 @@
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <button class="btn btn-sm btn-outline-light" disabled="@(!a.IsInLibrary)" @onclick="() => OpenArtistTagging(a.Id)">Taguj</button>
-                                <AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" />
+                                @if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /> }
                                 @if (a.IsInLibrary)
                                 {
                                     <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę artysty: @a.Name" @onclick="() => OpenArtistNote(a)"><AppIcon Name="edit" /><span>Notatka</span></button>
@@ -315,12 +316,15 @@
     private string? taggingNoteContent;
     private string ArtistNoteTitle => $"Notatka: {taggingNoteArtistName}";
     private Dictionary<long, int> tagCounts = new();
+    private bool aiAvailable;
     private ArtistFilterSnapshot? appliedFilters;
     private bool HasTagCriteria => !string.IsNullOrWhiteSpace(selectedTagFilter) || !string.IsNullOrWhiteSpace(selectedTagSort) || includeTagIds.Count > 0 || excludeTagIds.Count > 0 || sortKey == "weight";
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
 
     protected override async Task OnInitializedAsync()
     {
+        AiDrawer.Changed += HandleAiAccessChanged;
+        aiAvailable = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadFromStore();
@@ -356,8 +360,17 @@
 
     public async ValueTask DisposeAsync()
     {
+        AiDrawer.Changed -= HandleAiAccessChanged;
         try { await JS.InvokeVoidAsync("libraryControls.disconnect"); } catch (JSDisconnectedException) { }
         controlsObserverRef?.Dispose();
+    }
+
+    private void HandleAiAccessChanged()
+    {
+        var available = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
+        if (aiAvailable == available) return;
+        aiAvailable = available;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadSavedFilters()

@@ -20,8 +20,7 @@ public sealed class AiChatDrawerService(HttpClient http, IJSRuntime js)
 
     public async Task OpenAsync(AiChatContext context)
     {
-        await InitializeAsync();
-        if (!IsAllowed) return;
+        if (!AccessLoaded || !IsAllowed) return;
 
         if (Context?.Key != context.Key)
         {
@@ -48,7 +47,9 @@ public sealed class AiChatDrawerService(HttpClient http, IJSRuntime js)
         NotifyChanged();
     }
 
-    public async Task RefreshAccessAsync()
+    public Task RefreshAccessAsync() => RefreshAccessAsync(notify: true);
+
+    private async Task RefreshAccessAsync(bool notify)
     {
         try
         {
@@ -64,7 +65,7 @@ public sealed class AiChatDrawerService(HttpClient http, IJSRuntime js)
 
         AccessLoaded = true;
         if (!IsAllowed) IsOpen = false;
-        NotifyChanged();
+        if (notify) NotifyChanged();
     }
 
     public async Task PersistAsync()
@@ -79,21 +80,22 @@ public sealed class AiChatDrawerService(HttpClient http, IJSRuntime js)
 
     private async Task InitializeCoreAsync()
     {
-        await RefreshAccessAsync();
-        if (!IsAllowed) return;
-
-        try
+        await RefreshAccessAsync(notify: false);
+        if (IsAllowed)
         {
-            var json = await js.InvokeAsync<string?>("sessionStorage.getItem", SessionStorageKey);
-            var stored = string.IsNullOrWhiteSpace(json) ? null : System.Text.Json.JsonSerializer.Deserialize<AiDrawerStoredState>(json);
-            if (stored?.Context is { ItemType: "artist" or "album" or "track" } && !string.IsNullOrWhiteSpace(stored.Context.SpotifyItemId))
+            try
             {
-                Context = stored.Context;
-                Messages = stored.Messages.TakeLast(20).ToList();
-                IsOpen = stored.IsOpen;
+                var json = await js.InvokeAsync<string?>("sessionStorage.getItem", SessionStorageKey);
+                var stored = string.IsNullOrWhiteSpace(json) ? null : System.Text.Json.JsonSerializer.Deserialize<AiDrawerStoredState>(json);
+                if (stored?.Context is { ItemType: "artist" or "album" or "track" } && !string.IsNullOrWhiteSpace(stored.Context.SpotifyItemId))
+                {
+                    Context = stored.Context;
+                    Messages = stored.Messages.TakeLast(20).ToList();
+                    IsOpen = stored.IsOpen;
+                }
             }
+            catch { }
         }
-        catch { }
 
         NotifyChanged();
     }

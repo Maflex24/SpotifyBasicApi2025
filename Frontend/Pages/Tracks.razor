@@ -3,6 +3,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject AiChatDrawerService AiDrawer
 @implements IDisposable
 @using Microsoft.JSInterop
 @using System.Text.Json
@@ -207,17 +208,17 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrackAndFollowing(t.Id)">▶</button>
                             </div>
                         </td>
-                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextButton ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" /></span></td>
+                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name @if (aiAvailable) { <AiContextButton ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" /> }</span></td>
                         <td class="trackTd">
                             @foreach (var a in t.Artists)
                             {
-                                <span class="d-inline-flex align-items-center gap-1 me-1"><a class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a><AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /></span>
+                                <span class="d-inline-flex align-items-center gap-1 me-1"><a class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /> }</span>
                             }
                         </td>
                         <td class="trackTd">
                             @if (!string.IsNullOrWhiteSpace(t.AlbumId))
                             {
-                                <span class="d-inline-flex align-items-center gap-2"><a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a><AiContextButton ItemType="album" SpotifyItemId="@t.AlbumId" DisplayName="@t.AlbumName" /></span>
+                                <span class="d-inline-flex align-items-center gap-2"><a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>@if (aiAvailable) { <AiContextButton ItemType="album" SpotifyItemId="@t.AlbumId" DisplayName="@t.AlbumName" /> }</span>
                             }
                             else
                             {
@@ -337,11 +338,14 @@
     private List<SavedFilterItem> savedFilters = new();
     private string? selectedSavedFilterId;
     private string? newFilterName;
+    private bool aiAvailable;
 
     private sealed class SavedFilterItem { public long Id { get; set; } public string Name { get; set; } = string.Empty; public string? ContextId { get; set; } public string Scope { get; set; } = string.Empty; public string PayloadJson { get; set; } = string.Empty; }
 
     protected override async Task OnInitializedAsync()
     {
+        AiDrawer.Changed += HandleAiAccessChanged;
+        aiAvailable = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadFromStore();
@@ -1110,12 +1114,21 @@
 
     public void Dispose()
     {
+        AiDrawer.Changed -= HandleAiAccessChanged;
         try { pollCts?.Cancel(); } catch { }
         pollCts?.Dispose();
         try { _ = JS.InvokeVoidAsync("infiniteScroll.disconnect"); } catch { }
         try { _ = JS.InvokeVoidAsync("libraryControls.disconnect"); } catch { }
         try { if (dotNetRef != null) { _ = JS.InvokeVoidAsync("tagSync.unregister", dotNetRef); } } catch { }
         try { dotNetRef?.Dispose(); } catch { }
+    }
+
+    private void HandleAiAccessChanged()
+    {
+        var available = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
+        if (aiAvailable == available) return;
+        aiAvailable = available;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
