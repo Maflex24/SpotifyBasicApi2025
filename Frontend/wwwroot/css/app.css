@@ -2520,6 +2520,9 @@ button.tag-preview-tag {
     border: 1px solid #2d3a4d;
     border-radius: 0.5rem;
     font-size: 0.9rem;
+}
+
+.ai-chat-message-text {
     white-space: pre-wrap;
 }
 
@@ -2535,7 +2538,7 @@ button.tag-preview-tag {
 }
 
 .ai-chat-message-label {
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.1rem;
     color: #9fb1c8;
     font-size: 0.72rem;
     font-weight: 700;

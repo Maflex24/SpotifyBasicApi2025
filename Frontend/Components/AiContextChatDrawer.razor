@@ -19,7 +19,7 @@
             {
                 <div class="ai-chat-message ai-chat-message-@message.Role">
                     <div class="ai-chat-message-label">@(message.Role == "user" ? "Ty" : "AI")</div>
-                    <div>@message.Text</div>
+                    <div class="ai-chat-message-text">@message.Text</div>
                     @if (message.Response != null)
                     {
                         @if (message.Response.Items.Count > 0)
