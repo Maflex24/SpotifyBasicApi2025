@@ -1,0 +1,51 @@
+@page "/ai-settings"
+@inject HttpClient Http
+
+<PageTitle>Ustawienia AI</PageTitle>
+<h1>Ustawienia AI</h1>
+@if (error != null) { <div class="alert alert-danger">@error</div> }
+else if (settings == null) { <p>Wczytywanie ustawień…</p> }
+else
+{
+    @if (usage != null) { <p class="text-secondary">Dzisiaj: @usage.RequestsToday wywołań, @usage.InputTokensToday tokenów wejściowych, @usage.OutputTokensToday tokenów wyjściowych.</p> }
+    <div class="card app-form-surface"><div class="card-body">
+        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" @bind="settings.Enabled" id="aiEnabled" /><label class="form-check-label" for="aiEnabled">Włącz asystenta AI</label></div>
+        <div class="mb-3"><label class="form-label">Dostęp do AI</label><select class="form-select" @bind="settings.AccessMode"><option value="allowlist">Wskazani użytkownicy Spotify</option><option value="all">Wszyscy zalogowani do Spotify</option></select></div>
+        <div class="mb-3"><label class="form-label">Spotify user IDs (po jednym w linii)</label><textarea class="form-control" rows="4" @bind="allowedUsersText"></textarea></div>
+        <div class="mb-3"><label class="form-label">Limit dzienny na użytkownika</label><input class="form-control" type="number" min="1" max="1000" @bind="settings.DailyRequestLimit" /></div>
+        <hr />
+        <div class="mb-3"><label class="form-label">OpenAI API key</label><input class="form-control" type="password" @bind="settings.OpenAiApiKey" placeholder="pozostaw puste, aby nie zmieniać" /><small class="text-secondary">@(settings.HasOpenAiApiKey ? "Klucz jest zapisany." : "Brak zapisanego klucza.")</small><div class="form-check"><input class="form-check-input" type="checkbox" @bind="settings.ClearOpenAiApiKey" id="clearOpenAi" /><label class="form-check-label" for="clearOpenAi">Usuń zapisany klucz OpenAI</label></div></div>
+        <div class="mb-3"><label class="form-label">Last.fm API key</label><input class="form-control" type="password" @bind="settings.LastFmApiKey" placeholder="pozostaw puste, aby nie zmieniać" /><small class="text-secondary">@(settings.HasLastFmApiKey ? "Klucz jest zapisany." : "Brak zapisanego klucza.")</small><div class="form-check"><input class="form-check-input" type="checkbox" @bind="settings.ClearLastFmApiKey" id="clearLastFm" /><label class="form-check-label" for="clearLastFm">Usuń zapisany klucz Last.fm</label></div></div>
+        <div class="mb-3"><label class="form-label">Model domyślny</label><select class="form-select" @bind="settings.DefaultModel"><option value="@settings.DefaultModel">@settings.DefaultModel</option>@foreach (var model in models.Where(x => x.Id != settings.DefaultModel)) { <option value="@model.Id">@model.Id</option> }</select><button class="btn btn-sm btn-outline-secondary mt-2" @onclick="LoadModels">Odśwież modele dostępne dla klucza</button></div>
+        <button class="btn btn-primary" disabled="@saving" @onclick="Save">@(saving ? "Zapisywanie…" : "Zapisz ustawienia")</button>
+        @if (saved) { <span class="ms-2 text-success">Zapisano.</span> }
+    </div></div>
+}
+
+@code {
+    private AiSettingsModel? settings;
+    private List<AiModelOption> models = new();
+    private AiUsageSummary? usage;
+    private string allowedUsersText = string.Empty;
+    private string? error;
+    private bool saving, saved;
+    protected override async Task OnInitializedAsync()
+    {
+        try { settings = await Http.GetFromJsonAsync<AiSettingsModel>("api/admin/ai/settings"); usage = await Http.GetFromJsonAsync<AiUsageSummary>("api/admin/ai/usage"); allowedUsersText = string.Join("\n", settings?.AllowedUserIds ?? new List<string>()); await LoadModels(); }
+        catch { error = "Ten panel jest dostępny tylko dla zalogowanego administratora systemu."; }
+    }
+    private async Task LoadModels() { try { models = await Http.GetFromJsonAsync<List<AiModelOption>>("api/admin/ai/models") ?? new(); } catch { models = new(); } }
+    private async Task Save()
+    {
+        if (settings == null) return;
+        saving = true; saved = false;
+        settings.AllowedUserIds = allowedUsersText.Split(new[] { '\r', '\n', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
+        try { var result = await Http.PutAsJsonAsync("api/admin/ai/settings", settings); if (!result.IsSuccessStatusCode) error = await result.Content.ReadAsStringAsync(); else { saved = true; settings.OpenAiApiKey = settings.LastFmApiKey = null; await Reload(); } }
+        catch { error = "Nie udało się zapisać ustawień."; }
+        finally { saving = false; }
+    }
+    private async Task Reload() { settings = await Http.GetFromJsonAsync<AiSettingsModel>("api/admin/ai/settings"); usage = await Http.GetFromJsonAsync<AiUsageSummary>("api/admin/ai/usage"); allowedUsersText = string.Join("\n", settings?.AllowedUserIds ?? new List<string>()); await LoadModels(); }
+    private sealed class AiSettingsModel { public bool Enabled { get; set; } public string AccessMode { get; set; } = "allowlist"; public List<string> AllowedUserIds { get; set; } = new(); public int DailyRequestLimit { get; set; } = 20; public string DefaultModel { get; set; } = "gpt-5.6-luna"; public bool HasOpenAiApiKey { get; set; } public bool HasLastFmApiKey { get; set; } public string? OpenAiApiKey { get; set; } public string? LastFmApiKey { get; set; } public bool ClearOpenAiApiKey { get; set; } public bool ClearLastFmApiKey { get; set; } }
+    private sealed class AiModelOption { public string Id { get; set; } = string.Empty; }
+    private sealed class AiUsageSummary { public int RequestsToday { get; set; } public int InputTokensToday { get; set; } public int OutputTokensToday { get; set; } }
+}

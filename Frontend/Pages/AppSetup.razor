@@ -1,0 +1,24 @@
+@page "/setup"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Konfiguracja administratora</PageTitle>
+<h1>Pierwszy administrator</h1>
+<p class="text-secondary">Ten ekran jest dostępny tylko przed utworzeniem pierwszego konta systemowego.</p>
+@if (error != null) { <div class="alert alert-danger">@error</div> }
+<div class="card app-form-surface"><div class="card-body">
+    <div class="mb-3"><label class="form-label">Nick</label><input class="form-control" @bind="nick" /></div>
+    <div class="mb-3"><label class="form-label">Hasło (12–128 znaków)</label><input class="form-control" type="password" @bind="password" /></div>
+    <button class="btn btn-primary" @onclick="Setup">Utwórz administratora</button>
+</div></div>
+
+@code {
+    private string nick = string.Empty, password = string.Empty;
+    private string? error;
+    private async Task Setup()
+    {
+        var response = await Http.PostAsJsonAsync("api/app-auth/setup", new { nick, password });
+        if (response.IsSuccessStatusCode) Navigation.NavigateTo("/", true);
+        else error = await response.Content.ReadAsStringAsync();
+    }
+}

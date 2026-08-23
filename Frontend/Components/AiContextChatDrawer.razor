@@ -1,0 +1,138 @@
+@implements IDisposable
+@inject AiChatDrawerService Drawer
+@inject HttpClient Http
+@inject BlindModeService BlindMode
+
+@if (Drawer.IsOpen && Drawer.Context != null)
+{
+    <div class="ai-chat-backdrop" @onclick="Close"></div>
+    <aside class="ai-chat-drawer" aria-label="Czat AI dla wybranego elementu">
+        <header class="ai-chat-drawer-header">
+            <div><span class="ai-chat-context-label">@Drawer.Context.Label</span><strong>@Drawer.Context.HeaderText</strong><small>Pozostało: @Drawer.RemainingRequestsToday zapytań</small></div>
+            <button type="button" class="btn btn-sm btn-outline-light" title="Zamknij czat AI" @onclick="Close">×</button>
+        </header>
+        <section class="ai-chat-messages" aria-live="polite">
+            @if (Drawer.Messages.Count == 0)
+            {
+                <p class="ai-chat-empty">Zapytaj o historię, skład, gatunki, podobnych artystów, albumy lub propozycje tagów.</p>
+            }
+            @foreach (var message in Drawer.Messages)
+            {
+                <div class="ai-chat-message ai-chat-message-@message.Role">
+                    <div class="ai-chat-message-label">@(message.Role == "user" ? "Ty" : "AI")</div>
+                    <div class="ai-chat-message-text">@message.Text</div>
+                    @if (message.Response != null)
+                    {
+                        @if (message.Response.Items.Count > 0)
+                        {
+                            <ul class="ai-chat-results">@foreach (var item in message.Response.Items) { <li>@if (!string.IsNullOrWhiteSpace(item.Url)) { <a href="@item.Url" target="_blank" rel="noopener">@item.Name</a> } else { @item.Name } @if (!string.IsNullOrWhiteSpace(item.Subtitle)) { <span> — @item.Subtitle</span> } @if (!string.IsNullOrWhiteSpace(item.Metric)) { <small>@item.Metric@(item.Score.HasValue ? $": {item.Score}" : string.Empty)</small> }</li> }</ul>
+                        }
+                        @if (message.Response.Facts.Count > 0)
+                        {
+                            <dl class="ai-chat-facts">
+                                @foreach (var fact in message.Response.Facts.Take(10))
+                                {
+                                    <div><dt>@fact.Label</dt><dd>@fact.Value <a href="@fact.SourceUrl" target="_blank" rel="noopener" title="@fact.SourceName">źródło</a></dd></div>
+                                }
+                            </dl>
+                        }
+                        @if (message.Response.TagProposals.Count > 0)
+                        {
+                            <div class="ai-chat-tags">@foreach (var tag in message.Response.TagProposals) { <div><strong>@tag.Name</strong><small>@tag.Reason</small>@if (tag.Assigned) { <span class="badge text-bg-success">Przypisano</span> } else if (tag.ExistingTagId.HasValue) { <button class="btn btn-sm btn-success" @onclick="() => AssignTag(message, tag)">Przypisz</button> }</div> }</div>
+                        }
+                        @if (message.Response.Sources.Count > 0)
+                        {
+                            <div class="ai-chat-sources"><span>Źródła:</span><ul>@foreach (var source in message.Response.Sources) { <li><a href="@source.Url" target="_blank" rel="noopener">@source.Name</a>@if (!string.IsNullOrWhiteSpace(source.Detail)) { <small>@source.Detail</small> }</li> }</ul></div>
+                        }
+                        @if (message.Response.Warnings.Count > 0)
+                        {
+                            <div class="ai-chat-warnings">@foreach (var warning in message.Response.Warnings) { <div>@warning</div> }</div>
+                        }
+                    }
+                </div>
+            }
+        </section>
+        <footer class="ai-chat-composer">
+            <div class="ai-chat-presets">@foreach (var preset in Presets) { <button @onclick='@(() => UsePreset(preset.Question))'>@preset.Label</button> }</div>
+            <textarea class="form-control" rows="3" placeholder="O co chcesz zapytać?" @bind="draft" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@sending"></textarea>
+            <button class="btn btn-primary w-100 mt-2" disabled="@(sending || string.IsNullOrWhiteSpace(draft))" @onclick="Send">@(sending ? "Sprawdzanie…" : "Zapytaj")</button>
+        </footer>
+    </aside>
+}
+
+@code {
+    private string draft = string.Empty;
+    private bool sending;
+    private IEnumerable<(string Label, string Question)> Presets
+    {
+        get
+        {
+            if (Drawer.Context?.IsBlind == true)
+            {
+                return Drawer.Context.ItemType == "album"
+                    ? new[] { ("Opowiedz", "Opowiedz mi o tym ukrytym albumie"), ("Wydanie", "Kiedy i jako jaki typ wydania ukazał się ten ukryty album?"), ("Gatunki", "Jakie gatunki reprezentuje ten ukryty element?"), ("Tagi", "Zaproponuj tagi dla tego ukrytego elementu") }
+                    : new[] { ("Opowiedz", "Opowiedz mi o tym ukrytym elemencie"), ("Gatunki", "Jakie gatunki reprezentuje ten ukryty element?"), ("Tagi", "Zaproponuj tagi dla tego ukrytego elementu") };
+            }
+
+            return Drawer.Context?.ItemType switch
+            {
+                "artist" => new[] { ("Opowiedz", "Opowiedz mi o tym zespole lub artyście"), ("Historia", "Kiedy powstał ten zespół i jaka jest jego historia?"), ("Skład", "Jaki jest skład tego zespołu?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów") },
+                "album" => new[] { ("Opowiedz", "Opowiedz mi o tym albumie"), ("Wydanie", "Kiedy i jako jaki typ wydania ukazał się ten album?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobne albumy"), ("Tagi", "Zaproponuj tagi dla tego elementu") },
+                _ => new[] { ("Opowiedz", "Opowiedz mi o tym utworze i jego artyście"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów"), ("Tagi", "Zaproponuj tagi dla tego elementu") }
+            };
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await BlindMode.InitializeAsync();
+        BlindMode.Changed += OnBlindModeChanged;
+        Drawer.Changed += OnDrawerChanged;
+        await Drawer.InitializeAsync();
+        if (BlindMode.IsEnabled) await Drawer.ClearAsync();
+    }
+    public void Dispose()
+    {
+        BlindMode.Changed -= OnBlindModeChanged;
+        Drawer.Changed -= OnDrawerChanged;
+    }
+    private void OnDrawerChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnBlindModeChanged() => _ = Drawer.ClearAsync();
+    private Task Close() => Drawer.CloseAsync();
+    private async Task UsePreset(string question) { draft = question; await Send(); }
+    private async Task OnKeyDown(KeyboardEventArgs args) { if (args.Key == "Enter" && !args.ShiftKey) { await Send(); } }
+
+    private async Task Send()
+    {
+        if (Drawer.Context == null || string.IsNullOrWhiteSpace(draft) || sending) return;
+        var question = draft.Trim();
+        var history = Drawer.Context.IsBlind ? new List<object>() : Drawer.Messages.TakeLast(6).Select(message => (object)new { role = message.Role, text = message.Text }).ToList();
+        draft = string.Empty;
+        sending = true;
+        await Drawer.AddMessageAsync(new AiDrawerMessage { Role = "user", Text = question });
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/ai/chat", new { message = question, itemType = Drawer.Context.ItemType, spotifyItemId = Drawer.Context.SpotifyItemId, isBlind = Drawer.Context.IsBlind, conversation = history });
+            var payload = await response.Content.ReadFromJsonAsync<AiDrawerResponse>();
+            var text = payload?.Answer ?? payload?.Notice ?? (response.IsSuccessStatusCode ? "Brak odpowiedzi." : "Nie udało się uzyskać odpowiedzi AI.");
+            await Drawer.AddMessageAsync(new AiDrawerMessage { Role = "assistant", Text = text, Response = payload });
+        }
+        catch
+        {
+            await Drawer.AddMessageAsync(new AiDrawerMessage { Role = "assistant", Text = "Nie udało się połączyć z asystentem." });
+        }
+        finally
+        {
+            sending = false;
+            await Drawer.RefreshAccessAsync();
+            await Drawer.PersistAsync();
+        }
+    }
+
+    private async Task AssignTag(AiDrawerMessage message, AiDrawerTagProposal tag)
+    {
+        if (Drawer.Context == null || !tag.ExistingTagId.HasValue) return;
+        var result = await Http.PostAsJsonAsync("api/tags/assign", new { tagId = tag.ExistingTagId.Value, spotifyItemId = Drawer.Context.SpotifyItemId, itemType = Drawer.Context.ItemType, strength = 3.0f });
+        if (result.IsSuccessStatusCode) { tag.Assigned = true; await Drawer.PersistAsync(); }
+    }
+}

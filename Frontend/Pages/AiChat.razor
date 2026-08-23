@@ -1,0 +1,9 @@
+@page "/ai"
+@inject NavigationManager Navigation
+
+<PageTitle>Asystent AI</PageTitle>
+<p>Przekierowanie do albumów…</p>
+
+@code {
+    protected override void OnInitialized() => Navigation.NavigateTo("/albums", replace: true);
+}

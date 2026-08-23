@@ -3,6 +3,8 @@
 @using Frontend.Components
 @inject HttpClient Http
 @inject LocalStorageService Store
+@inject AiChatDrawerService AiDrawer
+@implements IDisposable
 
 <PageTitle>Library Manager - Artysta</PageTitle>
 
@@ -18,7 +20,7 @@
             <div class="flex-fill">
                 <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
                     <div>
-                        <h3 class="mb-1">@artist.name</h3>
+                        <div class="d-flex align-items-center gap-2"><h3 class="mb-1">@artist.name</h3>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@artist.id" DisplayName="@artist.name" /> }</div>
                         @if (artist.genres.Length > 0)
                         {
                             <div class="d-flex flex-wrap gap-1 mt-2">
@@ -56,7 +58,7 @@
                     {
                         <tr>
                             <td><div class="cover-container"><img class="cover-img-56" src="@GetBestImageUrl(track.album?.images)" alt="Okładka" /><button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(track.uri)">▶</button></div></td>
-                            <td>@track.name</td><td>@track.album?.name</td><td>@(track.album?.release_date?.Length >= 4 ? track.album.release_date[..4] : "—")</td>
+                            <td><span class="d-inline-flex align-items-center gap-2">@track.name @if (aiAvailable) { <AiContextButton ItemType="track" SpotifyItemId="@track.id" DisplayName="@track.name" /> }</span></td><td>@track.album?.name</td><td>@(track.album?.release_date?.Length >= 4 ? track.album.release_date[..4] : "—")</td>
                         </tr>
                     }
                 </tbody>
@@ -110,7 +112,7 @@
                             {
                                 <div class="mt-2"><small class="text-muted">Tagi:</small><div class="d-flex flex-wrap gap-1 mt-1">@foreach (var tag in album.tags.Take(3)) { <span class="badge badge-tag">@tag.TagName (@tag.Strength.ToString("0.0"))</span> } @if (album.tags.Count > 3) { <span class="badge bg-outline-primary text-primary badge-tag">+@(album.tags.Count - 3)</span> }</div></div>
                             }
-                            <div class="mt-auto pt-3"><button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" @onclick="() => OpenAlbumTagging(album.id)"><AppIcon Name="tag" /><span>Taguj</span></button></div>
+                            <div class="mt-auto pt-3 d-flex gap-2"><button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" @onclick="() => OpenAlbumTagging(album.id)"><AppIcon Name="tag" /><span>Taguj</span></button>@if (aiAvailable) { <AiContextButton ItemType="album" SpotifyItemId="@album.id" DisplayName="@album.name" /> }</div>
                         </div>
                     </div>
                 </div>
@@ -137,13 +139,26 @@
     private bool artistInLibrary, isChangingArtist, isAddingVisible, showAlbumTagging, showAlbums = true, showSingles = true, showCompilations = true;
     private string? taggingAlbumId, actionMessage;
     private bool actionFailed;
+    private bool aiAvailable;
 
     protected override async Task OnInitializedAsync()
     {
+        AiDrawer.Changed += HandleAiAccessChanged;
+        aiAvailable = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
         var filters = await Store.GetItemAsync<ReleaseTypesState>(ReleaseTypesStoreKey);
         if (filters != null) { showAlbums = filters.Albums; showSingles = filters.Singles; showCompilations = filters.Compilations; }
         await LoadAllAsync();
         await LoadTagItemsAsync();
+    }
+
+    public void Dispose() => AiDrawer.Changed -= HandleAiAccessChanged;
+
+    private void HandleAiAccessChanged()
+    {
+        var available = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
+        if (aiAvailable == available) return;
+        aiAvailable = available;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadAllAsync()

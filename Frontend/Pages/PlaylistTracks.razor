@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject LocalStorageService Store
 @inject HttpClient Http
+@inject AiChatDrawerService AiDrawer
 @implements IAsyncDisposable
 
 <PageTitle>Library Manager - Playlista</PageTitle>
@@ -160,17 +161,17 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
                             </div>
                         </td>
-                        <td>@t.Name</td>
+                        <td><span class="d-inline-flex align-items-center gap-2">@t.Name @if (aiAvailable) { <AiContextButton ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" /> }</span></td>
                         <td>
                             @foreach (var a in t.Artists)
                             {
-                                <a class="badge bg-outline-light text-light me-1 text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
+                                <span class="d-inline-flex align-items-center gap-1 me-1"><a class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /> }</span>
                             }
                         </td>
                         <td>
                             @if (!string.IsNullOrWhiteSpace(t.AlbumId))
                             {
-                                <a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>
+                                <span class="d-inline-flex align-items-center gap-2"><a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>@if (aiAvailable) { <AiContextButton ItemType="album" SpotifyItemId="@t.AlbumId" DisplayName="@t.AlbumName" /> }</span>
                             }
                             else
                             {
@@ -253,11 +254,14 @@
     private bool showUnassignedTags;
     private string? tagSearch;
     private Dictionary<long, int> tagCounts = new();
+    private bool aiAvailable;
     private PlaylistFilterSnapshot? appliedFilters;
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
 
     protected override async Task OnInitializedAsync()
     {
+        AiDrawer.Changed += HandleAiAccessChanged;
+        aiAvailable = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadAvailableTags();
@@ -350,9 +354,18 @@
 
     public async ValueTask DisposeAsync()
     {
+        AiDrawer.Changed -= HandleAiAccessChanged;
         try { await JS.InvokeVoidAsync("tagSync.unregister", controlsObserverRef); } catch (JSDisconnectedException) { }
         try { await JS.InvokeVoidAsync("libraryControls.disconnect"); } catch (JSDisconnectedException) { }
         controlsObserverRef?.Dispose();
+    }
+
+    private void HandleAiAccessChanged()
+    {
+        var available = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
+        if (aiAvailable == available) return;
+        aiAvailable = available;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadSavedFilters()

@@ -21,6 +21,7 @@ catch
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddDataProtection();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -38,7 +39,8 @@ builder.Services.AddCors(options =>
 
         policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -60,6 +62,35 @@ builder.Services.AddHttpClient("SpotifyApi", client =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient("MusicBrainz", client =>
+{
+    client.BaseAddress = new Uri("https://musicbrainz.org/ws/2/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("User-Agent", "SpotifyLibraryManager/1.0 (contact: administrator)");
+});
+builder.Services.AddHttpClient("LastFm", client =>
+{
+    client.BaseAddress = new Uri("https://ws.audioscrobbler.com/2.0/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddHttpClient("Wikidata", client =>
+{
+    client.BaseAddress = new Uri("https://www.wikidata.org/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("User-Agent", "SpotifyLibraryManager/1.0 (contact: administrator)");
+});
+builder.Services.AddHttpClient("WikidataQuery", client =>
+{
+    client.BaseAddress = new Uri("https://query.wikidata.org/");
+    client.DefaultRequestHeaders.Add("Accept", "application/sparql-results+json");
+    client.DefaultRequestHeaders.Add("User-Agent", "SpotifyLibraryManager/1.0 (contact: administrator)");
+});
+builder.Services.AddHttpClient("OpenAi", client =>
+{
+    client.BaseAddress = new Uri("https://api.openai.com/v1/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<TokenManagerService>();
 
@@ -74,6 +105,11 @@ builder.Services.AddScoped<TagsService>();
 builder.Services.AddScoped<UserService>();
 // Serwis Library
 builder.Services.AddScoped<LibraryService>();
+builder.Services.AddScoped<AppUserAuthService>();
+builder.Services.AddScoped<AiSettingsService>();
+builder.Services.AddScoped<MusicResearchService>();
+builder.Services.AddScoped<IAiChatCompletionProvider, OpenAiChatCompletionProvider>();
+builder.Services.AddScoped<AiChatService>();
 
 builder.Services.AddDbContext<DatabaseContext>(options =>
 {

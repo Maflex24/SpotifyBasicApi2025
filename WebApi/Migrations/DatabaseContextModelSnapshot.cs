@@ -22,6 +22,191 @@ namespace SpotifyBasicApi2025.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AiExternalCacheEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CacheKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Source", "CacheKey")
+                        .IsUnique();
+
+                    b.ToTable("AiExternalCacheEntries");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AiSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AccessMode")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("AllowedUserIds")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("DailyRequestLimit")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DefaultModel")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("LastFmApiKeyProtected")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("OpenAiApiKeyProtected")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AiSettings");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AiUsageMetric", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("varchar(24)");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.ToTable("AiUsageMetrics");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AppUser", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsAdmin")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Nick")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Nick")
+                        .IsUnique();
+
+                    b.ToTable("AppUsers");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AppUserSession", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AppUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("AppUserId", "ExpiresAtUtc");
+
+                    b.ToTable("AppUserSessions");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibAlbumUserAssign", b =>
                 {
                     b.Property<long>("Id")
@@ -874,6 +1059,17 @@ namespace SpotifyBasicApi2025.Migrations
                     b.ToTable("SpUsers");
                 });
 
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AppUserSession", b =>
+                {
+                    b.HasOne("SpotifyBasicApi2025.Entities.AppUser", "AppUser")
+                        .WithMany("Sessions")
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+                });
+
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibAlbumUserAssign", b =>
                 {
                     b.HasOne("SpotifyBasicApi2025.Entities.SpAlbum", "Album")
@@ -1163,6 +1359,11 @@ namespace SpotifyBasicApi2025.Migrations
                     b.Navigation("Artist");
 
                     b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("SpotifyBasicApi2025.Entities.AppUser", b =>
+                {
+                    b.Navigation("Sessions");
                 });
 
             modelBuilder.Entity("SpotifyBasicApi2025.Entities.LibPlaylistFolder", b =>

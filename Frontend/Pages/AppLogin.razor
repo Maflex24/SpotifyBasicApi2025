@@ -1,0 +1,24 @@
+@page "/app-login"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Logowanie systemowe</PageTitle>
+<h1>Logowanie systemowe</h1>
+@if (error != null) { <div class="alert alert-danger">@error</div> }
+<div class="card app-form-surface"><div class="card-body">
+    <div class="mb-3"><label class="form-label">Nick</label><input class="form-control" @bind="nick" /></div>
+    <div class="mb-3"><label class="form-label">Hasło</label><input class="form-control" type="password" @bind="password" @onkeydown="OnKeyDown" /></div>
+    <button class="btn btn-primary" @onclick="Login">Zaloguj</button>
+</div></div>
+
+@code {
+    private string nick = string.Empty, password = string.Empty;
+    private string? error;
+    private async Task OnKeyDown(KeyboardEventArgs args) { if (args.Key == "Enter") await Login(); }
+    private async Task Login()
+    {
+        var response = await Http.PostAsJsonAsync("api/app-auth/login", new { nick, password });
+        if (response.IsSuccessStatusCode) Navigation.NavigateTo("/", true);
+        else error = "Nieprawidłowy nick lub hasło.";
+    }
+}
