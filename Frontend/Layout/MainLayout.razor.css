@@ -51,12 +51,20 @@ main {
         text-overflow: ellipsis;
     }
 
+    .top-row ::deep .top-row-system-status {
+        margin-left: 1.5rem;
+    }
+
 @media (max-width: 640.98px) {
     .top-row {
         justify-content: space-between;
     }
 
     .top-row ::deep a, .top-row ::deep .btn-link {
+        margin-left: 0;
+    }
+
+    .top-row ::deep .top-row-system-status {
         margin-left: 0;
     }
 }

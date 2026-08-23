@@ -16,7 +16,7 @@
                 <a href="/" class="small">Spotify: @(status?.Spotify.IsLoggedIn == true ? (status.Spotify.DisplayName ?? status.Spotify.Id) : "niezalogowany")</a>
                 @if (status?.AppUser.IsLoggedIn == true)
                 {
-                    <span class="small">System: @status.AppUser.Nick@(status.AppUser.IsAdmin ? " (admin)" : string.Empty)</span>
+                    <span class="small top-row-system-status">System: @status.AppUser.Nick@(status.AppUser.IsAdmin ? " (admin)" : string.Empty)</span>
                     @if (status.AppUser.IsAdmin)
                     {
                         <a href="ai-settings" class="small">AI</a>
