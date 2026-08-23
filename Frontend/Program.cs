@@ -22,6 +22,7 @@ builder.Services.AddSingleton(new FrontendTheme
 });
 
 builder.Services.AddScoped<LocalStorageService>();
+builder.Services.AddScoped<AiChatDrawerService>();
 builder.Services.AddScoped<BlindModeService>();
 builder.Services.AddScoped<ActivePlaybackService>();
 

@@ -14,12 +14,12 @@
         <div class="d-flex align-items-start gap-3 mb-3">
             <img src="@GetBestImageUrl(album.images)" alt="okładka" style="width:160px;height:160px;object-fit:cover;border-radius:8px;" />
             <div class="flex-fill">
-                <h3 class="mb-1">@album.name</h3>
+                <div class="d-flex align-items-center gap-2"><h3 class="mb-1">@album.name</h3><AiContextButton ItemType="album" SpotifyItemId="@album.id" DisplayName="@album.name" /></div>
                 <div class="text-secondary">@album.release_date</div>
                 <div class="d-flex flex-wrap gap-1 mt-1">
                     @foreach (var art in (album.artists ?? Array.Empty<AArtist>()))
                     {
-                        <a href="/artist/@art.id" class="badge bg-outline-light text-light text-decoration-none" style="font-size:0.75rem;">@art.name</a>
+                        <span class="d-inline-flex align-items-center gap-1"><a href="/artist/@art.id" class="badge bg-outline-light text-light text-decoration-none" style="font-size:0.75rem;">@art.name</a><AiContextButton ItemType="artist" SpotifyItemId="@art.id" DisplayName="@art.name" /></span>
                     }
                 </div>
                 <div class="mt-2 d-flex gap-2">
@@ -48,7 +48,7 @@
                                     <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.uri)">▶</button>
                                 </div>
                             </td>
-                            <td>@t.name</td>
+                            <td><span class="d-inline-flex align-items-center gap-2">@t.name <AiContextButton ItemType="track" SpotifyItemId="@t.id" DisplayName="@t.name" /></span></td>
                             <td>@t.track_number</td>
                             <td class="d-flex gap-2">
                                 <button class="btn btn-sm btn-outline-light" @onclick="() => AddTrack(t.id)">+ Utwór</button>

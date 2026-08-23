@@ -1,0 +1,19 @@
+@inject AiChatDrawerService Drawer
+
+@if (Drawer.AccessLoaded && Drawer.IsAllowed && !string.IsNullOrWhiteSpace(SpotifyItemId))
+{
+    <button type="button" class="btn btn-sm ai-context-button @Class" title="Zapytaj AI o @DisplayName" aria-label="Zapytaj AI o @ItemLabel: @DisplayName" @onclick="Open">AI</button>
+}
+
+@code {
+    [Parameter, EditorRequired] public string ItemType { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string SpotifyItemId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string DisplayName { get; set; } = string.Empty;
+    [Parameter] public string Class { get; set; } = string.Empty;
+
+    private string ItemLabel => ItemType switch { "artist" => "artystę", "album" => "album", "track" => "utwór", _ => "element" };
+
+    protected override async Task OnInitializedAsync() => await Drawer.InitializeAsync();
+
+    private Task Open() => Drawer.OpenAsync(new AiChatContext { ItemType = ItemType, SpotifyItemId = SpotifyItemId, DisplayName = DisplayName });
+}

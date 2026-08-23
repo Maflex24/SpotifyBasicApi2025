@@ -5,6 +5,13 @@ public sealed class AiChatRequest
     public string Message { get; set; } = string.Empty;
     public string? ItemType { get; set; }
     public string? SpotifyItemId { get; set; }
+    public List<AiConversationMessage> Conversation { get; set; } = new();
+}
+
+public sealed class AiConversationMessage
+{
+    public string Role { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
 }
 
 public sealed class AiChatResponse

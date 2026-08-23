@@ -369,6 +369,10 @@
                         <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
+                        @if (!IsBlindMode)
+                        {
+                            <AiContextButton ItemType="artist" SpotifyItemId="@group.Id" DisplayName="@group.Name" />
+                        }
                     }
                 </header>
                 @if (!IsArtistGroupCollapsed(group.Id))
@@ -2193,7 +2197,7 @@
                                 }
                                 else
                                 {
-                                    <a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>
+                                    <span class="d-inline-flex align-items-center gap-1"><a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a><AiContextButton ItemType="artist" SpotifyItemId="@artist.Id" DisplayName="@artist.Name" /></span>
                                 }
                             }
                         </div>
@@ -2223,6 +2227,10 @@
                         <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumNote(album)">
                             <AppIcon Name="edit" /><span>Notatka</span>
                         </button>
+                        @if (!IsBlindMode)
+                        {
+                            <AiContextButton ItemType="album" SpotifyItemId="@album.Id" DisplayName="@album.Name" />
+                        }
                         <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
                     </div>
                 </div>

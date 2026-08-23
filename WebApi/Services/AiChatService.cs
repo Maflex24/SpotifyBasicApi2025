@@ -31,7 +31,7 @@ public sealed class AiChatService(
         response.Answer = BuildFallbackAnswer(intent, packet, response.Items);
 
         var settings = await settingsService.GetSettingsAsync();
-        var research = BuildResearchText(intent, packet, response.Items);
+        var research = BuildResearchText(intent, request.ItemType, request.Message, packet, response.Items, SanitizeConversation(request.Conversation));
         try
         {
             var completion = await completionProvider.CreateShortAnswerAsync(settings.DefaultModel, research, cancellationToken);
@@ -91,12 +91,32 @@ public sealed class AiChatService(
         _ => items.Count == 0 ? "Nie znaleziono podobnych albumów." : $"Propozycje pochodzą z podobieństwa wykonawców Last.fm: {string.Join(", ", items.Take(3).Select(x => x.Name))}."
     };
 
-    private static string BuildResearchText(string intent, AiResearchPacket packet, List<AiResultItem> items)
+    private static string BuildResearchText(string intent, string? itemType, string message, AiResearchPacket packet, List<AiResultItem> items, List<AiConversationMessage> conversation)
     {
-        // Do modelu przekazujemy wyłącznie intencję oraz materiał pobrany z zewnętrznych źródeł.
-        var text = new StringBuilder($"Intencja: {intent}. ");
+        // Do modelu przekazujemy tylko aktualnie wybrany element, pytanie i krótki wątek oraz materiał zewnętrznych źródeł, nigdy całą prywatną bibliotekę.
+        var normalizedType = itemType?.Trim().ToLowerInvariant() switch { "artist" => "artysta", "album" => "album", "track" => "utwór", _ => "element" };
+        var artist = string.IsNullOrWhiteSpace(packet.ArtistName) ? string.Empty : $"; wykonawca: {packet.ArtistName}";
+        var currentQuestion = message.Trim()[..Math.Min(message.Trim().Length, 1_200)];
+        var text = new StringBuilder($"Kontekst: {normalizedType} „{packet.SubjectName}”{artist}. Intencja: {intent}. Bieżące pytanie użytkownika: {currentQuestion}. ");
         if (packet.Genres.Count > 0) text.Append("Gatunki/tagi MusicBrainz: ").Append(string.Join(", ", packet.Genres)).Append(". ");
         if (items.Count > 0) text.Append("Wyniki: ").Append(string.Join("; ", items.Take(8).Select(x => $"{x.Name} ({x.Metric}, {x.Score})"))).Append(".");
+        if (conversation.Count > 0)
+        {
+            text.Append("\n\nPoprzednie wiadomości w tym samym wątku (służą wyłącznie do rozumienia odniesień; nie są dodatkowymi źródłami faktów):\n");
+            foreach (var conversationMessage in conversation)
+                text.Append(conversationMessage.Role == "assistant" ? "Asystent: " : "Użytkownik: ").Append(conversationMessage.Text).Append('\n');
+        }
         return text.ToString();
     }
+
+    private static List<AiConversationMessage> SanitizeConversation(IEnumerable<AiConversationMessage>? messages) =>
+        (messages ?? Enumerable.Empty<AiConversationMessage>())
+            .Where(conversationMessage => conversationMessage.Role is "user" or "assistant" && !string.IsNullOrWhiteSpace(conversationMessage.Text))
+            .TakeLast(6)
+            .Select(conversationMessage => new AiConversationMessage
+            {
+                Role = conversationMessage.Role,
+                Text = conversationMessage.Text.Trim()[..Math.Min(conversationMessage.Text.Trim().Length, 1_200)]
+            })
+            .ToList();
 }

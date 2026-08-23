@@ -160,17 +160,17 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
                             </div>
                         </td>
-                        <td>@t.Name</td>
+                        <td><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextButton ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" /></span></td>
                         <td>
                             @foreach (var a in t.Artists)
                             {
-                                <a class="badge bg-outline-light text-light me-1 text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
+                                <span class="d-inline-flex align-items-center gap-1 me-1"><a class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a><AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /></span>
                             }
                         </td>
                         <td>
                             @if (!string.IsNullOrWhiteSpace(t.AlbumId))
                             {
-                                <a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>
+                                <span class="d-inline-flex align-items-center gap-2"><a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a><AiContextButton ItemType="album" SpotifyItemId="@t.AlbumId" DisplayName="@t.AlbumName" /></span>
                             }
                             else
                             {
