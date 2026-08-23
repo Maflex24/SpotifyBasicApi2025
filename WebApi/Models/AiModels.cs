@@ -20,8 +20,19 @@ public sealed class AiChatResponse
     public string Intent { get; set; } = string.Empty;
     public string? Notice { get; set; }
     public List<AiResultItem> Items { get; set; } = new();
+    public List<AiResearchFact> Facts { get; set; } = new();
     public List<AiSourceLink> Sources { get; set; } = new();
+    public List<string> Warnings { get; set; } = new();
     public List<AiTagProposal> TagProposals { get; set; } = new();
+}
+
+public sealed class AiResearchFact
+{
+    public string Category { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+    public string SourceName { get; set; } = string.Empty;
+    public string SourceUrl { get; set; } = string.Empty;
 }
 
 public sealed class AiResultItem

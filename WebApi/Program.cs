@@ -74,6 +74,18 @@ builder.Services.AddHttpClient("LastFm", client =>
     client.BaseAddress = new Uri("https://ws.audioscrobbler.com/2.0/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
+builder.Services.AddHttpClient("Wikidata", client =>
+{
+    client.BaseAddress = new Uri("https://www.wikidata.org/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("User-Agent", "SpotifyLibraryManager/1.0 (contact: administrator)");
+});
+builder.Services.AddHttpClient("WikidataQuery", client =>
+{
+    client.BaseAddress = new Uri("https://query.wikidata.org/");
+    client.DefaultRequestHeaders.Add("Accept", "application/sparql-results+json");
+    client.DefaultRequestHeaders.Add("User-Agent", "SpotifyLibraryManager/1.0 (contact: administrator)");
+});
 builder.Services.AddHttpClient("OpenAi", client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/v1/");

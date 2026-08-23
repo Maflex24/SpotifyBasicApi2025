@@ -2,13 +2,15 @@
 
 ## Cel
 
-Aplikacja pomaga odkrywać, opisywać i organizować bibliotekę Spotify. Czat AI korzysta z metadanych MusicBrainz oraz Last.fm, a odpowiedzi pokazują źródła, metryki i wymagające zatwierdzenia propozycje tagów.
+Aplikacja pomaga odkrywać, opisywać i organizować bibliotekę Spotify. Czat AI korzysta z metadanych MusicBrainz, Wikidata i Last.fm, a odpowiedzi pokazują źródła, metryki, fakty oraz wymagające zatwierdzenia propozycje tagów.
 
 ## Źródła i granice
 
 - Spotify identyfikuje elementy biblioteki oraz obsługuje opcjonalne logowanie do niej.
 - Do MVP nie używamy Spotify Related Artists ani Recommendations, Reddita, Discogs ani Metal Archives.
-- MusicBrainz dostarcza metadane i gatunki; Last.fm podobieństwo oraz popularność. Popularność nie jest przedstawiana jako ocena.
+- MusicBrainz dostarcza metadane, gatunki, daty działalności, dane wydań oraz relacje członkowskie. Wikidata uzupełnia encyklopedyczne fakty przez stabilne identyfikatory MusicBrainz. Last.fm dostarcza podobieństwo oraz popularność; popularność nie jest przedstawiana jako ocena.
+- Odpowiedzi informacyjne, np. „opowiedz mi o tym zespole”, są syntezą wyłącznie faktów z pakietu badawczego. Model nie uzupełnia ich własną wiedzą i jasno sygnalizuje brak danych lub niejednoznaczne dopasowanie.
+- Tematyka i pełne teksty utworów nie należą do obecnego zakresu; wymagają późniejszego wyboru legalnego źródła.
 - Treść prywatnej biblioteki Spotify nie jest wysyłana do modelu AI.
 
 ## Konta i uprawnienia
@@ -35,13 +37,16 @@ Aplikacja pomaga odkrywać, opisywać i organizować bibliotekę Spotify. Czat A
 ## Dane, cache i niezawodność
 
 - Cache źródeł, limity żądań oraz deterministyczne rankingi ograniczają koszt i poprawiają powtarzalność.
+- Cache przechowuje wyłącznie poprawne odpowiedzi źródeł. Dane stabilne MusicBrainz/Wikidata są cache’owane dłużej niż dane Last.fm; błędne odpowiedzi Last.fm nie są cache’owane ani prezentowane jako źródło.
 - Czat jest panelem kontekstowym otwieranym z przycisków `AI` przy albumach, artystach i utworach, a nie osobnym ekranem roboczym. Jego nagłówek zawsze wskazuje wybrany element.
 - Aktywny wątek pozostaje tylko w `sessionStorage` bieżącej sesji przeglądarki. Do modelu trafia bieżące pytanie, typ i nazwa aktualnie wybranego elementu oraz najwyżej sześć poprzednich wiadomości; backend zapisuje wyłącznie metryki użycia.
 - Playlisty nie są kontekstem AI. W widoku playlisty można otwierać czat dla jej utworów, albumów i artystów bez przekazywania modelowi składu playlisty.
 - Brak klucza, modelu, danych źródłowych lub awaria dostawcy zwracają czytelny stan bez wycieku sekretów.
+- Źródła pod odpowiedzią prowadzą do konkretnych stron encji (artysty, release group lub elementu Wikidata), nigdy wyłącznie do strony głównej dostawcy.
 
 ## Weryfikacja
 
 - Testujemy setup, login/logout, sesję wygasłą, błędne hasło i ochronę ostatniego administratora.
 - Testujemy izolację panelu dla gościa i zwykłego użytkownika oraz niezależne statusy Spotify/AppUser.
 - Testujemy szyfrowanie sekretów, brak ich w API/logach, zachowanie pustego pola, jawne usunięcie, cache, limity i błędy dostawców.
+- Testujemy polskie pytania o profil, historię, skład i wydanie, brak halucynacji przy niejednoznacznym dopasowaniu oraz linki do konkretnych encji źródłowych.

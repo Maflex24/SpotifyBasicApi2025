@@ -21,8 +21,9 @@ public sealed class OpenAiChatCompletionProvider(IHttpClientFactory httpClientFa
         var payload = new
         {
             model,
-            input = "Jesteś asystentem biblioteki muzycznej. Odpowiedz po polsku w najwyżej 3 zdaniach. " +
-                    "Używaj tylko faktów z pakietu badawczego. Nie dopowiadaj faktów i nie nazywaj popularności oceną.\n\n" + research,
+            input = "Jesteś asystentem biblioteki muzycznej. Odpowiedz po polsku, zwięźle i naturalnie. " +
+                    "Używaj wyłącznie faktów z pakietu badawczego; nie dopowiadaj faktów, nie interpretuj braku danych jako zaprzeczenia i nie nazywaj popularności oceną. " +
+                    "Nie analizuj tekstów utworów ani nie przytaczaj ich, jeśli pakiet nie zawiera takich danych.\n\n" + research,
             max_output_tokens = 240
         };
         var client = httpClientFactory.CreateClient("OpenAi");

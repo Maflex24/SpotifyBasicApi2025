@@ -131,11 +131,14 @@ public sealed class AiDrawerResponse
     public string? Answer { get; set; }
     public string? Notice { get; set; }
     public List<AiDrawerItem> Items { get; set; } = new();
+    public List<AiDrawerFact> Facts { get; set; } = new();
     public List<AiDrawerSource> Sources { get; set; } = new();
+    public List<string> Warnings { get; set; } = new();
     public List<AiDrawerTagProposal> TagProposals { get; set; } = new();
 }
 
 public sealed class AiDrawerItem { public string Name { get; set; } = string.Empty; public string? Subtitle { get; set; } public decimal? Score { get; set; } public string? Metric { get; set; } public string? Url { get; set; } }
+public sealed class AiDrawerFact { public string Category { get; set; } = string.Empty; public string Label { get; set; } = string.Empty; public string Value { get; set; } = string.Empty; public string SourceName { get; set; } = string.Empty; public string SourceUrl { get; set; } = string.Empty; }
 public sealed class AiDrawerSource { public string Name { get; set; } = string.Empty; public string Url { get; set; } = string.Empty; public string? Detail { get; set; } }
 public sealed class AiDrawerTagProposal { public string Name { get; set; } = string.Empty; public string Reason { get; set; } = string.Empty; public long? ExistingTagId { get; set; } public bool Assigned { get; set; } }
 public sealed class AiAccess { public bool Allowed { get; set; } public int RemainingRequestsToday { get; set; } }

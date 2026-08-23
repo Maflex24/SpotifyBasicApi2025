@@ -2552,6 +2552,30 @@ button.tag-preview-tag {
     border-top: 1px solid #2d3a4d;
 }
 
+.ai-chat-facts {
+    margin: 0.7rem 0 0;
+    padding-top: 0.55rem;
+    border-top: 1px solid #2d3a4d;
+}
+
+.ai-chat-facts > div {
+    margin-bottom: 0.35rem;
+}
+
+.ai-chat-facts dt {
+    color: #9fb1c8;
+    font-size: 0.74rem;
+}
+
+.ai-chat-facts dd {
+    margin: 0;
+}
+
+.ai-chat-facts a {
+    margin-left: 0.3rem;
+    font-size: 0.76rem;
+}
+
 .ai-chat-results {
     padding-left: 1rem;
 }
@@ -2581,7 +2605,22 @@ button.tag-preview-tag {
 }
 
 .ai-chat-sources a {
-    margin-left: 0.35rem;
+    margin-left: 0.15rem;
+}
+
+.ai-chat-sources ul {
+    margin: 0.25rem 0 0;
+    padding-left: 1rem;
+}
+
+.ai-chat-sources small {
+    margin-left: 0.3rem;
+}
+
+.ai-chat-warnings {
+    margin-top: 0.55rem;
+    color: #d8b36b;
+    font-size: 0.76rem;
 }
 
 .ai-chat-composer {

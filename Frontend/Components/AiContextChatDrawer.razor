@@ -13,7 +13,7 @@
         <section class="ai-chat-messages" aria-live="polite">
             @if (Drawer.Messages.Count == 0)
             {
-                <p class="ai-chat-empty">Zapytaj o gatunki, podobnych artystów, albumy lub propozycje tagów.</p>
+                <p class="ai-chat-empty">Zapytaj o historię, skład, gatunki, podobnych artystów, albumy lub propozycje tagów.</p>
             }
             @foreach (var message in Drawer.Messages)
             {
@@ -26,25 +26,33 @@
                         {
                             <ul class="ai-chat-results">@foreach (var item in message.Response.Items) { <li>@if (!string.IsNullOrWhiteSpace(item.Url)) { <a href="@item.Url" target="_blank" rel="noopener">@item.Name</a> } else { @item.Name } @if (!string.IsNullOrWhiteSpace(item.Subtitle)) { <span> — @item.Subtitle</span> } @if (!string.IsNullOrWhiteSpace(item.Metric)) { <small>@item.Metric@(item.Score.HasValue ? $": {item.Score}" : string.Empty)</small> }</li> }</ul>
                         }
+                        @if (message.Response.Facts.Count > 0)
+                        {
+                            <dl class="ai-chat-facts">
+                                @foreach (var fact in message.Response.Facts.Take(10))
+                                {
+                                    <div><dt>@fact.Label</dt><dd>@fact.Value <a href="@fact.SourceUrl" target="_blank" rel="noopener" title="@fact.SourceName">źródło</a></dd></div>
+                                }
+                            </dl>
+                        }
                         @if (message.Response.TagProposals.Count > 0)
                         {
                             <div class="ai-chat-tags">@foreach (var tag in message.Response.TagProposals) { <div><strong>@tag.Name</strong><small>@tag.Reason</small>@if (tag.Assigned) { <span class="badge text-bg-success">Przypisano</span> } else if (tag.ExistingTagId.HasValue) { <button class="btn btn-sm btn-success" @onclick="() => AssignTag(message, tag)">Przypisz</button> }</div> }</div>
                         }
                         @if (message.Response.Sources.Count > 0)
                         {
-                            <div class="ai-chat-sources">Źródła: @foreach (var source in message.Response.Sources) { <a href="@source.Url" target="_blank" rel="noopener">@source.Name</a> }</div>
+                            <div class="ai-chat-sources"><span>Źródła:</span><ul>@foreach (var source in message.Response.Sources) { <li><a href="@source.Url" target="_blank" rel="noopener">@source.Name</a>@if (!string.IsNullOrWhiteSpace(source.Detail)) { <small>@source.Detail</small> }</li> }</ul></div>
+                        }
+                        @if (message.Response.Warnings.Count > 0)
+                        {
+                            <div class="ai-chat-warnings">@foreach (var warning in message.Response.Warnings) { <div>@warning</div> }</div>
                         }
                     }
                 </div>
             }
         </section>
         <footer class="ai-chat-composer">
-            <div class="ai-chat-presets">
-                <button @onclick='@(() => UsePreset("Jakie gatunki reprezentuje ten element?"))'>Gatunki</button>
-                <button @onclick='@(() => UsePreset("Poleć podobnych artystów"))'>Podobni</button>
-                <button @onclick='@(() => UsePreset("Jakie są najpopularniejsze albumy tego artysty?"))'>Albumy</button>
-                <button @onclick='@(() => UsePreset("Zaproponuj tagi dla tego element"))'>Tagi</button>
-            </div>
+            <div class="ai-chat-presets">@foreach (var preset in Presets) { <button @onclick='@(() => UsePreset(preset.Question))'>@preset.Label</button> }</div>
             <textarea class="form-control" rows="3" placeholder="O co chcesz zapytać?" @bind="draft" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@sending"></textarea>
             <button class="btn btn-primary w-100 mt-2" disabled="@(sending || string.IsNullOrWhiteSpace(draft))" @onclick="Send">@(sending ? "Sprawdzanie…" : "Zapytaj")</button>
         </footer>
@@ -54,6 +62,12 @@
 @code {
     private string draft = string.Empty;
     private bool sending;
+    private IEnumerable<(string Label, string Question)> Presets => Drawer.Context?.ItemType switch
+    {
+        "artist" => new[] { ("Opowiedz", "Opowiedz mi o tym zespole lub artyście"), ("Historia", "Kiedy powstał ten zespół i jaka jest jego historia?"), ("Skład", "Jaki jest skład tego zespołu?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów") },
+        "album" => new[] { ("Opowiedz", "Opowiedz mi o tym albumie"), ("Wydanie", "Kiedy i jako jaki typ wydania ukazał się ten album?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobne albumy"), ("Tagi", "Zaproponuj tagi dla tego elementu") },
+        _ => new[] { ("Opowiedz", "Opowiedz mi o tym utworze i jego artyście"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów"), ("Tagi", "Zaproponuj tagi dla tego elementu") }
+    };
 
     protected override async Task OnInitializedAsync()
     {
