@@ -46,6 +46,19 @@ public sealed class MusicResearchService(DatabaseContext context, IHttpClientFac
         return packet;
     }
 
+    public async Task<AiIdentityContext?> GetIdentityAsync(string itemType, string spotifyItemId)
+    {
+        var subject = await ResolveSubjectAsync(itemType, spotifyItemId);
+        if (subject == null) return null;
+        return new AiIdentityContext
+        {
+            ItemType = itemType.Trim().ToLowerInvariant(),
+            SubjectName = subject.Name,
+            ArtistName = subject.ArtistName,
+            AlbumName = subject.AlbumName
+        };
+    }
+
     private async Task<ResearchSubject?> ResolveSubjectAsync(string itemType, string id)
     {
         var normalized = itemType.Trim().ToLowerInvariant();
@@ -429,4 +442,12 @@ public sealed class AiResearchPacket
     public List<AiSourceLink> Sources { get; } = new();
     public List<string> Warnings { get; } = new();
     public bool HasAnswerData { get; set; }
+}
+
+public sealed class AiIdentityContext
+{
+    public string ItemType { get; set; } = string.Empty;
+    public string SubjectName { get; set; } = string.Empty;
+    public string? ArtistName { get; set; }
+    public string? AlbumName { get; set; }
 }

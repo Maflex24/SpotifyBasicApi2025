@@ -40,6 +40,15 @@ public sealed class AiChatDrawerService(HttpClient http, IJSRuntime js)
         NotifyChanged();
     }
 
+    public async Task ClearAsync()
+    {
+        IsOpen = false;
+        Context = null;
+        Messages = new();
+        await PersistAsync();
+        NotifyChanged();
+    }
+
     public async Task AddMessageAsync(AiDrawerMessage message)
     {
         Messages.Add(message);
@@ -72,7 +81,9 @@ public sealed class AiChatDrawerService(HttpClient http, IJSRuntime js)
     {
         try
         {
-            var state = new AiDrawerStoredState { IsOpen = IsOpen, Context = Context, Messages = Messages };
+            // Wiadomości Blind mogą zawierać świadomie ujawnioną tożsamość elementu, więc nie utrwalamy ich między odświeżeniami.
+            var storedMessages = Context?.IsBlind == true ? new List<AiDrawerMessage>() : Messages;
+            var state = new AiDrawerStoredState { IsOpen = IsOpen, Context = Context, Messages = storedMessages };
             await js.InvokeVoidAsync("sessionStorage.setItem", SessionStorageKey, System.Text.Json.JsonSerializer.Serialize(state));
         }
         catch { }
@@ -115,8 +126,10 @@ public sealed class AiChatContext
     public string ItemType { get; set; } = string.Empty;
     public string SpotifyItemId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public string Key => $"{ItemType}:{SpotifyItemId}";
-    public string Label => ItemType switch { "artist" => "Artysta", "album" => "Album", "track" => "Utwór", _ => "Element" };
+    public bool IsBlind { get; set; }
+    public string Key => $"{(IsBlind ? "blind" : "normal")}:{ItemType}:{SpotifyItemId}";
+    public string Label => IsBlind ? ItemType switch { "artist" => "Ukryty artysta", "album" => "Ukryty album", "track" => "Ukryty utwór", _ => "Ukryty element" } : ItemType switch { "artist" => "Artysta", "album" => "Album", "track" => "Utwór", _ => "Element" };
+    public string HeaderText => IsBlind ? "Tryb Blind" : DisplayName;
 }
 
 public sealed class AiDrawerMessage

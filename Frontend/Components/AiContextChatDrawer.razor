@@ -1,13 +1,14 @@
 @implements IDisposable
 @inject AiChatDrawerService Drawer
 @inject HttpClient Http
+@inject BlindModeService BlindMode
 
 @if (Drawer.IsOpen && Drawer.Context != null)
 {
     <div class="ai-chat-backdrop" @onclick="Close"></div>
     <aside class="ai-chat-drawer" aria-label="Czat AI dla wybranego elementu">
         <header class="ai-chat-drawer-header">
-            <div><span class="ai-chat-context-label">@Drawer.Context.Label</span><strong>@Drawer.Context.DisplayName</strong><small>Pozostało: @Drawer.RemainingRequestsToday zapytań</small></div>
+            <div><span class="ai-chat-context-label">@Drawer.Context.Label</span><strong>@Drawer.Context.HeaderText</strong><small>Pozostało: @Drawer.RemainingRequestsToday zapytań</small></div>
             <button type="button" class="btn btn-sm btn-outline-light" title="Zamknij czat AI" @onclick="Close">×</button>
         </header>
         <section class="ai-chat-messages" aria-live="polite">
@@ -62,20 +63,41 @@
 @code {
     private string draft = string.Empty;
     private bool sending;
-    private IEnumerable<(string Label, string Question)> Presets => Drawer.Context?.ItemType switch
+    private IEnumerable<(string Label, string Question)> Presets
     {
-        "artist" => new[] { ("Opowiedz", "Opowiedz mi o tym zespole lub artyście"), ("Historia", "Kiedy powstał ten zespół i jaka jest jego historia?"), ("Skład", "Jaki jest skład tego zespołu?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów") },
-        "album" => new[] { ("Opowiedz", "Opowiedz mi o tym albumie"), ("Wydanie", "Kiedy i jako jaki typ wydania ukazał się ten album?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobne albumy"), ("Tagi", "Zaproponuj tagi dla tego elementu") },
-        _ => new[] { ("Opowiedz", "Opowiedz mi o tym utworze i jego artyście"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów"), ("Tagi", "Zaproponuj tagi dla tego elementu") }
-    };
+        get
+        {
+            if (Drawer.Context?.IsBlind == true)
+            {
+                return Drawer.Context.ItemType == "album"
+                    ? new[] { ("Opowiedz", "Opowiedz mi o tym ukrytym albumie"), ("Wydanie", "Kiedy i jako jaki typ wydania ukazał się ten ukryty album?"), ("Gatunki", "Jakie gatunki reprezentuje ten ukryty element?"), ("Tagi", "Zaproponuj tagi dla tego ukrytego elementu") }
+                    : new[] { ("Opowiedz", "Opowiedz mi o tym ukrytym elemencie"), ("Gatunki", "Jakie gatunki reprezentuje ten ukryty element?"), ("Tagi", "Zaproponuj tagi dla tego ukrytego elementu") };
+            }
+
+            return Drawer.Context?.ItemType switch
+            {
+                "artist" => new[] { ("Opowiedz", "Opowiedz mi o tym zespole lub artyście"), ("Historia", "Kiedy powstał ten zespół i jaka jest jego historia?"), ("Skład", "Jaki jest skład tego zespołu?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów") },
+                "album" => new[] { ("Opowiedz", "Opowiedz mi o tym albumie"), ("Wydanie", "Kiedy i jako jaki typ wydania ukazał się ten album?"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobne albumy"), ("Tagi", "Zaproponuj tagi dla tego elementu") },
+                _ => new[] { ("Opowiedz", "Opowiedz mi o tym utworze i jego artyście"), ("Gatunki", "Jakie gatunki reprezentuje ten element?"), ("Podobni", "Poleć podobnych artystów"), ("Tagi", "Zaproponuj tagi dla tego elementu") }
+            };
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
+        await BlindMode.InitializeAsync();
+        BlindMode.Changed += OnBlindModeChanged;
         Drawer.Changed += OnDrawerChanged;
         await Drawer.InitializeAsync();
+        if (BlindMode.IsEnabled) await Drawer.ClearAsync();
     }
-    public void Dispose() => Drawer.Changed -= OnDrawerChanged;
+    public void Dispose()
+    {
+        BlindMode.Changed -= OnBlindModeChanged;
+        Drawer.Changed -= OnDrawerChanged;
+    }
     private void OnDrawerChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnBlindModeChanged() => _ = Drawer.ClearAsync();
     private Task Close() => Drawer.CloseAsync();
     private async Task UsePreset(string question) { draft = question; await Send(); }
     private async Task OnKeyDown(KeyboardEventArgs args) { if (args.Key == "Enter" && !args.ShiftKey) { await Send(); } }
@@ -84,13 +106,13 @@
     {
         if (Drawer.Context == null || string.IsNullOrWhiteSpace(draft) || sending) return;
         var question = draft.Trim();
-        var history = Drawer.Messages.TakeLast(6).Select(message => new { role = message.Role, text = message.Text }).ToList();
+        var history = Drawer.Context.IsBlind ? new List<object>() : Drawer.Messages.TakeLast(6).Select(message => (object)new { role = message.Role, text = message.Text }).ToList();
         draft = string.Empty;
         sending = true;
         await Drawer.AddMessageAsync(new AiDrawerMessage { Role = "user", Text = question });
         try
         {
-            var response = await Http.PostAsJsonAsync("api/ai/chat", new { message = question, itemType = Drawer.Context.ItemType, spotifyItemId = Drawer.Context.SpotifyItemId, conversation = history });
+            var response = await Http.PostAsJsonAsync("api/ai/chat", new { message = question, itemType = Drawer.Context.ItemType, spotifyItemId = Drawer.Context.SpotifyItemId, isBlind = Drawer.Context.IsBlind, conversation = history });
             var payload = await response.Content.ReadFromJsonAsync<AiDrawerResponse>();
             var text = payload?.Answer ?? payload?.Notice ?? (response.IsSuccessStatusCode ? "Brak odpowiedzi." : "Nie udało się uzyskać odpowiedzi AI.");
             await Drawer.AddMessageAsync(new AiDrawerMessage { Role = "assistant", Text = text, Response = payload });

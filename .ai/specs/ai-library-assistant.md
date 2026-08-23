@@ -39,7 +39,9 @@ Aplikacja pomaga odkrywać, opisywać i organizować bibliotekę Spotify. Czat A
 - Cache źródeł, limity żądań oraz deterministyczne rankingi ograniczają koszt i poprawiają powtarzalność.
 - Cache przechowuje wyłącznie poprawne odpowiedzi źródeł. Dane stabilne MusicBrainz/Wikidata są cache’owane dłużej niż dane Last.fm; błędne odpowiedzi Last.fm nie są cache’owane ani prezentowane jako źródło.
 - Czat jest panelem kontekstowym otwieranym z przycisków `AI` przy albumach, artystach i utworach, a nie osobnym ekranem roboczym. Jego nagłówek zawsze wskazuje wybrany element.
-- Aktywny wątek pozostaje tylko w `sessionStorage` bieżącej sesji przeglądarki. Do modelu trafia bieżące pytanie, typ i nazwa aktualnie wybranego elementu oraz najwyżej sześć poprzednich wiadomości; backend zapisuje wyłącznie metryki użycia.
+- W trybie Blind na `/albums` przyciski AI są dostępne dla ukrytych albumów i artystów, lecz panel, zapisany wątek i zwykłe odpowiedzi nie pokazują ich nazw. Do modelu trafia wyłącznie anonimowy kontekst oraz zredagowane fakty; bezpośrednia prośba o nazwę świadomie ujawnia ją bez wywołania modelu.
+- Konkretne linki źródłowe pozostają w Blind widoczne jako świadoma droga do ujawnienia informacji poza aplikacją.
+- Aktywny wątek pozostaje tylko w `sessionStorage` bieżącej sesji przeglądarki. Do modelu trafia bieżące pytanie, typ i nazwa aktualnie wybranego elementu oraz najwyżej sześć poprzednich wiadomości; backend zapisuje wyłącznie metryki użycia. Wątki Blind nie są utrwalane, aby ujawniona na żądanie nazwa nie wróciła po odświeżeniu.
 - Playlisty nie są kontekstem AI. W widoku playlisty można otwierać czat dla jej utworów, albumów i artystów bez przekazywania modelowi składu playlisty.
 - Brak klucza, modelu, danych źródłowych lub awaria dostawcy zwracają czytelny stan bez wycieku sekretów.
 - Źródła pod odpowiedzią prowadzą do konkretnych stron encji (artysty, release group lub elementu Wikidata), nigdy wyłącznie do strony głównej dostawcy.

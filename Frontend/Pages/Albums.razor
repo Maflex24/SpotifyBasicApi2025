@@ -370,9 +370,9 @@
                         <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
-                        @if (!IsBlindMode && aiAvailable)
+                        @if (aiAvailable)
                         {
-                            <AiContextButton ItemType="artist" SpotifyItemId="@group.Id" DisplayName="@group.Name" />
+                            <AiContextButton ItemType="artist" SpotifyItemId="@group.Id" DisplayName="@(IsBlindMode ? string.Empty : group.Name)" IsBlind="@IsBlindMode" />
                         }
                     }
                 </header>
@@ -2244,9 +2244,9 @@
                         <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumNote(album)">
                             <AppIcon Name="edit" /><span>Notatka</span>
                         </button>
-                        @if (!IsBlindMode && aiAvailable)
+                        @if (aiAvailable)
                         {
-                            <AiContextButton ItemType="album" SpotifyItemId="@album.Id" DisplayName="@album.Name" />
+                            <AiContextButton ItemType="album" SpotifyItemId="@album.Id" DisplayName="@(IsBlindMode ? string.Empty : album.Name)" IsBlind="@IsBlindMode" />
                         }
                         <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
                     </div>

@@ -5,6 +5,7 @@ public sealed class AiChatRequest
     public string Message { get; set; } = string.Empty;
     public string? ItemType { get; set; }
     public string? SpotifyItemId { get; set; }
+    public bool IsBlind { get; set; }
     public List<AiConversationMessage> Conversation { get; set; } = new();
 }
 
