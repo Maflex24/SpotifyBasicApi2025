@@ -26,7 +26,7 @@ namespace SpotifyBasicApi2025.Controllers
 
         // Nowy endpoint do wymiany kodu odbieranego przez frontend na tokeny po stronie API
         [HttpPost("exchange-code")]
-        public async Task<ActionResult<SpotifyTokenResponse>> ExchangeCode([FromBody] string code)
+        public async Task<IActionResult> ExchangeCode([FromBody] string code)
         {
             if (string.IsNullOrWhiteSpace(code))
                 return BadRequest("Brak kodu autoryzacji");
@@ -38,11 +38,12 @@ namespace SpotifyBasicApi2025.Controllers
                 return BadRequest("Nie udało się wymienić kodu na tokeny");
             }
 
-            return Ok(token);
+            // Token pozostaje w zaszyfrowanym HttpOnly cookie sesji; nie zwracamy go do JavaScript.
+            return Ok(new { authenticated = true, expiresAt = _tokenManager.GetExpiresAt() });
         }
 
         [HttpPost("refresh")]
-        public async Task<ActionResult<SpotifyTokenResponse>> RefreshToken([FromBody] string refreshToken)
+        public async Task<IActionResult> RefreshToken([FromBody] string refreshToken)
         {
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -54,29 +55,29 @@ namespace SpotifyBasicApi2025.Controllers
             if (tokenResponse == null)
                 return BadRequest("Nie udało się odświeżyć tokenu");
 
-            return Ok(tokenResponse);
+            return Ok(new { authenticated = true, expiresAt = _tokenManager.GetExpiresAt() });
         }
 
         [HttpPost("refresh-current")]
-        public async Task<ActionResult<SpotifyTokenResponse>> RefreshCurrentToken()
+        public async Task<IActionResult> RefreshCurrentToken()
         {
             var tokenResponse = await _authService.RefreshCurrentTokenAsync();
 
             if (tokenResponse == null)
                 return BadRequest("Brak zapisanego refresh token lub nie udało się odświeżyć tokenu");
 
-            return Ok(tokenResponse);
+            return Ok(new { authenticated = true, expiresAt = _tokenManager.GetExpiresAt() });
         }
 
         [HttpGet("current-token")]
-        public ActionResult<SpotifyTokenResponse> GetCurrentToken()
+        public IActionResult GetCurrentToken()
         {
             var token = _tokenManager.GetCurrentToken();
 
             if (token == null)
                 return NotFound("Brak zapisanego tokenu");
 
-            return Ok(token);
+            return Ok(new { authenticated = true, expiresAt = _tokenManager.GetExpiresAt() });
         }
 
         [HttpDelete("clear-token")]

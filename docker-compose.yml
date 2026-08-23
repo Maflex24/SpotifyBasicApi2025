@@ -28,6 +28,8 @@ services:
       - Spotify__ClientSecret=${SPOTIFY_CLIENT_SECRET}
       - Spotify__RedirectUri=${SPOTIFY_REDIRECT_URI}
       - Spotify__ApiUrl=${SPOTIFY_API_URL}
+    volumes:
+      - data_protection_keys:/root/.aspnet/DataProtection-Keys
     entrypoint: ["/bin/sh", "-c", "sleep 25 && dotnet SpotifyBasicApi2025.dll"]
     networks:
       edge-proxy:
@@ -57,5 +59,4 @@ networks:
 
 volumes:
   db_data:
-
-
+  data_protection_keys:

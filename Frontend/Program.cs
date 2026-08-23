@@ -8,7 +8,11 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 // Użyj adresu API z konfiguracji (wwwroot/appsettings.json → "ApiBase")
 var apiBase = builder.Configuration["ApiBase"] ?? builder.HostEnvironment.BaseAddress;
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBase) });
+builder.Services.AddScoped(sp =>
+{
+    var handler = new IncludeCredentialsHandler { InnerHandler = new HttpClientHandler() };
+    return new HttpClient(handler) { BaseAddress = new Uri(apiBase) };
+});
 
 // Konfiguracja Bootstrap w dark theme
 builder.Services.AddSingleton(new FrontendTheme

@@ -1,18 +1,58 @@
-﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@inherits LayoutComponentBase
+@inject HttpClient Http
+@inject NavigationManager Navigation
 
+<div class="page">
+    <div class="sidebar"><NavMenu /></div>
     <main>
         <div class="top-row px-4">
             <span>Spotify Library</span>
+            @if (statusLoading)
+            {
+                <span class="text-secondary small ms-auto">Sprawdzanie sesji…</span>
+            }
+            else
+            {
+                <a href="/" class="small">Spotify: @(status?.Spotify.IsLoggedIn == true ? (status.Spotify.DisplayName ?? status.Spotify.Id) : "niezalogowany")</a>
+                @if (status?.AppUser.IsLoggedIn == true)
+                {
+                    <span class="small">System: @status.AppUser.Nick@(status.AppUser.IsAdmin ? " (admin)" : string.Empty)</span>
+                    @if (status.AppUser.IsAdmin)
+                    {
+                        <a href="ai-settings" class="small">AI</a>
+                        <a href="admin-users" class="small">Konta</a>
+                    }
+                    <button class="btn btn-link small" @onclick="Logout">Wyloguj system</button>
+                }
+                else if (status?.SetupRequired == true)
+                {
+                    <a href="setup" class="small">Utwórz administratora</a>
+                }
+                else
+                {
+                    <a href="app-login" class="small">Zaloguj systemowo</a>
+                }
+            }
         </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-
+        <article class="content px-4">@Body</article>
         <PlayerBar />
     </main>
 </div>
+
+@code {
+    private SystemStatus? status;
+    private bool statusLoading = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { status = await Http.GetFromJsonAsync<SystemStatus>("api/app-auth/status"); }
+        finally { statusLoading = false; }
+    }
+    private async Task Logout()
+    {
+        await Http.PostAsync("api/app-auth/logout", null);
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+    private sealed class SystemStatus { public bool SetupRequired { get; set; } public AppUserStatus AppUser { get; set; } = new(); public SpotifyStatus Spotify { get; set; } = new(); }
+    private sealed class AppUserStatus { public bool IsLoggedIn { get; set; } public string? Nick { get; set; } public bool IsAdmin { get; set; } }
+    private sealed class SpotifyStatus { public bool IsLoggedIn { get; set; } public string? DisplayName { get; set; } public string? Id { get; set; } }
+}

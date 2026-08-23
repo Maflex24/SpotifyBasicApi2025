@@ -39,6 +39,11 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<LibTrackUserAssign> LibTrackUserAssigns { get; set; }
         public DbSet<LibSavedFilter> LibSavedFilters { get; set; }
         public DbSet<LibItemNote> LibItemNotes { get; set; }
+        public DbSet<AiSettings> AiSettings { get; set; }
+        public DbSet<AiExternalCacheEntry> AiExternalCacheEntries { get; set; }
+        public DbSet<AiUsageMetric> AiUsageMetrics { get; set; }
+        public DbSet<AppUser> AppUsers { get; set; }
+        public DbSet<AppUserSession> AppUserSessions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -354,6 +359,38 @@ namespace SpotifyBasicApi2025.Entities.Context
             modelBuilder.Entity<LibItemNote>()
                 .Property(note => note.Content)
                 .HasColumnType("longtext");
+
+            modelBuilder.Entity<AiSettings>()
+                .Property(setting => setting.AllowedUserIds)
+                .HasColumnType("longtext");
+
+            modelBuilder.Entity<AiExternalCacheEntry>()
+                .Property(entry => entry.PayloadJson)
+                .HasColumnType("longtext");
+
+            modelBuilder.Entity<AiExternalCacheEntry>()
+                .HasIndex(entry => new { entry.Source, entry.CacheKey })
+                .IsUnique();
+
+            modelBuilder.Entity<AiUsageMetric>()
+                .HasIndex(metric => new { metric.UserId, metric.CreatedAtUtc });
+
+            modelBuilder.Entity<AppUser>()
+                .HasIndex(user => user.Nick)
+                .IsUnique();
+
+            modelBuilder.Entity<AppUserSession>()
+                .HasIndex(session => session.TokenHash)
+                .IsUnique();
+
+            modelBuilder.Entity<AppUserSession>()
+                .HasIndex(session => new { session.AppUserId, session.ExpiresAtUtc });
+
+            modelBuilder.Entity<AppUserSession>()
+                .HasOne(session => session.AppUser)
+                .WithMany(user => user.Sessions)
+                .HasForeignKey(session => session.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
         }

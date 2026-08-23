@@ -1817,6 +1817,69 @@ button.tag-preview-tag {
     gap: 0.35rem;
 }
 
+/* Formularze kont systemowych i konfiguracji AI w tej samej ciemnej palecie co aplikacja. */
+.app-form-surface {
+    --bs-card-bg: #0f1117;
+    --bs-card-color: #e5e7eb;
+    --bs-card-border-color: #263244;
+    background-color: #0f1117;
+    color: #e5e7eb;
+    border-color: #263244;
+}
+
+.app-form-surface .form-control,
+.app-form-surface .form-select {
+    background-color: #1e293b;
+    color: #e5e7eb;
+    border-color: #3a4a60;
+}
+
+.app-form-surface .form-control::placeholder {
+    color: #9ca3af;
+    opacity: 1;
+}
+
+.app-form-surface .form-control:focus,
+.app-form-surface .form-select:focus {
+    background-color: #243248;
+    color: #fff;
+    border-color: #258cfb;
+    box-shadow: 0 0 0 0.2rem rgba(37, 140, 251, 0.2);
+}
+
+.app-form-surface .form-select {
+    --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e5e7eb' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1 6 7 7 7-7'/%3e%3c/svg%3e");
+}
+
+.app-form-surface .form-check-input {
+    background-color: #1e293b;
+    border-color: #64748b;
+}
+
+.app-form-surface .form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.app-form-surface .form-check-input:focus {
+    box-shadow: 0 0 0 0.2rem rgba(37, 140, 251, 0.2);
+}
+
+.app-form-surface .text-secondary {
+    color: #aab5c4 !important;
+}
+
+.app-form-surface .btn-outline-secondary {
+    color: #cbd5e1;
+    border-color: #64748b;
+}
+
+.app-form-surface .btn-outline-secondary:hover {
+    color: #0f1117;
+    background-color: #cbd5e1;
+    border-color: #cbd5e1;
+}
+
 .tag-filter-chip {
     display: inline-flex;
     align-items: stretch;
