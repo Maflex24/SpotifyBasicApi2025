@@ -1,0 +1,43 @@
+@inject AiChatDrawerService Drawer
+
+@if (Items.Count > 0)
+{
+    <div class="ai-context-menu @Class">
+        <button type="button" class="btn btn-sm album-card-tag ai-context-menu-toggle @ButtonClass" title="@AriaLabel" aria-label="@AriaLabel" aria-haspopup="true" aria-expanded="@isOpen" @onclick="Toggle">
+            <AppIcon Name="more" />
+        </button>
+        @if (isOpen)
+        {
+            <div class="ai-context-menu-popup @(OpenUpwards ? "ai-context-menu-popup-up" : string.Empty)" role="group" aria-label="@AriaLabel">
+                @foreach (var item in Items)
+                {
+                    <button type="button" class="ai-context-menu-item" @onclick="() => OpenAsync(item)">@item.Label</button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<AiContextMenuItem> Items { get; set; } = Array.Empty<AiContextMenuItem>();
+    [Parameter] public string AriaLabel { get; set; } = "Więcej opcji AI";
+    [Parameter] public string Class { get; set; } = string.Empty;
+    [Parameter] public string ButtonClass { get; set; } = string.Empty;
+    [Parameter] public bool OpenUpwards { get; set; }
+
+    private bool isOpen;
+
+    protected override void OnParametersSet()
+    {
+        if (Items.Count == 0)
+            isOpen = false;
+    }
+
+    private void Toggle() => isOpen = !isOpen;
+
+    private async Task OpenAsync(AiContextMenuItem item)
+    {
+        isOpen = false;
+        await Drawer.OpenAsync(item.Context);
+    }
+}

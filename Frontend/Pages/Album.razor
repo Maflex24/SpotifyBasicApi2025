@@ -16,12 +16,12 @@
         <div class="d-flex align-items-start gap-3 mb-3">
             <img src="@GetBestImageUrl(album.images)" alt="okładka" style="width:160px;height:160px;object-fit:cover;border-radius:8px;" />
             <div class="flex-fill">
-                <div class="d-flex align-items-center gap-2"><h3 class="mb-1">@album.name</h3>@if (aiAvailable) { <AiContextButton ItemType="album" SpotifyItemId="@album.id" DisplayName="@album.name" /> }</div>
+                <div class="d-flex align-items-center gap-2"><h3 class="mb-1">@album.name</h3>@if (aiAvailable) { <AiContextMenu Items="GetAlbumAiMenuItems(album)" AriaLabel="Więcej opcji dla albumu" /> }</div>
                 <div class="text-secondary">@album.release_date</div>
                 <div class="d-flex flex-wrap gap-1 mt-1">
                     @foreach (var art in (album.artists ?? Array.Empty<AArtist>()))
                     {
-                        <span class="d-inline-flex align-items-center gap-1"><a href="/artist/@art.id" class="badge bg-outline-light text-light text-decoration-none" style="font-size:0.75rem;">@art.name</a>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@art.id" DisplayName="@art.name" /> }</span>
+                        <a href="/artist/@art.id" class="badge bg-outline-light text-light text-decoration-none" style="font-size:0.75rem;">@art.name</a>
                     }
                 </div>
                 <div class="mt-2 d-flex gap-2">
@@ -50,7 +50,7 @@
                                     <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.uri)">▶</button>
                                 </div>
                             </td>
-                            <td><span class="d-inline-flex align-items-center gap-2">@t.name @if (aiAvailable) { <AiContextButton ItemType="track" SpotifyItemId="@t.id" DisplayName="@t.name" /> }</span></td>
+                            <td><span class="d-inline-flex align-items-center gap-2">@t.name @if (aiAvailable) { <AiContextMenu Items="GetTrackAiMenuItems(t.id, t.name)" AriaLabel="Więcej opcji dla utworu" /> }</span></td>
                             <td>@t.track_number</td>
                             <td class="d-flex gap-2">
                                 <button class="btn btn-sm btn-outline-light" @onclick="() => AddTrack(t.id)">+ Utwór</button>
@@ -85,6 +85,43 @@
         if (aiAvailable == available) return;
         aiAvailable = available;
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private static IReadOnlyList<AiContextMenuItem> GetTrackAiMenuItems(string trackId, string trackName) =>
+        string.IsNullOrWhiteSpace(trackId)
+            ? Array.Empty<AiContextMenuItem>()
+            : new[]
+            {
+                new AiContextMenuItem("Zapytaj AI o utwór", new AiChatContext
+                {
+                    ItemType = "track",
+                    SpotifyItemId = trackId,
+                    DisplayName = trackName
+                })
+            };
+
+    private static IReadOnlyList<AiContextMenuItem> GetAlbumAiMenuItems(AlbumDto album)
+    {
+        var items = new List<AiContextMenuItem>
+        {
+            new("Zapytaj AI o album", new AiChatContext
+            {
+                ItemType = "album",
+                SpotifyItemId = album.id,
+                DisplayName = album.name
+            })
+        };
+
+        items.AddRange((album.artists ?? Array.Empty<AArtist>())
+            .Where(artist => !string.IsNullOrWhiteSpace(artist.id))
+            .Select(artist => new AiContextMenuItem($"Zapytaj AI o: {artist.name}", new AiChatContext
+            {
+                ItemType = "artist",
+                SpotifyItemId = artist.id,
+                DisplayName = artist.name
+            })));
+
+        return items;
     }
 
     private async Task LoadAlbum()

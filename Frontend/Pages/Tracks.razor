@@ -208,17 +208,17 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrackAndFollowing(t.Id)">▶</button>
                             </div>
                         </td>
-                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name @if (aiAvailable) { <AiContextButton ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" /> }</span></td>
+                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name @if (aiAvailable) { <AiContextMenu Items="GetTrackAiMenuItems(t)" AriaLabel="Więcej opcji dla utworu" /> }</span></td>
                         <td class="trackTd">
                             @foreach (var a in t.Artists)
                             {
-                                <span class="d-inline-flex align-items-center gap-1 me-1"><a class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /> }</span>
+                                <a class="badge bg-outline-light text-light text-decoration-none me-1" style="font-size: 0.7rem;" href="/artist/@a.Id">@a.Name</a>
                             }
                         </td>
                         <td class="trackTd">
                             @if (!string.IsNullOrWhiteSpace(t.AlbumId))
                             {
-                                <span class="d-inline-flex align-items-center gap-2"><a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>@if (aiAvailable) { <AiContextButton ItemType="album" SpotifyItemId="@t.AlbumId" DisplayName="@t.AlbumName" /> }</span>
+                                <a href="/album/@t.AlbumId" class="link-light text-decoration-none">@t.AlbumName</a>
                             }
                             else
                             {
@@ -1129,6 +1129,41 @@
         if (aiAvailable == available) return;
         aiAvailable = available;
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private static IReadOnlyList<AiContextMenuItem> GetTrackAiMenuItems(Track track)
+    {
+        var items = new List<AiContextMenuItem>();
+        if (!string.IsNullOrWhiteSpace(track.Id))
+        {
+            items.Add(new AiContextMenuItem("Zapytaj AI o utwór", new AiChatContext
+            {
+                ItemType = "track",
+                SpotifyItemId = track.Id,
+                DisplayName = track.Name
+            }));
+        }
+
+        items.AddRange((track.Artists ?? new List<SimpleArtist>())
+            .Where(artist => !string.IsNullOrWhiteSpace(artist.Id))
+            .Select(artist => new AiContextMenuItem($"Zapytaj AI o: {artist.Name}", new AiChatContext
+            {
+                ItemType = "artist",
+                SpotifyItemId = artist.Id,
+                DisplayName = artist.Name
+            })));
+
+        if (!string.IsNullOrWhiteSpace(track.AlbumId))
+        {
+            items.Add(new AiContextMenuItem("Zapytaj AI o album", new AiChatContext
+            {
+                ItemType = "album",
+                SpotifyItemId = track.AlbumId,
+                DisplayName = track.AlbumName ?? string.Empty
+            }));
+        }
+
+        return items;
     }
 
     [JSInvokable]

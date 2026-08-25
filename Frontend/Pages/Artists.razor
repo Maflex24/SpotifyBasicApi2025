@@ -231,7 +231,6 @@
                         <div class="mt-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <button class="btn btn-sm btn-outline-light" disabled="@(!a.IsInLibrary)" @onclick="() => OpenArtistTagging(a.Id)">Taguj</button>
-                                @if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@a.Id" DisplayName="@a.Name" /> }
                                 @if (a.IsInLibrary)
                                 {
                                     <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę artysty: @a.Name" @onclick="() => OpenArtistNote(a)"><AppIcon Name="edit" /><span>Notatka</span></button>
@@ -239,6 +238,10 @@
                                 @if (!a.IsInLibrary)
                                 {
                                     <button class="btn btn-sm album-card-tag" @onclick="() => AddArtistToLibraryAsync(a.Id)"><AppIcon Name="save" /><span>Dodaj do biblioteki</span></button>
+                                }
+                                @if (aiAvailable)
+                                {
+                                    <AiContextMenu Items="GetArtistAiMenuItems(a.Id, a.Name)" AriaLabel="Więcej opcji dla wykonawcy" OpenUpwards="true" />
                                 }
                             </div>
                         </div>
@@ -372,6 +375,19 @@
         aiAvailable = available;
         _ = InvokeAsync(StateHasChanged);
     }
+
+    private static IReadOnlyList<AiContextMenuItem> GetArtistAiMenuItems(string artistId, string artistName) =>
+        string.IsNullOrWhiteSpace(artistId)
+            ? Array.Empty<AiContextMenuItem>()
+            : new[]
+            {
+                new AiContextMenuItem("Zapytaj AI o wykonawcę", new AiChatContext
+                {
+                    ItemType = "artist",
+                    SpotifyItemId = artistId,
+                    DisplayName = artistName
+                })
+            };
 
     private async Task LoadSavedFilters()
     {

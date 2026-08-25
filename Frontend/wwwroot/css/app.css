@@ -1322,21 +1322,21 @@ button.tag-preview-tag {
     border-color: rgba(255,255,255,0.65);
 }
 
-.album-card-more-actions {
+.ai-context-menu {
     position: relative;
     display: inline-flex;
 }
 
-.album-card-more-toggle {
+.ai-context-menu-toggle {
     min-width: 2.25rem;
     padding-inline: 0.45rem;
 }
 
-.album-card-more-menu {
+.ai-context-menu-popup {
     position: absolute;
     z-index: 30;
     right: 0;
-    bottom: calc(100% + 0.4rem);
+    top: calc(100% + 0.4rem);
     display: grid;
     min-width: max-content;
     max-width: min(19rem, 78vw);
@@ -1347,7 +1347,12 @@ button.tag-preview-tag {
     box-shadow: 0 0.7rem 1.5rem rgba(0,0,0,0.35);
 }
 
-.album-card-more-menu-item {
+.ai-context-menu-popup-up {
+    top: auto;
+    bottom: calc(100% + 0.4rem);
+}
+
+.ai-context-menu-item {
     padding: 0.4rem 0.55rem;
     color: #e5e7eb;
     text-align: left;
@@ -1356,8 +1361,8 @@ button.tag-preview-tag {
     border-radius: 0.3rem;
 }
 
-.album-card-more-menu-item:hover,
-.album-card-more-menu-item:focus-visible {
+.ai-context-menu-item:hover,
+.ai-context-menu-item:focus-visible {
     color: #fff;
     background: rgba(255,255,255,0.12);
     outline: none;
