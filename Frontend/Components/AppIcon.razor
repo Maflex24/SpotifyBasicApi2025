@@ -46,6 +46,10 @@ else if (Name == "delete")
 {
     <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
 }
+else if (Name == "more")
+{
+    <svg class="app-icon @Class" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="app-icon-fill" cx="5" cy="12" r="1.6" /><circle class="app-icon-fill" cx="12" cy="12" r="1.6" /><circle class="app-icon-fill" cx="19" cy="12" r="1.6" /></svg>
+}
 
 @code {
     [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;

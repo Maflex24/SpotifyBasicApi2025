@@ -454,6 +454,7 @@
     private readonly HashSet<string> queuingAlbumIds = new();
     private bool isQueueingAllAlbums;
     private bool aiAvailable;
+    private string? openAlbumMoreMenuId;
     private AlbumFilterSnapshot? appliedFilters;
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
     private List<TagDto> allTags = new();
@@ -712,7 +713,40 @@
         var available = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
         if (aiAvailable == available) return;
         aiAvailable = available;
+        if (!aiAvailable)
+            openAlbumMoreMenuId = null;
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleAlbumMoreMenu(string albumId) => openAlbumMoreMenuId = string.Equals(openAlbumMoreMenuId, albumId, StringComparison.Ordinal)
+        ? null
+        : albumId;
+
+    private async Task OpenAlbumAiAsync(Album album)
+    {
+        openAlbumMoreMenuId = null;
+        await AiDrawer.OpenAsync(new AiChatContext
+        {
+            ItemType = "album",
+            SpotifyItemId = album.Id,
+            DisplayName = IsBlindMode ? string.Empty : album.Name,
+            IsBlind = IsBlindMode
+        });
+    }
+
+    private async Task OpenArtistAiAsync(SimpleArtist artist)
+    {
+        if (string.IsNullOrWhiteSpace(artist.Id))
+            return;
+
+        openAlbumMoreMenuId = null;
+        await AiDrawer.OpenAsync(new AiChatContext
+        {
+            ItemType = "artist",
+            SpotifyItemId = artist.Id,
+            DisplayName = artist.Name,
+            IsBlind = false
+        });
     }
 
     private async Task LoadSavedFilters()
@@ -2258,7 +2292,7 @@
                                 }
                                 else
                                 {
-                                    <span class="d-inline-flex align-items-center gap-1"><a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>@if (aiAvailable) { <AiContextButton ItemType="artist" SpotifyItemId="@artist.Id" DisplayName="@artist.Name" /> }</span>
+                                    <a href="/artist/@artist.Id" class="badge bg-outline-light text-light text-decoration-none" style="font-size: 0.8rem;">@artist.Name</a>
                                 }
                             }
                         </div>
@@ -2290,7 +2324,24 @@
                         </button>
                         @if (aiAvailable)
                         {
-                            <AiContextButton ItemType="album" SpotifyItemId="@album.Id" DisplayName="@(IsBlindMode ? string.Empty : album.Name)" IsBlind="@IsBlindMode" />
+                            <div class="album-card-more-actions">
+                                <button type="button" class="btn btn-sm album-card-tag album-card-more-toggle" title="Więcej opcji" aria-label="Więcej opcji dla albumu: @(IsBlindMode ? album.Id : album.Name)" aria-haspopup="true" aria-expanded="@(openAlbumMoreMenuId == album.Id)" @onclick="() => ToggleAlbumMoreMenu(album.Id)">
+                                    <AppIcon Name="more" />
+                                </button>
+                                @if (openAlbumMoreMenuId == album.Id)
+                                {
+                                    <div class="album-card-more-menu" role="group" aria-label="Opcje AI dla albumu">
+                                        <button type="button" class="album-card-more-menu-item" @onclick="() => OpenAlbumAiAsync(album)">Zapytaj AI o album</button>
+                                        @if (!IsBlindMode)
+                                        {
+                                            @foreach (var artist in (album.Artists ?? new List<SimpleArtist>()).Where(artist => !string.IsNullOrWhiteSpace(artist.Id)))
+                                            {
+                                                <button type="button" class="album-card-more-menu-item" @onclick="() => OpenArtistAiAsync(artist)">Zapytaj AI o: @artist.Name</button>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
                         }
                         <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
                     </div>
