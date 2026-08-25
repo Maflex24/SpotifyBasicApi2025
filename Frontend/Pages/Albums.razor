@@ -968,6 +968,7 @@
         includeGenres = state.includeGenres != null ? new HashSet<string>(state.includeGenres, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         excludeGenres = state.excludeGenres != null ? new HashSet<string>(state.excludeGenres, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         includeArtistTags = state.includeArtistTags ?? false;
+        RefreshAvailableTags();
         showTagFilters = state.showTagFilters ?? showTagFilters;
         showArtistFilters = state.showArtistFilters ?? showArtistFilters;
         showGenreFilters = state.showGenreFilters ?? showGenreFilters;
