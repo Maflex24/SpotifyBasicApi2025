@@ -409,7 +409,7 @@
 
     private string GetBlindAlbumLabel() => state?.item?.album?.id ?? "Brak identyfikatora albumu";
 
-    private string? GetBlindTrackPosition()
+    private string? GetTrackPosition()
     {
         var trackNumber = state?.item?.track_number ?? 0;
         var totalTracks = state?.item?.album?.total_tracks ?? 0;
@@ -472,12 +472,12 @@
             <div class="text-truncate" style="min-width:0;">
                 @if (IsBlindMode)
                 {
-                    <div class="small text-light text-truncate">@(GetBlindTrackPosition() ?? "Utwór") · @GetBlindTrackLabel()</div>
+                    <div class="small text-light text-truncate">@(GetTrackPosition() ?? "Utwór") · @GetBlindTrackLabel()</div>
                     <div class="small text-secondary text-truncate">Album: @GetBlindAlbumLabel()</div>
                 }
                 else
                 {
-                    <div class="small text-light text-truncate">@state?.item?.name</div>
+                    <div class="small text-light text-truncate">@state?.item?.name@if (GetTrackPosition() is { } trackPosition) { <span> · @trackPosition</span> }</div>
                     <div class="small text-secondary text-truncate">@GetArtists()</div>
                 }
                 @if (isCurrentInLibrary && currentTrackAssigns.Count > 0)
