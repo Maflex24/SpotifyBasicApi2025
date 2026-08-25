@@ -298,6 +298,11 @@ button.tag-preview-tag {
     box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.2), 0 10px 24px rgba(234, 179, 8, 0.16);
 }
 
+.has-direct-album-tag-match:not(.is-playing-blind-album):not(.is-locally-random-album) .card {
+    border: 2px solid #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14), 0 10px 24px rgba(59, 130, 246, 0.1);
+}
+
 .is-playing-blind-album.is-locally-random-album .card {
     border-color: #22c55e;
     outline: 3px solid #eab308;

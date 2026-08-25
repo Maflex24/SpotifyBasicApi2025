@@ -1500,6 +1500,46 @@
         return true;
     }
 
+    private bool HasDirectAlbumTagMatch(Album album)
+    {
+        var filters = appliedFilters;
+        if (IsBlindMode || filters is null || !filters.IncludeArtistTags || !HasPositiveTagCriteria(filters))
+            return false;
+
+        var albumTags = album.Tags.Select(tag => (tag.TagId, tag.Strength));
+        return MatchesPositiveTagCriteria(albumTags, filters);
+    }
+
+    private static bool HasPositiveTagCriteria(AlbumFilterSnapshot filters) =>
+        long.TryParse(filters.SelectedTagFilter, out _) || filters.IncludeTagIds.Length > 0;
+
+    private static bool MatchesPositiveTagCriteria(IEnumerable<(long TagId, float Strength)> tags, AlbumFilterSnapshot filters)
+    {
+        var tagList = tags.ToList();
+
+        if (long.TryParse(filters.SelectedTagFilter, out var selectedTagId)
+            && !tagList.Any(tag => tag.TagId == selectedTagId))
+            return false;
+
+        if (filters.IncludeTagIds.Length == 0)
+            return true;
+
+        var strengthRules = filters.IncludeTagStrengths.ToDictionary(rule => rule.TagId);
+        bool MatchesTag(long tagId) => tagList.Any(tag => tag.TagId == tagId
+            && MatchesTagStrength(tag.Strength, strengthRules.GetValueOrDefault(tagId)));
+
+        return string.Equals(filters.IncludeMode, "and", StringComparison.OrdinalIgnoreCase)
+            ? filters.IncludeTagIds.All(MatchesTag)
+            : filters.IncludeTagIds.Any(MatchesTag);
+    }
+
+    private static bool MatchesTagStrength(float strength, TagStrengthFilterRule? rule) => rule?.Operator.ToLowerInvariant() switch
+    {
+        "gte" => strength >= rule.Value,
+        "lte" => strength <= rule.Value,
+        _ => true
+    };
+
     private void SortAlbumsByTagStrength(AlbumFilterSnapshot filters)
     {
         if (!string.Equals(filters.SortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(filters.SelectedTagSort, out var tagId))
@@ -2107,7 +2147,7 @@
         revealedBlindFields.Add(new BlindRevealKey(album.Id, field, artistId));
     }
 
-    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty) @(IsLocallyRandomAlbum(album.Id) ? "is-locally-random-album" : string.Empty)" data-album-card-id="@album.Id">
+    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty) @(IsLocallyRandomAlbum(album.Id) ? "is-locally-random-album" : string.Empty) @(HasDirectAlbumTagMatch(album) ? "has-direct-album-tag-match" : string.Empty)" data-album-card-id="@album.Id">
         <div class="card bg-dark text-light h-100">
             @if (IsBlindMode)
             {
