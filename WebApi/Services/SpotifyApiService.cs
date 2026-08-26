@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace SpotifyBasicApi2025.Services
 {
@@ -14,11 +15,38 @@ namespace SpotifyBasicApi2025.Services
     {
         private readonly SpotifyRequestService requestService;
         private readonly DatabaseContext context;
+        private readonly IMemoryCache memoryCache;
 
-        public SpotifyApiService(SpotifyRequestService requestService, DatabaseContext context)
+        public SpotifyApiService(SpotifyRequestService requestService, DatabaseContext context, IMemoryCache memoryCache)
         {
             this.requestService = requestService;
             this.context = context;
+            this.memoryCache = memoryCache;
+        }
+
+        private Task<T> GetCachedLibraryAsync<T>(string spotifyUserId, string kind, Func<Task<T>> factory) =>
+            memoryCache.GetOrCreateAsync($"spotify-library:{spotifyUserId}:{kind}", async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                return await factory();
+            })!;
+
+        public Task<List<SpotifyArtistObject>> GetLiveFollowedArtistsAsync(string spotifyUserId) =>
+            GetCachedLibraryAsync(spotifyUserId, "artists", GetAllFollowedArtists);
+
+        public Task<List<SpotifySavedAlbumItem>> GetLiveSavedAlbumsAsync(string spotifyUserId) =>
+            GetCachedLibraryAsync(spotifyUserId, "albums", GetAllUserSavedAlbums);
+
+        public Task<List<SpotifySavedTrackItem>> GetLiveSavedTracksAsync(string spotifyUserId) =>
+            GetCachedLibraryAsync(spotifyUserId, "tracks", GetAllUserSavedTracks);
+
+        public Task<List<SpotifyPlaylistObject>> GetLivePlaylistsAsync(string spotifyUserId) =>
+            GetCachedLibraryAsync(spotifyUserId, "playlists", GetAllUserPlaylists);
+
+        public void InvalidateLiveLibrary(string spotifyUserId)
+        {
+            foreach (var kind in new[] { "artists", "albums", "tracks", "playlists" })
+                memoryCache.Remove($"spotify-library:{spotifyUserId}:{kind}");
         }
 
         #region Artists

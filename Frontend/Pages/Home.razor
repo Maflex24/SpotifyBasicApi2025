@@ -4,9 +4,10 @@
 
 <div class="container py-3">
     <h3>Spotify Library</h3>
-    <p class="text-secondary">Zaloguj się do Spotify, aby zsynchronizować bibliotekę i zarządzać tagami.</p>
+    <p class="text-secondary">Zaloguj się do Spotify, aby przeglądać bibliotekę. Po zalogowaniu połącz konto Spotify z kontem aplikacji, aby zabezpieczyć tagi i archiwum.</p>
 
     <button class="btn btn-primary" @onclick="Login">Zaloguj przez Spotify</button>
+    <button class="btn btn-outline-light ms-2" @onclick="LinkSpotify">Połącz z kontem aplikacji</button>
 
     @if (!string.IsNullOrEmpty(Message))
     {
@@ -44,6 +45,14 @@
         {
             Message = ex.Message;
         }
+    }
+
+    private async Task LinkSpotify()
+    {
+        var response = await Http.PostAsync("api/app-auth/spotify-link", null);
+        Message = response.IsSuccessStatusCode
+            ? "Konto Spotify zostało połączone."
+            : await response.Content.ReadAsStringAsync();
     }
 
     [Microsoft.AspNetCore.Components.Inject]

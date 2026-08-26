@@ -16,6 +16,8 @@ namespace SpotifyBasicApi2025.Services
         private readonly UserService userService;
         private readonly SpotifyRequestService spotifyRequestService;
         private readonly SpotifyApiService spotifyApiService;
+        private readonly LibraryOwnerService ownerService;
+        private readonly ItemSnapshotService snapshotService;
 
         public DbSet<LibSavedFilter> SavedFilters => context.Set<LibSavedFilter>();
 
@@ -137,12 +139,14 @@ namespace SpotifyBasicApi2025.Services
             await context.SaveChangesAsync();
         }
 
-        public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService, SpotifyApiService spotifyApiService)
+        public LibraryService(DatabaseContext context, UserService userService, SpotifyRequestService spotifyRequestService, SpotifyApiService spotifyApiService, LibraryOwnerService ownerService, ItemSnapshotService snapshotService)
         {
             this.context = context;
             this.userService = userService;
             this.spotifyRequestService = spotifyRequestService;
             this.spotifyApiService = spotifyApiService;
+            this.ownerService = ownerService;
+            this.snapshotService = snapshotService;
         }
 
         private static string NormalizeNoteItemType(string? itemType)
@@ -162,9 +166,7 @@ namespace SpotifyBasicApi2025.Services
 
         public async Task<ItemNoteModel?> GetItemNoteAsync(string itemType, string spotifyItemId)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-            if (string.IsNullOrEmpty(userId))
-                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+            var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
 
             var normalizedType = NormalizeNoteItemType(itemType);
             if (string.IsNullOrWhiteSpace(spotifyItemId))
@@ -183,18 +185,13 @@ namespace SpotifyBasicApi2025.Services
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<ItemNoteModel?> SetItemNoteAsync(string itemType, string spotifyItemId, string? content)
+        public async Task<ItemNoteModel?> SetItemNoteAsync(string itemType, string spotifyItemId, string? content, LibItemSnapshotInput? snapshot)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-            if (string.IsNullOrEmpty(userId))
-                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+            var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
 
             var normalizedType = NormalizeNoteItemType(itemType);
             if (string.IsNullOrWhiteSpace(spotifyItemId))
                 throw new ArgumentException("Identyfikator elementu jest wymagany.");
-
-            if (!await IsItemInUserLibraryAsync(userId, normalizedType, spotifyItemId))
-                throw new InvalidOperationException("Element nie znajduje się w bibliotece użytkownika.");
 
             var normalizedContent = content?.Trim() ?? string.Empty;
             var existing = await context.LibItemNotes
@@ -206,6 +203,8 @@ namespace SpotifyBasicApi2025.Services
                 {
                     context.LibItemNotes.Remove(existing);
                     await context.SaveChangesAsync();
+                    await snapshotService.DeleteIfOrphanedAsync(userId, normalizedType, spotifyItemId);
+                    await context.SaveChangesAsync();
                 }
 
                 return null;
@@ -213,6 +212,9 @@ namespace SpotifyBasicApi2025.Services
 
             if (existing == null)
             {
+                snapshot ??= await ResolveNoteSnapshotAsync(normalizedType, spotifyItemId);
+                if (snapshot is null)
+                    throw new ArgumentException("Nie udało się pobrać opisu archiwalnego elementu ze Spotify.");
                 existing = new LibItemNote
                 {
                     UserId = userId,
@@ -230,6 +232,8 @@ namespace SpotifyBasicApi2025.Services
                 existing.UpdatedAtUtc = DateTime.UtcNow;
             }
 
+            if (snapshot is not null)
+                await snapshotService.UpsertAsync(userId, normalizedType, spotifyItemId, snapshot);
             await context.SaveChangesAsync();
             return new ItemNoteModel
             {
@@ -238,6 +242,18 @@ namespace SpotifyBasicApi2025.Services
                 Content = existing.Content,
                 UpdatedAtUtc = existing.UpdatedAtUtc
             };
+        }
+
+        private async Task<LibItemSnapshotInput?> ResolveNoteSnapshotAsync(string itemType, string spotifyItemId)
+        {
+            if (itemType == "artist")
+            {
+                var artist = await spotifyApiService.GetArtist(spotifyItemId);
+                return artist == null ? null : new LibItemSnapshotInput { Title = artist.Name, Artists = new List<string> { artist.Name }, SpotifyUri = artist.Uri };
+            }
+
+            var album = await spotifyApiService.GetAlbumAsync(spotifyItemId);
+            return album == null ? null : new LibItemSnapshotInput { Title = album.Name, Artists = album.Artists.Select(x => x.Name).ToList(), SpotifyUri = album.Uri };
         }
 
         public async Task<object> GetUserArtistsAsync(
@@ -994,6 +1010,14 @@ namespace SpotifyBasicApi2025.Services
                 throw;
             }
         }
+
+        // Spotify library mutations no longer populate the catalog mirror.
+        public Task<bool> FollowArtistLiveAsync(string artistId) => spotifyRequestService.SendAsync(HttpMethod.Put, $"me/following?type=artist&ids={Uri.EscapeDataString(artistId)}");
+        public Task<bool> UnfollowArtistLiveAsync(string artistId) => spotifyRequestService.SendAsync(HttpMethod.Delete, $"me/following?type=artist&ids={Uri.EscapeDataString(artistId)}");
+        public Task<bool> SaveAlbumLiveAsync(string albumId) => spotifyRequestService.SendAsync(HttpMethod.Put, $"me/albums?ids={Uri.EscapeDataString(albumId)}");
+        public Task<bool> RemoveSavedAlbumLiveAsync(string albumId) => spotifyRequestService.SendAsync(HttpMethod.Delete, $"me/albums?ids={Uri.EscapeDataString(albumId)}");
+        public Task<bool> SaveTrackLiveAsync(string trackId) => spotifyRequestService.SendAsync(HttpMethod.Put, $"me/tracks?ids={Uri.EscapeDataString(trackId)}");
+        public Task<bool> RemoveSavedTrackLiveAsync(string trackId) => spotifyRequestService.SendAsync(HttpMethod.Delete, $"me/tracks?ids={Uri.EscapeDataString(trackId)}");
 
         public async Task<bool> RemoveAlbumSynchronouslyAsync(string albumId)
         {

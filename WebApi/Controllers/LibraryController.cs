@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SpotifyBasicApi2025.Services;
 using SpotifyBasicApi2025.Entities;
+using SpotifyBasicApi2025.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace SpotifyBasicApi2025.Controllers
@@ -11,12 +12,22 @@ namespace SpotifyBasicApi2025.Controllers
     {
         private readonly LibraryService libraryService;
         private readonly SpotifyApiService spotifyApiService;
+        private readonly LiveLibraryService liveLibraryService;
+        private readonly LibraryOwnerService ownerService;
         
 
-        public LibraryController(LibraryService libraryService, SpotifyApiService spotifyApiService)
+        public LibraryController(LibraryService libraryService, SpotifyApiService spotifyApiService, LiveLibraryService liveLibraryService, LibraryOwnerService ownerService)
         {
             this.libraryService = libraryService;
             this.spotifyApiService = spotifyApiService;
+            this.liveLibraryService = liveLibraryService;
+            this.ownerService = ownerService;
+        }
+
+        private async Task InvalidateLiveLibraryAsync()
+        {
+            try { spotifyApiService.InvalidateLiveLibrary(await ownerService.RequireOwnerSpotifyUserIdAsync()); }
+            catch { }
         }
         [HttpGet("filters")] // GET api/library/filters?scope=tracks&contextId=...
         public async Task<IActionResult> GetSavedFilters([FromQuery] string scope, [FromQuery] string? contextId = null)
@@ -37,6 +48,7 @@ namespace SpotifyBasicApi2025.Controllers
             public string ItemType { get; set; } = string.Empty;
             public string SpotifyItemId { get; set; } = string.Empty;
             public string? Content { get; set; }
+            public LibItemSnapshotInput? Snapshot { get; set; }
         }
 
         [HttpGet("notes/{itemType}/{spotifyItemId}")]
@@ -57,7 +69,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var note = await libraryService.SetItemNoteAsync(request.ItemType, request.SpotifyItemId, request.Content);
+                var note = await libraryService.SetItemNoteAsync(request.ItemType, request.SpotifyItemId, request.Content, request.Snapshot);
                 return Ok(note);
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -112,7 +124,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserPlaylistsAsync(sort, order, search, folderId, page, pageSize);
+                var result = await liveLibraryService.GetPlaylistsAsync(sort, order, search, folderId, page, pageSize);
 
                 return Ok(result);
             }
@@ -227,7 +239,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, search, includeExternal);
+                var result = await liveLibraryService.GetArtistsAsync(sort, order, includeTags ?? tags, includeMode, excludeTags, excludeMode, genre, search, sortTagId);
 
                 return Ok(result);
             }
@@ -250,7 +262,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.RemoveArtistSynchronouslyAsync(id);
+                var result = await libraryService.UnfollowArtistLiveAsync(id);
+                if (result) await InvalidateLiveLibraryAsync();
                 return Ok(new { removed = result });
             }
             catch (InvalidOperationException ex)
@@ -268,7 +281,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.AddArtistToLibraryAsync(id);
+                var result = await libraryService.FollowArtistLiveAsync(id);
+                if (result) await InvalidateLiveLibraryAsync();
                 return Ok(new { added = result });
             }
             catch (InvalidOperationException ex)
@@ -307,7 +321,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.RemoveAlbumSynchronouslyAsync(id);
+                var result = await libraryService.RemoveSavedAlbumLiveAsync(id);
+                if (result) await InvalidateLiveLibraryAsync();
                 return Ok(new { removed = result });
             }
             catch (InvalidOperationException ex)
@@ -325,7 +340,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.AddAlbumSynchronouslyAsync(id);
+                var result = await libraryService.SaveAlbumLiveAsync(id);
+                if (result) await InvalidateLiveLibraryAsync();
                 return Ok(new { added = result });
             }
             catch (InvalidOperationException ex)
@@ -375,7 +391,8 @@ namespace SpotifyBasicApi2025.Controllers
             {
                 try
                 {
-                    var added = await libraryService.AddAlbumSynchronouslyAsync(albumId);
+                    var added = await libraryService.SaveAlbumLiveAsync(albumId);
+                    if (added) await InvalidateLiveLibraryAsync();
                     result.Add(new { albumId, added, success = added });
                 }
                 catch (Exception ex)
@@ -391,7 +408,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.RemoveTrackFromLibraryAsync(id);
+                var result = await libraryService.RemoveSavedTrackLiveAsync(id);
+                if (result) await InvalidateLiveLibraryAsync();
                 return Ok(new { removed = result });
             }
             catch (InvalidOperationException ex)
@@ -409,7 +427,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.AddTrackToLibraryAsync(id);
+                var result = await libraryService.SaveTrackLiveAsync(id);
+                if (result) await InvalidateLiveLibraryAsync();
                 return Ok(new { added = result });
             }
             catch (InvalidOperationException ex)
@@ -518,10 +537,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserTracksAsync(
-                    sort, order, tags, sortTagId, artistId, albumId, year,
-                    includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths,
-                    page, pageSize, search);
+                var result = await liveLibraryService.GetTracksAsync(sort, order, includeTags ?? tags, includeMode, excludeTags, excludeMode, search, page, pageSize);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -607,7 +623,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, includeGenres, excludeGenres, includeArtistTags, search, random, page, pageSize);
+                var result = await liveLibraryService.GetAlbumsAsync(sort, order, includeTags ?? tags, includeMode, excludeTags, excludeMode, search, includeArtistTags, page, pageSize);
 
                 return Ok(result);
             }

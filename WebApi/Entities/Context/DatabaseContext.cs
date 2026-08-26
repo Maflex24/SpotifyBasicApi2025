@@ -44,6 +44,8 @@ namespace SpotifyBasicApi2025.Entities.Context
         public DbSet<AiUsageMetric> AiUsageMetrics { get; set; }
         public DbSet<AppUser> AppUsers { get; set; }
         public DbSet<AppUserSession> AppUserSessions { get; set; }
+        public DbSet<AppUserSpotifyLink> AppUserSpotifyLinks { get; set; }
+        public DbSet<LibItemSnapshot> LibItemSnapshots { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -263,6 +265,14 @@ namespace SpotifyBasicApi2025.Entities.Context
                 .HasIndex(ti => new { ti.UserId, ti.TagId, ti.SpotifyItemId, ti.ItemType })
                 .IsUnique();
 
+            modelBuilder.Entity<LibItemSnapshot>()
+                .HasIndex(snapshot => new { snapshot.UserId, snapshot.ItemType, snapshot.SpotifyItemId })
+                .IsUnique();
+
+            modelBuilder.Entity<LibItemSnapshot>()
+                .Property(snapshot => snapshot.ArtistsJson)
+                .HasColumnType("longtext");
+
             // Konfiguracja relacji many-to-many Artist-User
             modelBuilder.Entity<LibArtistUserAssign>()
                 .HasOne(aua => aua.User)
@@ -359,6 +369,16 @@ namespace SpotifyBasicApi2025.Entities.Context
             modelBuilder.Entity<LibItemNote>()
                 .Property(note => note.Content)
                 .HasColumnType("longtext");
+
+            modelBuilder.Entity<AppUserSpotifyLink>()
+                .HasOne(link => link.AppUser)
+                .WithOne(user => user.SpotifyLink)
+                .HasForeignKey<AppUserSpotifyLink>(link => link.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<AppUserSpotifyLink>()
+                .HasIndex(link => link.SpotifyUserId)
+                .IsUnique();
 
             modelBuilder.Entity<AiSettings>()
                 .Property(setting => setting.AllowedUserIds)

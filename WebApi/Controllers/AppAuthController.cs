@@ -6,7 +6,7 @@ namespace SpotifyBasicApi2025.Controllers;
 
 [ApiController]
 [Route("api/app-auth")]
-public sealed class AppAuthController(AppUserAuthService appUserAuthService, UserService userService, TokenManagerService tokenManager) : ControllerBase
+public sealed class AppAuthController(AppUserAuthService appUserAuthService, UserService userService, TokenManagerService tokenManager, LibraryOwnerService libraryOwnerService) : ControllerBase
 {
     [HttpGet("status")]
     public async Task<ActionResult<SystemSessionStatusModel>> Status()
@@ -41,6 +41,18 @@ public sealed class AppAuthController(AppUserAuthService appUserAuthService, Use
     {
         await appUserAuthService.LogoutAsync();
         return NoContent();
+    }
+
+    [HttpPost("spotify-link")]
+    public async Task<ActionResult<SpotifyAccountLinkModel>> LinkSpotify()
+    {
+        try
+        {
+            var link = await libraryOwnerService.LinkCurrentSpotifyAccountAsync();
+            return Ok(new SpotifyAccountLinkModel { SpotifyUserId = link.SpotifyUserId, SpotifyDisplayName = link.SpotifyDisplayName, LinkedAtUtc = link.LinkedAtUtc });
+        }
+        catch (UnauthorizedAccessException ex) { return Unauthorized(ex.Message); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
 
     private static AppUserModel ToModel(Entities.AppUser user) => new() { Id = user.Id, Nick = user.Nick, IsAdmin = user.IsAdmin, CreatedAtUtc = user.CreatedAtUtc };

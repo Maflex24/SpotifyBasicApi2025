@@ -10,13 +10,13 @@ namespace SpotifyBasicApi2025.Controllers
     {
         private readonly TagsService tagsService;
         private readonly SpotifyApiService spotifyApiService;
-        private readonly UserService userService;
+        private readonly LibraryOwnerService ownerService;
 
-        public TagsGroupsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService)
+        public TagsGroupsController(TagsService tagsService, SpotifyApiService spotifyApiService, LibraryOwnerService ownerService)
         {
             this.tagsService = tagsService;
             this.spotifyApiService = spotifyApiService;
-            this.userService = userService;
+            this.ownerService = ownerService;
         }
 
         [HttpGet]
@@ -24,10 +24,7 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var userId = await userService.GetCurrentUserIdAsync();
-
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized("Użytkownik nie jest zalogowany");
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
 
                 var tagGroups = await tagsService.GetAllTagGroupsAsync(userId);
 
@@ -44,7 +41,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var tagGroup = await tagsService.GetTagGroupByIdAsync(id);
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
+                var tagGroup = await tagsService.GetTagGroupByIdAsync(id, userId);
 
                 if (tagGroup == null)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");
@@ -65,10 +63,7 @@ namespace SpotifyBasicApi2025.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var userId = await userService.GetCurrentUserIdAsync();
-
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized("Użytkownik nie jest zalogowany");
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
 
                 var createdTagGroup = await tagsService.CreateTagGroupAsync(tagGroupModel, userId);
 
@@ -88,7 +83,8 @@ namespace SpotifyBasicApi2025.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var updatedTagGroup = await tagsService.UpdateTagGroupAsync(id, tagGroupModel);
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
+                var updatedTagGroup = await tagsService.UpdateTagGroupAsync(id, tagGroupModel, userId);
 
                 if (updatedTagGroup == null)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");
@@ -106,7 +102,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var success = await tagsService.DeleteTagGroupAsync(id);
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
+                var success = await tagsService.DeleteTagGroupAsync(id, userId);
 
                 if (!success)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");

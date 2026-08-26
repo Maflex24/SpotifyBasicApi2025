@@ -113,7 +113,7 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
-        [HttpPost("artists/sync")]
+        [NonAction]
         public async Task<ActionResult<object>> SyncFollowedArtistsToDatabase()
         {
             try
@@ -133,7 +133,7 @@ namespace SpotifyBasicApi2025.Controllers
 
         #region Albums
 
-        [HttpPost("albums/sync")]
+        [NonAction]
         public async Task<ActionResult<object>> SyncUserSavedAlbums()
         {
             try
@@ -167,7 +167,7 @@ namespace SpotifyBasicApi2025.Controllers
 
         #region Tracks
 
-        [HttpPost("tracks/sync")]
+        [NonAction]
         public async Task<ActionResult<object>> SyncUserSavedTracks()
         {
             try
@@ -206,7 +206,7 @@ namespace SpotifyBasicApi2025.Controllers
             }
         }
 
-        [HttpPost("playlists/sync")]
+        [NonAction]
         public async Task<ActionResult<object>> SyncUserPlaylists()
         {
             try
@@ -276,7 +276,7 @@ namespace SpotifyBasicApi2025.Controllers
 
         #endregion Search
 
-        [HttpPost("sync")]
+        [NonAction]
         public async Task<ActionResult<object>> SyncSpotifyLibrary()
         {
             try

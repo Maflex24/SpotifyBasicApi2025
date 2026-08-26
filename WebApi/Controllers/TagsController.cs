@@ -13,24 +13,25 @@ namespace SpotifyBasicApi2025.Controllers
     {
         private readonly TagsService tagsService;
         private readonly SpotifyApiService spotifyApiService;
-        private readonly UserService userService;
+        private readonly LibraryOwnerService ownerService;
+        private readonly ItemSnapshotService snapshotService;
         private readonly DatabaseContext dbContext;
 
-        public TagsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService, DatabaseContext dbContext)
+        public TagsController(TagsService tagsService, SpotifyApiService spotifyApiService, LibraryOwnerService ownerService, ItemSnapshotService snapshotService, DatabaseContext dbContext)
         {
             this.tagsService = tagsService;
             this.spotifyApiService = spotifyApiService;
-            this.userService = userService;
+            this.ownerService = ownerService;
+            this.snapshotService = snapshotService;
             this.dbContext = dbContext;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetAllTags()
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-
-            if (userId is null)
-                return StatusCode(403);
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
             try
             {
@@ -48,10 +49,9 @@ namespace SpotifyBasicApi2025.Controllers
         public async Task<IActionResult> GetTagsList(
             [FromQuery] string categoriesIds)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-
-            if (userId is null)
-                return StatusCode(403);
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
             try
             {
@@ -70,7 +70,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var tag = await tagsService.GetTagByIdAsync(id);
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
+                var tag = await tagsService.GetTagByIdAsync(id, userId);
 
                 if (tag == null)
                     return NotFound($"Tag o ID {id} nie został znaleziony");
@@ -91,9 +92,9 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpPut("{id}/pin")]
         public async Task<IActionResult> SetTagPinned(long id, [FromBody] PinTagRequest request)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-            if (string.IsNullOrWhiteSpace(userId))
-                return Unauthorized("Użytkownik nie jest zalogowany");
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
             var updated = await tagsService.SetTagPinnedAsync(id, request.IsPinned, userId);
             return updated ? NoContent() : NotFound($"Tag o ID {id} nie został znaleziony");
@@ -107,9 +108,7 @@ namespace SpotifyBasicApi2025.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var userId = await userService.GetCurrentUserIdAsync();
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized("Użytkownik nie jest zalogowany");
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
 
                 if (!await tagsService.UserOwnsTagGroupAsync(tagModel.TagGroupId, userId))
                     return BadRequest("Wybrana grupa tagów nie istnieje lub nie należy do użytkownika");
@@ -133,13 +132,15 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpPost("assign")]
         public async Task<IActionResult> AssignTag([FromBody] TagAssignModel model)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
-            if (userId is null)
-                return StatusCode(403);
-
+            model.ItemType = model.ItemType.Trim().ToLowerInvariant();
             if (model.TagId <= 0 || string.IsNullOrWhiteSpace(model.ItemType) || string.IsNullOrWhiteSpace(model.SpotifyItemId))
                 return BadRequest("Nieprawidłowe dane przypisania tagu");
+            model.Snapshot ??= await ResolveSnapshotAsync(model.ItemType, model.SpotifyItemId);
+            if (model.Snapshot is null) return BadRequest("Nie udało się pobrać opisu elementu ze Spotify.");
 
             var existing = await dbContext.LibTagAssigns
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.TagId == model.TagId && a.SpotifyItemId == model.SpotifyItemId && a.ItemType == model.ItemType);
@@ -150,6 +151,7 @@ namespace SpotifyBasicApi2025.Controllers
             {
                 existing.Strength = strength;
                 existing.UpdatedAt = DateTime.UtcNow;
+                await snapshotService.UpsertAsync(userId, model.ItemType, model.SpotifyItemId, model.Snapshot);
                 await dbContext.SaveChangesAsync();
                 return NoContent();
             }
@@ -166,6 +168,7 @@ namespace SpotifyBasicApi2025.Controllers
             };
 
             dbContext.LibTagAssigns.Add(entity);
+            await snapshotService.UpsertAsync(userId, model.ItemType, model.SpotifyItemId, model.Snapshot);
             await dbContext.SaveChangesAsync();
 
             return Created($"api/tags/assign/{entity.Id}", entity.Id);
@@ -174,11 +177,11 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpPut("assign")]
         public async Task<IActionResult> UpdateAssign([FromBody] TagAssignModel model)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
-            if (userId is null)
-                return StatusCode(403);
-
+            model.ItemType = model.ItemType.Trim().ToLowerInvariant();
             var entity = await dbContext.LibTagAssigns
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.TagId == model.TagId && a.SpotifyItemId == model.SpotifyItemId && a.ItemType == model.ItemType);
 
@@ -187,6 +190,8 @@ namespace SpotifyBasicApi2025.Controllers
             if (entity is null)
             {
                 // Upsert: utwórz jeśli nie istnieje
+                model.Snapshot ??= await ResolveSnapshotAsync(model.ItemType, model.SpotifyItemId);
+                if (model.Snapshot is null) return BadRequest("Nie udało się pobrać opisu elementu ze Spotify.");
                 var created = new LibTagAssign
                 {
                     TagId = model.TagId,
@@ -198,12 +203,15 @@ namespace SpotifyBasicApi2025.Controllers
                     UpdatedAt = DateTime.UtcNow
                 };
                 dbContext.LibTagAssigns.Add(created);
+                await snapshotService.UpsertAsync(userId, model.ItemType, model.SpotifyItemId, model.Snapshot);
                 await dbContext.SaveChangesAsync();
                 return NoContent();
             }
 
             entity.Strength = strength;
             entity.UpdatedAt = DateTime.UtcNow;
+            if (model.Snapshot is not null)
+                await snapshotService.UpsertAsync(userId, model.ItemType, model.SpotifyItemId, model.Snapshot);
 
             await dbContext.SaveChangesAsync();
 
@@ -213,10 +221,9 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpDelete("assign")]
         public async Task<IActionResult> RemoveAssign([FromBody] TagAssignModel model)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-
-            if (userId is null)
-                return StatusCode(403);
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
             var entity = await dbContext.LibTagAssigns
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.TagId == model.TagId && a.SpotifyItemId == model.SpotifyItemId && a.ItemType == model.ItemType);
@@ -226,6 +233,8 @@ namespace SpotifyBasicApi2025.Controllers
 
             dbContext.LibTagAssigns.Remove(entity);
             await dbContext.SaveChangesAsync();
+            await snapshotService.DeleteIfOrphanedAsync(userId, entity.ItemType, entity.SpotifyItemId);
+            await dbContext.SaveChangesAsync();
 
             return NoContent();
         }
@@ -233,10 +242,9 @@ namespace SpotifyBasicApi2025.Controllers
         [HttpGet("assign/{itemType}/{spotifyItemId}")]
         public async Task<IActionResult> GetAssignsForItem([FromRoute] string itemType, [FromRoute] string spotifyItemId)
         {
-            var userId = await userService.GetCurrentUserIdAsync();
-
-            if (userId is null)
-                return StatusCode(403);
+            string userId;
+            try { userId = await ownerService.RequireOwnerSpotifyUserIdAsync(); }
+            catch (Exception ex) { return Unauthorized(ex.Message); }
 
             var normalizedItemType = itemType.Trim().ToLowerInvariant();
             if (normalizedItemType is not ("artist" or "album" or "track" or "playlist") || string.IsNullOrWhiteSpace(spotifyItemId))
@@ -258,6 +266,27 @@ namespace SpotifyBasicApi2025.Controllers
             return Ok(assigns);
         }
 
+        private async Task<LibItemSnapshotInput?> ResolveSnapshotAsync(string itemType, string spotifyItemId)
+        {
+            switch (itemType)
+            {
+                case "artist":
+                    var artist = await spotifyApiService.GetArtist(spotifyItemId);
+                    return artist == null ? null : new LibItemSnapshotInput { Title = artist.Name, Artists = new List<string> { artist.Name }, SpotifyUri = artist.Uri };
+                case "album":
+                    var album = await spotifyApiService.GetAlbumAsync(spotifyItemId);
+                    return album == null ? null : new LibItemSnapshotInput { Title = album.Name, Artists = album.Artists.Select(x => x.Name).ToList(), SpotifyUri = album.Uri };
+                case "track":
+                    var track = await spotifyApiService.GetTrackAsync(spotifyItemId);
+                    return track == null ? null : new LibItemSnapshotInput { Title = track.Name, Artists = track.Artists.Select(x => x.Name).ToList(), AlbumTitle = track.Album?.Name, SpotifyUri = track.Uri };
+                case "playlist":
+                    var playlist = await spotifyApiService.GetPlaylistAsync(spotifyItemId);
+                    return playlist == null ? null : new LibItemSnapshotInput { Title = playlist.Name, OwnerName = playlist.Owner?.DisplayName, SpotifyUri = playlist.Uri };
+                default:
+                    return null;
+            }
+        }
+
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateTag(int id, [FromBody] TagModel tagModel)
         {
@@ -266,9 +295,7 @@ namespace SpotifyBasicApi2025.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var userId = await userService.GetCurrentUserIdAsync();
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized("Użytkownik nie jest zalogowany");
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
 
                 if (!await tagsService.UserOwnsTagGroupAsync(tagModel.TagGroupId, userId))
                     return BadRequest("Wybrana grupa tagów nie istnieje lub nie należy do użytkownika");
@@ -295,7 +322,8 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var success = await tagsService.DeleteTagAsync(id);
+                var userId = await ownerService.RequireOwnerSpotifyUserIdAsync();
+                var success = await tagsService.DeleteTagAsync(id, userId);
 
                 if (!success)
                     return NotFound($"Tag o ID {id} nie został znaleziony");

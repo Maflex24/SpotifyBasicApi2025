@@ -1,0 +1,41 @@
+@page "/archive"
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<PageTitle>Archiwum biblioteki</PageTitle>
+
+<div class="container py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div><h4 class="mb-0">Archiwum biblioteki</h4><small class="text-secondary">Elementy z tagiem lub notatką, dostępne bez Spotify.</small></div>
+        <a class="btn btn-outline-light" href="api/library/archive/export">Eksport JSON</a>
+    </div>
+    @if (error is not null) { <div class="alert alert-warning">@error</div> }
+    @if (items is null) { <p>Wczytywanie…</p> }
+    else if (items.Count == 0) { <p class="text-secondary">Brak zarchiwizowanych elementów.</p> }
+    else
+    {
+        @foreach (var item in items)
+        {
+            <article class="border rounded p-3 mb-2 bg-dark">
+                <div class="text-uppercase text-secondary small">@item.ItemType</div>
+                <strong>@item.Title</strong>
+                @if (item.Artists.Count > 0) { <span> — @string.Join(", ", item.Artists)</span> }
+                @if (!string.IsNullOrWhiteSpace(item.AlbumTitle)) { <div class="small text-secondary">Album: @item.AlbumTitle</div> }
+                @if (item.Tags.Count > 0) { <div class="small mt-1">@string.Join(", ", item.Tags.Select(tag => tag.TagName))</div> }
+                @if (!string.IsNullOrWhiteSpace(item.Note)) { <div class="small mt-1">@item.Note</div> }
+            </article>
+        }
+    }
+</div>
+
+@code {
+    private List<ArchiveItem>? items;
+    private string? error;
+    protected override async Task OnInitializedAsync()
+    {
+        try { items = await Http.GetFromJsonAsync<List<ArchiveItem>>("api/library/archive") ?? new(); }
+        catch { items = new(); error = "Nie można wczytać archiwum. Zaloguj się do konta aplikacji i połącz je ze Spotify."; }
+    }
+    private sealed class ArchiveItem { public string ItemType { get; set; } = ""; public string Title { get; set; } = ""; public List<string> Artists { get; set; } = new(); public string? AlbumTitle { get; set; } public string? Note { get; set; } public List<Tag> Tags { get; set; } = new(); }
+    private sealed class Tag { public string TagName { get; set; } = ""; }
+}

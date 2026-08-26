@@ -12,6 +12,7 @@ public sealed class AppUser
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public ICollection<AppUserSession> Sessions { get; set; } = new List<AppUserSession>();
+    public AppUserSpotifyLink? SpotifyLink { get; set; }
 }
 
 public sealed class AppUserSession

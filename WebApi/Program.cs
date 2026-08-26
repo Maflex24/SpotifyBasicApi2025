@@ -106,6 +106,10 @@ builder.Services.AddScoped<UserService>();
 // Serwis Library
 builder.Services.AddScoped<LibraryService>();
 builder.Services.AddScoped<AppUserAuthService>();
+builder.Services.AddScoped<LibraryOwnerService>();
+builder.Services.AddScoped<ItemSnapshotService>();
+builder.Services.AddScoped<LiveLibraryService>();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<AiSettingsService>();
 builder.Services.AddScoped<MusicResearchService>();
 builder.Services.AddScoped<IAiChatCompletionProvider, OpenAiChatCompletionProvider>();

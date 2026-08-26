@@ -40,6 +40,13 @@ public sealed class AppUserSessionStatus
     public bool IsAdmin { get; set; }
 }
 
+public sealed class SpotifyAccountLinkModel
+{
+    public string SpotifyUserId { get; set; } = string.Empty;
+    public string? SpotifyDisplayName { get; set; }
+    public DateTime LinkedAtUtc { get; set; }
+}
+
 public sealed class SpotifySessionStatus
 {
     public bool IsLoggedIn { get; set; }

@@ -16,11 +16,13 @@ namespace SpotifyBasicApi2025.Services
 
         private readonly DatabaseContext context;
         private readonly UserService userService;
+        private readonly ItemSnapshotService snapshotService;
 
-        public TagsService(DatabaseContext context, UserService userService)
+        public TagsService(DatabaseContext context, UserService userService, ItemSnapshotService snapshotService)
         {
             this.context = context;
             this.userService = userService;
+            this.snapshotService = snapshotService;
         }
 
         #region TagsCategories
@@ -47,18 +49,19 @@ namespace SpotifyBasicApi2025.Services
             return entities.Select(e => e.MapToTagGroupModel()).ToList();
         }
 
-        public async Task<TagGroupModel?> GetTagGroupByIdAsync(int id)
+        public async Task<TagGroupModel?> GetTagGroupByIdAsync(int id, string? userId = null)
         {
-            var entity = await context.LibTagGroups
-                .FirstOrDefaultAsync(tg => tg.Id == id);
+            var query = context.LibTagGroups.Where(tg => tg.Id == id);
+            if (!string.IsNullOrWhiteSpace(userId)) query = query.Where(tg => tg.UserId == userId);
+            var entity = await query.FirstOrDefaultAsync();
 
             return entity?.MapToTagGroupModel();
         }
 
-        public async Task<TagGroupModel?> UpdateTagGroupAsync(int id, TagGroupModel model)
+        public async Task<TagGroupModel?> UpdateTagGroupAsync(int id, TagGroupModel model, string userId)
         {
             var entity = await context.LibTagGroups
-                .FirstOrDefaultAsync(tg => tg.Id == id);
+                .FirstOrDefaultAsync(tg => tg.Id == id && tg.UserId == userId);
 
             if (entity == null)
                 return null;
@@ -70,15 +73,21 @@ namespace SpotifyBasicApi2025.Services
             return entity.MapToTagGroupModel();
         }
 
-        public async Task<bool> DeleteTagGroupAsync(int id)
+        public async Task<bool> DeleteTagGroupAsync(int id, string userId)
         {
             var entity = await context.LibTagGroups
-                .FirstOrDefaultAsync(tg => tg.Id == id);
+                .Include(group => group.Tags)
+                .FirstOrDefaultAsync(tg => tg.Id == id && tg.UserId == userId);
 
             if (entity == null)
                 return false;
 
+            var affectedItems = await context.LibTagAssigns.Where(assign => entity.Tags.Select(tag => tag.Id).Contains(assign.TagId))
+                .Select(assign => new { assign.ItemType, assign.SpotifyItemId }).Distinct().ToListAsync();
             context.LibTagGroups.Remove(entity);
+            await context.SaveChangesAsync();
+            foreach (var item in affectedItems)
+                await snapshotService.DeleteIfOrphanedAsync(userId, item.ItemType, item.SpotifyItemId);
             await context.SaveChangesAsync();
 
             return true;
@@ -155,11 +164,13 @@ namespace SpotifyBasicApi2025.Services
             }).ToList();
         }
 
-        public async Task<TagModel?> GetTagByIdAsync(int id)
+        public async Task<TagModel?> GetTagByIdAsync(int id, string? userId = null)
         {
-            var entity = await context.LibTags
+            var query = context.LibTags
                 .Include(t => t.Aliases)
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .Where(t => t.Id == id);
+            if (!string.IsNullOrWhiteSpace(userId)) query = query.Where(t => t.TagGroup.UserId == userId);
+            var entity = await query.FirstOrDefaultAsync();
 
             return entity?.MapToTagModel();
         }
@@ -235,15 +246,21 @@ namespace SpotifyBasicApi2025.Services
             return entity.MapToTagModel();
         }
 
-        public async Task<bool> DeleteTagAsync(int id)
+        public async Task<bool> DeleteTagAsync(int id, string userId)
         {
             var entity = await context.LibTags
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .Include(t => t.TagGroup)
+                .FirstOrDefaultAsync(t => t.Id == id && t.TagGroup.UserId == userId);
 
             if (entity == null)
                 return false;
 
+            var affectedItems = await context.LibTagAssigns.Where(assign => assign.TagId == id)
+                .Select(assign => new { assign.ItemType, assign.SpotifyItemId }).Distinct().ToListAsync();
             context.LibTags.Remove(entity);
+            await context.SaveChangesAsync();
+            foreach (var item in affectedItems)
+                await snapshotService.DeleteIfOrphanedAsync(userId, item.ItemType, item.SpotifyItemId);
             await context.SaveChangesAsync();
 
             return true;
