@@ -2878,7 +2878,7 @@
 
         localRandomAlbumId = candidates[Random.Shared.Next(candidates.Count)].Id;
         await SaveToStore();
-        await InvokeAsync(StateHasChanged);
+        await NavigateToAlbumAsync(localRandomAlbumId);
     }
 
     private bool IsAlbumLoaded(string? albumId) => !string.IsNullOrWhiteSpace(albumId)
