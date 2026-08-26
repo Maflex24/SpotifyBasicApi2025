@@ -299,7 +299,7 @@
         await LoadTracks();
     }
 
-    private PlaylistFilterSnapshot CaptureCurrentFilters() => new(localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), clientSortColumn, clientSortAsc);
+    private PlaylistFilterSnapshot CaptureCurrentFilters() => new(localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters), TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters), clientSortColumn, clientSortAsc);
 
     private async Task ApplyFiltersAsync()
     {
@@ -506,23 +506,37 @@
             }).ToList();
         }
 
-        // include/exclude by tag ids
+        bool MatchesTag(TrackTag tag, long tagId, IReadOnlyDictionary<long, TagStrengthFilterRule> rules)
+        {
+            if (tag.TagId != tagId)
+                return false;
+
+            return rules.GetValueOrDefault(tagId)?.Operator switch
+            {
+                "gte" => tag.Strength >= rules[tagId].Value,
+                "lte" => tag.Strength <= rules[tagId].Value,
+                _ => true
+            };
+        }
+
+        // include/exclude by tag ids and optional strengths
         if (filters.IncludeTagIds.Length > 0)
         {
             var list = filters.IncludeTagIds.ToList();
             var andMode = string.Equals(filters.IncludeMode, "and", StringComparison.OrdinalIgnoreCase);
+            var rules = filters.IncludeTagStrengths.ToDictionary(rule => rule.TagId);
 
             if (andMode)
             {
                 foreach (var tid in list)
                 {
                     var idLocal = tid;
-                    source = source.Where(t => (t.Tags?.Any(x => x.TagId == idLocal) ?? false)).ToList();
+                    source = source.Where(t => t.Tags?.Any(x => MatchesTag(x, idLocal, rules)) ?? false).ToList();
                 }
             }
             else
             {
-                source = source.Where(t => (t.Tags?.Any(x => list.Contains(x.TagId)) ?? false)).ToList();
+                source = source.Where(t => t.Tags?.Any(x => list.Any(id => MatchesTag(x, id, rules))) ?? false).ToList();
             }
         }
 
@@ -530,11 +544,12 @@
         {
             var list = filters.ExcludeTagIds.ToList();
             var andMode = string.Equals(filters.ExcludeMode, "and", StringComparison.OrdinalIgnoreCase);
+            var rules = filters.ExcludeTagStrengths.ToDictionary(rule => rule.TagId);
 
             if (andMode)
-                source = source.Where(t => !list.All(tid => t.Tags?.Any(x => x.TagId == tid) ?? false)).ToList();
+                source = source.Where(t => !list.All(tid => t.Tags?.Any(x => MatchesTag(x, tid, rules)) ?? false)).ToList();
             else
-                source = source.Where(t => !(t.Tags?.Any(x => list.Contains(x.TagId)) ?? false)).ToList();
+                source = source.Where(t => !(t.Tags?.Any(x => list.Any(id => MatchesTag(x, id, rules))) ?? false)).ToList();
         }
 
         filteredTracks = source.ToList();
@@ -845,6 +860,8 @@
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
+        public TagStrengthFilterRule[]? includeTagStrengths { get; set; }
+        public TagStrengthFilterRule[]? excludeTagStrengths { get; set; }
         public string? clientSortColumn { get; set; }
         public bool? clientSortAsc { get; set; }
         public bool? showTagFilters { get; set; }
@@ -857,6 +874,8 @@
         excludeMode = excludeMode,
         includeTagIds = includeTagIds.ToArray(),
         excludeTagIds = excludeTagIds.ToArray(),
+        includeTagStrengths = TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters),
+        excludeTagStrengths = TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters),
         clientSortColumn = clientSortColumn,
         clientSortAsc = clientSortAsc,
         showTagFilters = showTagFilters
@@ -873,9 +892,9 @@
     }
 
     private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
-    private sealed record PlaylistFilterSnapshot(string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, string SortColumn, bool SortAsc)
+    private sealed record PlaylistFilterSnapshot(string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, TagStrengthFilterRule[] IncludeTagStrengths, TagStrengthFilterRule[] ExcludeTagStrengths, string SortColumn, bool SortAsc)
     {
-        public bool Matches(PlaylistFilterSnapshot? other) => other is not null && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && SortColumn == other.SortColumn && SortAsc == other.SortAsc && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds);
+        public bool Matches(PlaylistFilterSnapshot? other) => other is not null && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && SortColumn == other.SortColumn && SortAsc == other.SortAsc && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds) && TagStrengthFilters.Equal(IncludeTagStrengths, other.IncludeTagStrengths) && TagStrengthFilters.Equal(ExcludeTagStrengths, other.ExcludeTagStrengths);
     }
 
     private async Task SaveCurrentFilter()
@@ -905,6 +924,7 @@
         excludeMode = state.excludeMode ?? excludeMode;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
+        tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
         clientSortColumn = state.clientSortColumn ?? clientSortColumn;
         clientSortAsc = state.clientSortAsc ?? clientSortAsc;
         showTagFilters = state.showTagFilters ?? showTagFilters;

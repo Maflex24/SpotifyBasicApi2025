@@ -309,7 +309,6 @@
     private HashSet<long> includeTagIds = new();
     private HashSet<long> excludeTagIds = new();
     private Dictionary<long, TagStrengthFilterState> tagStrengthFilters = new();
-    private string GetTagStrengthsQuery(IEnumerable<long> tagIds) => TagStrengthFilters.ToQuery(tagIds.Select(id => new TagStrengthFilterRule { TagId = id, Operator = tagStrengthFilters.GetValueOrDefault(id)?.Operator ?? "all", Value = tagStrengthFilters.GetValueOrDefault(id)?.Value ?? 3f }));
     private string includeMode = "or";
     private string excludeMode = "or";
     private bool showTagsGrouped;
@@ -380,6 +379,8 @@
             excludeMode = excludeMode,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
+            includeTagStrengths = TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters),
+            excludeTagStrengths = TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters),
             showTagFilters = showTagFilters
         };
     }
@@ -398,9 +399,9 @@
     }
 
     private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
-    private sealed record TrackFilterSnapshot(string SortKey, string SortOrder, string? SelectedTagFilter, string? SelectedTagSort, string? SelectedArtistId, string? SelectedAlbumId, int? SelectedYear, string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds)
+    private sealed record TrackFilterSnapshot(string SortKey, string SortOrder, string? SelectedTagFilter, string? SelectedTagSort, string? SelectedArtistId, string? SelectedAlbumId, int? SelectedYear, string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, TagStrengthFilterRule[] IncludeTagStrengths, TagStrengthFilterRule[] ExcludeTagStrengths)
     {
-        public bool Matches(TrackFilterSnapshot? other) => other is not null && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && SelectedArtistId == other.SelectedArtistId && SelectedAlbumId == other.SelectedAlbumId && SelectedYear == other.SelectedYear && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds);
+        public bool Matches(TrackFilterSnapshot? other) => other is not null && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && SelectedArtistId == other.SelectedArtistId && SelectedAlbumId == other.SelectedAlbumId && SelectedYear == other.SelectedYear && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds) && TagStrengthFilters.Equal(IncludeTagStrengths, other.IncludeTagStrengths) && TagStrengthFilters.Equal(ExcludeTagStrengths, other.ExcludeTagStrengths);
     }
 
     private async Task SaveCurrentFilter()
@@ -437,6 +438,7 @@
         excludeMode = state.excludeMode ?? excludeMode;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
+        tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
         showTagFilters = state.showTagFilters ?? showTagFilters;
 
         await ApplyFiltersAsync();
@@ -468,7 +470,7 @@
         }
     }
 
-    private TrackFilterSnapshot CaptureCurrentFilters() => new(sortKey, sortOrder, selectedTagFilter, selectedTagSort, selectedArtistId, selectedAlbumId, selectedYear, localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray());
+    private TrackFilterSnapshot CaptureCurrentFilters() => new(sortKey, sortOrder, selectedTagFilter, selectedTagSort, selectedArtistId, selectedAlbumId, selectedYear, localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters), TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters));
 
     private async Task ApplyFiltersAsync()
     {
@@ -517,7 +519,7 @@
         {
             query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
             query.Add($"includeMode={filters.IncludeMode}");
-            var strengths = GetTagStrengthsQuery(filters.IncludeTagIds);
+            var strengths = TagStrengthFilters.ToQuery(filters.IncludeTagStrengths);
             if (!string.IsNullOrEmpty(strengths)) query.Add($"includeTagStrengths={Uri.EscapeDataString(strengths)}");
         }
 
@@ -525,7 +527,7 @@
         {
             query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
             query.Add($"excludeMode={filters.ExcludeMode}");
-            var strengths = GetTagStrengthsQuery(filters.ExcludeTagIds);
+            var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
             if (!string.IsNullOrEmpty(strengths)) query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
         }
 
@@ -1253,8 +1255,8 @@
     }
 
     private TagStrengthFilterState? GetTagStrengthRule(long tagId) => GetTagState(tagId) == 0 ? null : tagStrengthFilters.GetValueOrDefault(tagId) ?? (tagStrengthFilters[tagId] = new TagStrengthFilterState());
-    private void CycleTagStrengthOperator(long tagId) { var rule = GetTagStrengthRule(tagId); if (rule is not null) rule.Operator = rule.Operator == "gte" ? "lte" : rule.Operator == "lte" ? "all" : "gte"; }
-    private void SetTagStrength(TagStrengthValueChanged change) { var rule = GetTagStrengthRule(change.TagId); if (rule is not null) rule.Value = change.Value; }
+    private async Task CycleTagStrengthOperator(long tagId) { var rule = GetTagStrengthRule(tagId); if (rule is null) return; rule.Operator = rule.Operator == "gte" ? "lte" : rule.Operator == "lte" ? "all" : "gte"; await SaveToStore(); }
+    private async Task SetTagStrength(TagStrengthValueChanged change) { var rule = GetTagStrengthRule(change.TagId); if (rule is null) return; rule.Value = change.Value; await SaveToStore(); }
 
     private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
     private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
@@ -1335,6 +1337,8 @@
             localSearch,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
+            includeTagStrengths = TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters),
+            excludeTagStrengths = TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters),
             includeMode,
             excludeMode,
             showTagFilters
@@ -1358,6 +1362,7 @@
         excludeMode = state.excludeMode ?? excludeMode;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+        tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
 
         showTagFilters = state.showTagFilters ?? showTagFilters;
 
@@ -1380,7 +1385,7 @@
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public bool? showTagFilters { get; set; } }
+    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public TagStrengthFilterRule[]? includeTagStrengths { get; set; } public TagStrengthFilterRule[]? excludeTagStrengths { get; set; } public bool? showTagFilters { get; set; } }
 
     private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 

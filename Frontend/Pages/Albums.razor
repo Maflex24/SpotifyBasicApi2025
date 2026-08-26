@@ -812,11 +812,7 @@
         fromYear,
         toYear);
 
-    private TagStrengthFilterRule[] CaptureTagStrengthRules(IEnumerable<long> tagIds) => tagIds.OrderBy(id => id).Select(id =>
-    {
-        var rule = tagStrengthFilters.GetValueOrDefault(id) ?? new TagStrengthFilterState();
-        return new TagStrengthFilterRule { TagId = id, Operator = rule.Operator, Value = rule.Value };
-    }).ToArray();
+    private TagStrengthFilterRule[] CaptureTagStrengthRules(IEnumerable<long> tagIds) => TagStrengthFilters.Capture(tagIds, tagStrengthFilters);
 
     private async Task ApplyFiltersAsync()
     {
@@ -992,6 +988,8 @@
         excludeMode = excludeMode,
         includeTagIds = includeTagIds.ToArray(),
         excludeTagIds = excludeTagIds.ToArray(),
+        includeTagStrengths = CaptureTagStrengthRules(includeTagIds),
+        excludeTagStrengths = CaptureTagStrengthRules(excludeTagIds),
         includeArtistIds = includeArtistIds.ToArray(),
         excludeArtistIds = excludeArtistIds.ToArray(),
         includeGenres = includeGenres.ToArray(),
@@ -1038,6 +1036,7 @@
         excludeMode = state.excludeMode ?? excludeMode;
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
+        tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
         includeArtistIds = state.includeArtistIds != null
             ? new HashSet<string>(state.includeArtistIds, StringComparer.Ordinal)
             : string.IsNullOrWhiteSpace(state.selectedArtistId) ? new HashSet<string>(StringComparer.Ordinal) : new HashSet<string>(new[] { state.selectedArtistId }, StringComparer.Ordinal);
@@ -2249,6 +2248,8 @@
             localSearch,
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
+            includeTagStrengths = CaptureTagStrengthRules(includeTagIds),
+            excludeTagStrengths = CaptureTagStrengthRules(excludeTagIds),
             includeArtistIds = includeArtistIds.ToArray(),
             excludeArtistIds = excludeArtistIds.ToArray(),
             includeGenres = includeGenres.ToArray(),
@@ -2290,6 +2291,7 @@
 
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : includeTagIds;
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : excludeTagIds;
+        tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
         includeArtistIds = state.includeArtistIds != null
             ? new HashSet<string>(state.includeArtistIds, StringComparer.Ordinal)
             : string.IsNullOrWhiteSpace(state.selectedArtistId) ? includeArtistIds : new HashSet<string>(new[] { state.selectedArtistId }, StringComparer.Ordinal);
@@ -2326,6 +2328,8 @@
         public string? excludeMode { get; set; }
         public long[]? includeTagIds { get; set; }
         public long[]? excludeTagIds { get; set; }
+        public TagStrengthFilterRule[]? includeTagStrengths { get; set; }
+        public TagStrengthFilterRule[]? excludeTagStrengths { get; set; }
         public string[]? includeArtistIds { get; set; }
         public string[]? excludeArtistIds { get; set; }
         public string[]? includeGenres { get; set; }
