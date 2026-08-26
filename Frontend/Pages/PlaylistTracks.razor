@@ -249,6 +249,7 @@
     private bool clientSortAsc = true;
     private bool showTagFilters = true;
     private bool showTagsGrouped;
+    private const string TagFiltersStoreKey = "filters:playlist:show-tag-filters";
     private const string TagLayoutStoreKey = "tag-layout:grouped";
     private const string TagVisibilityStoreKey = "tag-visibility:show-unassigned";
     private bool showUnassignedTags;
@@ -262,6 +263,7 @@
     {
         AiDrawer.Changed += HandleAiAccessChanged;
         aiAvailable = AiDrawer.AccessLoaded && AiDrawer.IsAllowed;
+        await LoadTagFiltersVisibility();
         await LoadTagLayout();
         await LoadTagVisibility();
         await LoadAvailableTags();
@@ -799,7 +801,16 @@
 
     private void ToggleIncludeMode() { includeMode = includeMode == "and" ? "or" : "and"; }
     private void ToggleExcludeMode() { excludeMode = excludeMode == "and" ? "or" : "and"; }
-    private void ToggleTagFilters() { showTagFilters = !showTagFilters; }
+    private async Task ToggleTagFilters()
+    {
+        showTagFilters = !showTagFilters;
+        await Store.SetItemAsync(TagFiltersStoreKey, showTagFilters);
+    }
+
+    private async Task LoadTagFiltersVisibility()
+    {
+        showTagFilters = await Store.GetItemAsync<bool?>(TagFiltersStoreKey) ?? showTagFilters;
+    }
 
     private async Task LoadTagLayout()
     {
@@ -877,8 +888,7 @@
         includeTagStrengths = TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters),
         excludeTagStrengths = TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters),
         clientSortColumn = clientSortColumn,
-        clientSortAsc = clientSortAsc,
-        showTagFilters = showTagFilters
+        clientSortAsc = clientSortAsc
     };
 
     private List<ActiveFilterChip> GetActiveFilterChips()
@@ -927,8 +937,6 @@
         tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
         clientSortColumn = state.clientSortColumn ?? clientSortColumn;
         clientSortAsc = state.clientSortAsc ?? clientSortAsc;
-        showTagFilters = state.showTagFilters ?? showTagFilters;
-
         await ApplyFiltersAsync();
     }
 

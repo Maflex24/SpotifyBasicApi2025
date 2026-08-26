@@ -380,8 +380,7 @@
             includeTagIds = includeTagIds.ToArray(),
             excludeTagIds = excludeTagIds.ToArray(),
             includeTagStrengths = TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters),
-            excludeTagStrengths = TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters),
-            showTagFilters = showTagFilters
+            excludeTagStrengths = TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters)
         };
     }
 
@@ -439,8 +438,6 @@
         includeTagIds = state.includeTagIds != null ? new HashSet<long>(state.includeTagIds) : new HashSet<long>();
         excludeTagIds = state.excludeTagIds != null ? new HashSet<long>(state.excludeTagIds) : new HashSet<long>();
         tagStrengthFilters = TagStrengthFilters.Restore((state.includeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()).Concat(state.excludeTagStrengths ?? Array.Empty<TagStrengthFilterRule>()), includeTagIds, excludeTagIds);
-        showTagFilters = state.showTagFilters ?? showTagFilters;
-
         await ApplyFiltersAsync();
     }
 

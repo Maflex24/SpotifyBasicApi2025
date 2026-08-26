@@ -995,7 +995,6 @@
         includeGenres = includeGenres.ToArray(),
         excludeGenres = excludeGenres.ToArray(),
         includeArtistTags = includeArtistTags,
-        showTagFilters = showTagFilters,
         showArtistFilters = showArtistFilters,
         showGenreFilters = showGenreFilters,
         collapsedArtistGroupIds = collapsedArtistGroupIds.ToArray(),
@@ -1045,7 +1044,6 @@
         excludeGenres = state.excludeGenres != null ? new HashSet<string>(state.excludeGenres, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         includeArtistTags = state.includeArtistTags ?? false;
         RefreshAvailableTags();
-        showTagFilters = state.showTagFilters ?? showTagFilters;
         showArtistFilters = state.showArtistFilters ?? showArtistFilters;
         showGenreFilters = state.showGenreFilters ?? showGenreFilters;
         collapsedArtistGroupIds.Clear();
