@@ -20,7 +20,7 @@
             <div class="flex-fill">
                 <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
                     <div>
-                        <div class="d-flex align-items-center gap-2"><h3 class="mb-1">@artist.name</h3>@if (aiAvailable) { <AiContextMenu Items="GetArtistAiMenuItems(artist.id, artist.name)" AriaLabel="Więcej opcji dla wykonawcy" /> }</div>
+                        <div class="d-flex align-items-center gap-2"><h3 class="mb-1">@artist.name</h3><AiContextMenu Items="@(aiAvailable ? GetArtistAiMenuItems(artist.id, artist.name) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla wykonawcy" ItemType="artist" SpotifyItemId="@artist.id" DisplayName="@artist.name" Tags="@artistTags" IsInLibrary="@artistInLibrary" OnTagsChanged="ApplyTaggedArtistState" /></div>
                         @if (artist.genres.Length > 0)
                         {
                             <div class="d-flex flex-wrap gap-1 mt-2">
@@ -58,7 +58,7 @@
                     {
                         <tr>
                             <td><div class="cover-container"><img class="cover-img-56" src="@GetBestImageUrl(track.album?.images)" alt="Okładka" /><button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(track.uri)">▶</button></div></td>
-                            <td><span class="d-inline-flex align-items-center gap-2">@track.name @if (aiAvailable) { <AiContextMenu Items="GetTrackAiMenuItems(track.id, track.name)" AriaLabel="Więcej opcji dla utworu" /> }</span></td><td>@track.album?.name</td><td>@(track.album?.release_date?.Length >= 4 ? track.album.release_date[..4] : "—")</td>
+                            <td><span class="d-inline-flex align-items-center gap-2">@track.name <AiContextMenu Items="@(aiAvailable ? GetTrackAiMenuItems(track.id, track.name) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla utworu" ItemType="track" SpotifyItemId="@track.id" DisplayName="@track.name" Tags="@track.tags" IsInLibrary="@track.isInLibrary" OnTagsChanged="ApplyTaggedTrackState" /></span></td><td>@track.album?.name</td><td>@(track.album?.release_date?.Length >= 4 ? track.album.release_date[..4] : "—")</td>
                         </tr>
                     }
                 </tbody>
@@ -112,7 +112,7 @@
                             {
                                 <div class="mt-2"><small class="text-muted">Tagi:</small><div class="d-flex flex-wrap gap-1 mt-1">@foreach (var tag in album.tags.Take(3)) { <span class="badge badge-tag">@tag.TagName (@tag.Strength.ToString("0.0"))</span> } @if (album.tags.Count > 3) { <span class="badge bg-outline-primary text-primary badge-tag">+@(album.tags.Count - 3)</span> }</div></div>
                             }
-                            <div class="mt-auto pt-3 d-flex gap-2"><button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" @onclick="() => OpenAlbumTagging(album.id)"><AppIcon Name="tag" /><span>Taguj</span></button>@if (aiAvailable) { <AiContextMenu Items="GetAlbumAiMenuItems(album.id, album.name)" AriaLabel="Więcej opcji dla albumu" OpenUpwards="true" /> }</div>
+                            <div class="mt-auto pt-3 d-flex gap-2"><button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" disabled="@(!album.isInLibrary)" @onclick="() => OpenAlbumTagging(album.id)"><AppIcon Name="tag" /><span>Taguj</span></button><AiContextMenu Items="@(aiAvailable ? GetAlbumAiMenuItems(album.id, album.name) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla albumu" OpenUpwards="true" ItemType="album" SpotifyItemId="@album.id" DisplayName="@album.name" Tags="@album.tags" IsInLibrary="@album.isInLibrary" OnTagsChanged="ApplyTaggedAlbumState" /></div>
                         </div>
                     </div>
                 </div>
@@ -209,7 +209,8 @@
     {
         var albumRequest = Http.PostAsJsonAsync("api/library/items/status", new ItemStatusRequest { ItemType = "album", SpotifyItemIds = albums.Select(album => album.id).ToList() });
         var artistRequest = Http.PostAsJsonAsync("api/library/items/status", new ItemStatusRequest { ItemType = "artist", SpotifyItemIds = new() { Id } });
-        await Task.WhenAll(albumRequest, artistRequest);
+        var tracksRequest = Http.PostAsJsonAsync("api/library/items/status", new ItemStatusRequest { ItemType = "track", SpotifyItemIds = topTracks.Select(track => track.id).ToList() });
+        await Task.WhenAll(albumRequest, artistRequest, tracksRequest);
         if (albumRequest.Result.IsSuccessStatusCode)
         {
             var statuses = await albumRequest.Result.Content.ReadFromJsonAsync<List<ItemStatus>>() ?? new();
@@ -225,6 +226,16 @@
             var status = (await artistRequest.Result.Content.ReadFromJsonAsync<List<ItemStatus>>())?.FirstOrDefault();
             artistInLibrary = status?.IsInLibrary ?? false;
             artistTags = status?.Tags ?? new();
+        }
+        if (tracksRequest.Result.IsSuccessStatusCode)
+        {
+            var statuses = await tracksRequest.Result.Content.ReadFromJsonAsync<List<ItemStatus>>() ?? new();
+            foreach (var track in topTracks)
+            {
+                var status = statuses.FirstOrDefault(item => item.SpotifyItemId == track.id);
+                track.isInLibrary = status?.IsInLibrary ?? false;
+                track.tags = status?.Tags ?? new();
+            }
         }
     }
 
@@ -278,6 +289,24 @@
         return Task.CompletedTask;
     }
 
+    private Task ApplyTaggedArtistState(TagAssignmentState state)
+    {
+        if (string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
+            artistTags = state.Tags;
+        return Task.CompletedTask;
+    }
+
+    private Task ApplyTaggedTrackState(TagAssignmentState state)
+    {
+        if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase))
+            return Task.CompletedTask;
+
+        var track = topTracks.FirstOrDefault(item => item.id == state.SpotifyItemId);
+        if (track != null)
+            track.tags = state.Tags;
+        return Task.CompletedTask;
+    }
+
     private async Task PlayTrack(string? uri)
     {
         if (string.IsNullOrWhiteSpace(uri)) return;
@@ -297,7 +326,7 @@
     private sealed class ItemStatus { public string SpotifyItemId { get; set; } = string.Empty; public bool IsInLibrary { get; set; } public List<TagBadge> Tags { get; set; } = new(); }
     private sealed class BulkResult { public string albumId { get; set; } = string.Empty; public bool success { get; set; } }
     private sealed class ArtistDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string[] genres { get; set; } = Array.Empty<string>(); public ImgDto[] images { get; set; } = Array.Empty<ImgDto>(); }
-    private sealed class TrackDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? uri { get; set; } public AAlbum? album { get; set; } }
+    private sealed class TrackDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? uri { get; set; } public AAlbum? album { get; set; } public bool isInLibrary { get; set; } public List<TagBadge> tags { get; set; } = new(); }
     private sealed class AAlbum { public string? name { get; set; } public string? release_date { get; set; } public ImgDto[]? images { get; set; } }
     private sealed class AlbumDto { public string id { get; set; } = string.Empty; public string name { get; set; } = string.Empty; public string? release_date { get; set; } public ImgDto[] images { get; set; } = Array.Empty<ImgDto>(); public string? album_type { get; set; } public int total_tracks { get; set; } public bool isInLibrary { get; set; } public List<TagBadge> tags { get; set; } = new(); }
     private sealed class ImgDto { public string url { get; set; } = string.Empty; public int? width { get; set; } public int? height { get; set; } }

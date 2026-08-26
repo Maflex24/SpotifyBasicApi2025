@@ -208,7 +208,7 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrackAndFollowing(t.Id)">▶</button>
                             </div>
                         </td>
-                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name @if (aiAvailable) { <AiContextMenu Items="GetTrackAiMenuItems(t)" AriaLabel="Więcej opcji dla utworu" /> }</span></td>
+                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextMenu Items="@(aiAvailable ? GetTrackAiMenuItems(t) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla utworu" ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" Tags="@((t.Tags ?? new List<TrackTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" IsInLibrary="true" OnTagsChanged="ApplyTaggedTrackState" /></span></td>
                         <td class="trackTd">
                             @foreach (var a in t.Artists)
                             {

@@ -1,6 +1,12 @@
 @inject AiChatDrawerService Drawer
+@inject TagClipboardService TagClipboard
+@inject HttpClient Http
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using System.Net.Http.Json
+@using System.Globalization
+@implements IDisposable
 
-@if (Items.Count > 0)
+@if (CanRender)
 {
     <div class="ai-context-menu @Class">
         <button type="button" class="btn btn-sm album-card-tag ai-context-menu-toggle @ButtonClass" title="@AriaLabel" aria-label="@AriaLabel" aria-haspopup="true" aria-expanded="@isOpen" @onclick="Toggle">
@@ -9,9 +15,25 @@
         @if (isOpen)
         {
             <div class="ai-context-menu-popup @(OpenUpwards ? "ai-context-menu-popup-up" : string.Empty)" role="group" aria-label="@AriaLabel">
+                @if (CanCopy)
+                {
+                    <button type="button" class="ai-context-menu-item" @onclick="CopyTags">Kopiuj tagi</button>
+                }
+                @if (CanPaste)
+                {
+                    <button type="button" class="ai-context-menu-item" disabled="@isPasting" @onclick="PasteTagsAsync">@(isPasting ? "Wklejanie tagów..." : "Wklej tagi")</button>
+                }
                 @foreach (var item in Items)
                 {
                     <button type="button" class="ai-context-menu-item" @onclick="() => OpenAsync(item)">@item.Label</button>
+                }
+                @if (!CanCopy && !CanPaste && Items.Count == 0)
+                {
+                    <span class="ai-context-menu-item text-secondary">Brak tagów do skopiowania.</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(pasteError))
+                {
+                    <span class="ai-context-menu-item text-danger">@pasteError</span>
                 }
             </div>
         }
@@ -24,20 +46,116 @@
     [Parameter] public string Class { get; set; } = string.Empty;
     [Parameter] public string ButtonClass { get; set; } = string.Empty;
     [Parameter] public bool OpenUpwards { get; set; }
+    [Parameter] public string ItemType { get; set; } = string.Empty;
+    [Parameter] public string SpotifyItemId { get; set; } = string.Empty;
+    [Parameter] public string DisplayName { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<TagBadge> Tags { get; set; } = Array.Empty<TagBadge>();
+    [Parameter] public bool IsInLibrary { get; set; }
+    [Parameter] public EventCallback<TagAssignmentState> OnTagsChanged { get; set; }
 
     private bool isOpen;
+    private bool isPasting;
+    private string? pasteError;
+
+    private bool CanManageTags => IsInLibrary && !string.IsNullOrWhiteSpace(ItemType) && !string.IsNullOrWhiteSpace(SpotifyItemId);
+    private bool CanCopy => CanManageTags && Tags.Count > 0;
+    private bool CanPaste => CanManageTags && TagClipboard.CanPasteTo(ItemType, SpotifyItemId, IsInLibrary);
+    private bool CanRender => Items.Count > 0 || CanManageTags;
+
+    protected override void OnInitialized() => TagClipboard.Changed += HandleClipboardChanged;
 
     protected override void OnParametersSet()
     {
-        if (Items.Count == 0)
+        if (!CanRender)
             isOpen = false;
     }
 
-    private void Toggle() => isOpen = !isOpen;
+    private void Toggle()
+    {
+        pasteError = null;
+        isOpen = !isOpen;
+    }
+
+    private void CopyTags()
+    {
+        TagClipboard.Copy(ItemType, SpotifyItemId, DisplayName, Tags);
+        isOpen = false;
+    }
+
+    private async Task PasteTagsAsync()
+    {
+        var source = TagClipboard.Content;
+        if (source is null || !CanPaste)
+            return;
+
+        var tagsSummary = string.Join(Environment.NewLine, source.Tags
+            .OrderBy(tag => tag.TagName, StringComparer.CurrentCultureIgnoreCase)
+            .Select(tag => $"• {tag.TagName} — {tag.Strength.ToString("0.0", CultureInfo.CurrentCulture)}"));
+        var sourceName = string.IsNullOrWhiteSpace(source.DisplayName) ? source.SpotifyItemId : source.DisplayName;
+        var targetName = string.IsNullOrWhiteSpace(DisplayName) ? SpotifyItemId : DisplayName;
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Wkleić tagi z „{sourceName}” do „{targetName}”?{Environment.NewLine}{Environment.NewLine}" +
+            $"Tagi do dodania lub aktualizacji:{Environment.NewLine}{tagsSummary}{Environment.NewLine}{Environment.NewLine}" +
+            "Pozostałe tagi elementu docelowego pozostaną bez zmian.");
+        if (!confirmed)
+            return;
+
+        isPasting = true;
+        pasteError = null;
+        try
+        {
+            var request = new BulkAssignRequest
+            {
+                ItemType = ItemType,
+                SpotifyItemId = SpotifyItemId,
+                Tags = source.Tags.Select(tag => new BulkAssignTag { TagId = tag.TagId, Strength = tag.Strength }).ToList()
+            };
+            var response = await Http.PutAsJsonAsync("api/tags/assign/bulk", request);
+            if (!response.IsSuccessStatusCode)
+            {
+                pasteError = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(pasteError))
+                    pasteError = "Nie udało się wkleić tagów.";
+                return;
+            }
+
+            var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+            if (OnTagsChanged.HasDelegate)
+                await OnTagsChanged.InvokeAsync(new TagAssignmentState { ItemType = ItemType, SpotifyItemId = SpotifyItemId, Tags = tags });
+
+            try { await JS.InvokeVoidAsync("tagSync.notify", ItemType, SpotifyItemId); } catch { }
+            isOpen = false;
+        }
+        catch
+        {
+            pasteError = "Nie udało się wkleić tagów.";
+        }
+        finally
+        {
+            isPasting = false;
+        }
+    }
 
     private async Task OpenAsync(AiContextMenuItem item)
     {
         isOpen = false;
         await Drawer.OpenAsync(item.Context);
+    }
+
+    private void HandleClipboardChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => TagClipboard.Changed -= HandleClipboardChanged;
+
+    private sealed class BulkAssignRequest
+    {
+        public string SpotifyItemId { get; set; } = string.Empty;
+        public string ItemType { get; set; } = string.Empty;
+        public List<BulkAssignTag> Tags { get; set; } = new();
+    }
+
+    private sealed class BulkAssignTag
+    {
+        public long TagId { get; set; }
+        public float Strength { get; set; }
     }
 }

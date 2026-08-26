@@ -391,11 +391,14 @@
                                 <span>@(IsArtistCatalogExpanded(group.Id) ? "Wszystkie" : "Przefiltrowane")</span><strong aria-hidden="true">@(IsArtistCatalogExpanded(group.Id) ? "▲" : "▼")</strong>
                             }
                         </button>
-                        @if (aiAvailable)
-                        {
-                            <AiContextMenu Items="GetArtistAiMenuItems(group.Id, group.Name, IsBlindMode)"
-                                           AriaLabel="Więcej opcji dla wykonawcy" />
-                        }
+                        <AiContextMenu Items="@(aiAvailable ? GetArtistAiMenuItems(group.Id, group.Name, IsBlindMode) : Array.Empty<AiContextMenuItem>())"
+                                       AriaLabel="Więcej opcji dla wykonawcy"
+                                       ItemType="artist"
+                                       SpotifyItemId="@group.Id"
+                                       DisplayName="@(IsBlindMode ? group.Id : group.Name)"
+                                       Tags="@(group.Tags.Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())"
+                                       IsInLibrary="true"
+                                       OnTagsChanged="ApplyTaggedArtistState" />
                     }
                 </header>
                 @if (!IsArtistGroupCollapsed(group.Id))
@@ -2523,12 +2526,15 @@
                                 else { <AppIcon Name="save" /><span>Dodaj do biblioteki</span> }
                             </button>
                         }
-                        @if (aiAvailable)
-                        {
-                            <AiContextMenu Items="GetAlbumAiMenuItems(album)"
-                                           AriaLabel="Więcej opcji dla albumu"
-                                           OpenUpwards="true" />
-                        }
+                        <AiContextMenu Items="@(aiAvailable ? GetAlbumAiMenuItems(album) : Array.Empty<AiContextMenuItem>())"
+                                       AriaLabel="Więcej opcji dla albumu"
+                                       OpenUpwards="true"
+                                       ItemType="album"
+                                       SpotifyItemId="@album.Id"
+                                       DisplayName="@(IsBlindMode ? album.Id : album.Name)"
+                                       Tags="@((album.Tags ?? new List<AlbumTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())"
+                                       IsInLibrary="@album.IsInLibrary"
+                                       OnTagsChanged="ApplyTaggedAlbumState" />
                         <span class="badge bg-secondary" title="Liczba utworów" style="font-size:0.75rem;">@album.TotalTracks</span>
                     </div>
                 </div>

@@ -239,10 +239,15 @@
                                 {
                                     <button class="btn btn-sm album-card-tag" @onclick="() => AddArtistToLibraryAsync(a.Id)"><AppIcon Name="save" /><span>Dodaj do biblioteki</span></button>
                                 }
-                                @if (aiAvailable)
-                                {
-                                    <AiContextMenu Items="GetArtistAiMenuItems(a.Id, a.Name)" AriaLabel="Więcej opcji dla wykonawcy" OpenUpwards="true" />
-                                }
+                                <AiContextMenu Items="@(aiAvailable ? GetArtistAiMenuItems(a.Id, a.Name) : Array.Empty<AiContextMenuItem>())"
+                                               AriaLabel="Więcej opcji dla wykonawcy"
+                                               OpenUpwards="true"
+                                               ItemType="artist"
+                                               SpotifyItemId="@a.Id"
+                                               DisplayName="@a.Name"
+                                               Tags="@((a.Tags ?? new List<ArtistTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())"
+                                               IsInLibrary="@a.IsInLibrary"
+                                               OnTagsChanged="ApplyTaggedArtistState" />
                             </div>
                         </div>
                     </div>

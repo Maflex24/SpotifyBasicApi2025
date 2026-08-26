@@ -210,6 +210,79 @@ namespace SpotifyBasicApi2025.Controllers
             return NoContent();
         }
 
+        [HttpPut("assign/bulk")]
+        public async Task<IActionResult> MergeAssigns([FromBody] BulkTagAssignModel model)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (userId is null)
+                return StatusCode(403);
+
+            var itemType = model.ItemType?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(model.SpotifyItemId)
+                || itemType is not ("artist" or "album" or "track" or "playlist")
+                || model.Tags is null
+                || model.Tags.Count == 0
+                || model.Tags.Any(tag => tag.TagId <= 0 || float.IsNaN(tag.Strength) || float.IsInfinity(tag.Strength))
+                || model.Tags.Select(tag => tag.TagId).Distinct().Count() != model.Tags.Count)
+                return BadRequest("Nieprawidłowe dane przypisań tagów.");
+
+            var tagIds = model.Tags.Select(tag => tag.TagId).ToList();
+            var ownedTagIds = await dbContext.LibTags
+                .Where(tag => tagIds.Contains(tag.Id) && tag.TagGroup.UserId == userId)
+                .Select(tag => tag.Id)
+                .ToListAsync();
+
+            if (ownedTagIds.Count != tagIds.Count)
+                return BadRequest("Co najmniej jeden tag nie istnieje lub nie należy do użytkownika.");
+
+            var existing = await dbContext.LibTagAssigns
+                .Where(assign => assign.UserId == userId
+                    && assign.ItemType == itemType
+                    && assign.SpotifyItemId == model.SpotifyItemId
+                    && tagIds.Contains(assign.TagId))
+                .ToDictionaryAsync(assign => assign.TagId);
+
+            var now = DateTime.UtcNow;
+            foreach (var tag in model.Tags)
+            {
+                var strength = Math.Clamp(tag.Strength, 0.0f, 6.0f);
+                if (existing.TryGetValue(tag.TagId, out var assign))
+                {
+                    assign.Strength = strength;
+                    assign.UpdatedAt = now;
+                    continue;
+                }
+
+                dbContext.LibTagAssigns.Add(new LibTagAssign
+                {
+                    TagId = tag.TagId,
+                    UserId = userId,
+                    SpotifyItemId = model.SpotifyItemId,
+                    ItemType = itemType,
+                    Strength = strength,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+
+            await dbContext.SaveChangesAsync();
+
+            var result = await dbContext.LibTagAssigns
+                .AsNoTracking()
+                .Where(assign => assign.UserId == userId && assign.ItemType == itemType && assign.SpotifyItemId == model.SpotifyItemId)
+                .OrderBy(assign => assign.Tag.Name)
+                .Select(assign => new TagAssignmentStateModel
+                {
+                    TagId = assign.TagId,
+                    TagName = assign.Tag.Name,
+                    TagGroupName = assign.Tag.TagGroup.Name,
+                    Strength = assign.Strength
+                })
+                .ToListAsync();
+
+            return Ok(result);
+        }
+
         [HttpDelete("assign")]
         public async Task<IActionResult> RemoveAssign([FromBody] TagAssignModel model)
         {
