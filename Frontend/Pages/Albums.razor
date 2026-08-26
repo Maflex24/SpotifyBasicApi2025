@@ -3099,10 +3099,10 @@
 
         @if (!IsBlindMode)
         {
-            <div class="related-artists-search">
+            <form class="related-artists-search" @onsubmit="SearchRelatedArtistsFallbackAsync" @onsubmit:preventDefault>
                 <input class="form-control" placeholder="Wyszukaj wykonawcę w katalogu Spotify..." @bind="relatedArtistSearch" @bind:event="oninput" disabled="@isLoadingRelatedArtists" />
-                <button type="button" class="btn btn-outline-light" disabled="@(isLoadingRelatedArtists || string.IsNullOrWhiteSpace(relatedArtistSearch))" @onclick="SearchRelatedArtistsFallbackAsync">Szukaj</button>
-            </div>
+                <button type="submit" class="btn btn-outline-light" disabled="@(isLoadingRelatedArtists || string.IsNullOrWhiteSpace(relatedArtistSearch))">Szukaj</button>
+            </form>
         }
 
         @if (isLoadingRelatedArtists)
