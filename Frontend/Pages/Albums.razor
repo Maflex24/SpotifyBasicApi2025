@@ -376,6 +376,21 @@
                         <button type="button" class="btn btn-sm album-card-tag" title="Taguj artystę" aria-label="Taguj artystę: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistTagging(group.Id)"><AppIcon Name="tag" /><span>Taguj</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę artysty" aria-label="Edytuj notatkę artysty: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenArtistNote(group)"><AppIcon Name="edit" /><span>Notatka</span></button>
                         <button type="button" class="btn btn-sm album-card-tag" title="Pokaż podobnych wykonawców" aria-label="Pokaż podobnych wykonawców: @(IsBlindMode ? group.Id : group.Name)" @onclick="() => OpenRelatedArtistsAsync(group)"><AppIcon Name="filters" /><span>Podobni</span></button>
+                        <button type="button" class="btn btn-sm album-card-tag album-artist-catalog-toggle"
+                                title="@(IsArtistCatalogExpanded(group.Id) ? "Pokaż tylko przefiltrowane albumy" : "Pobierz wszystkie albumy wykonawcy")"
+                                aria-label="@(IsArtistCatalogExpanded(group.Id) ? "Pokaż tylko przefiltrowane albumy wykonawcy" : "Pobierz wszystkie albumy wykonawcy")"
+                                aria-pressed="@IsArtistCatalogExpanded(group.Id)"
+                                disabled="@isLoadingArtistCatalogIds.Contains(group.Id)"
+                                @onclick="() => ToggleArtistCatalogAsync(group.Id)">
+                            @if (isLoadingArtistCatalogIds.Contains(group.Id))
+                            {
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Wczytywanie</span>
+                            }
+                            else
+                            {
+                                <span>@(IsArtistCatalogExpanded(group.Id) ? "Wszystkie" : "Przefiltrowane")</span><strong aria-hidden="true">@(IsArtistCatalogExpanded(group.Id) ? "▲" : "▼")</strong>
+                            }
+                        </button>
                         @if (aiAvailable)
                         {
                             <AiContextMenu Items="GetArtistAiMenuItems(group.Id, group.Name, IsBlindMode)"
@@ -385,10 +400,14 @@
                 </header>
                 @if (!IsArtistGroupCollapsed(group.Id))
                 {
+                    @if (artistCatalogErrors.TryGetValue(group.Id, out var catalogError))
+                    {
+                        <p class="text-danger small mb-2" role="status">@catalogError</p>
+                    }
                     <div class="library-card-grid">
                         @foreach (var album in group.Albums)
                         {
-                            @RenderAlbumCard(album)
+                            @RenderAlbumCard(album, IsArtistCatalogExpanded(group.Id) && filteredAlbums.Any(item => item.Id == album.Id))
                         }
                     </div>
                 }
@@ -518,6 +537,11 @@
     private string RelatedArtistsTitle => $"Fani lubią też: {relatedSourceArtistName}";
     private List<TagItem> artistTagItems = new();
     private readonly HashSet<string> collapsedArtistGroupIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> expandedArtistCatalogIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> isLoadingArtistCatalogIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<Album>> artistCatalogAlbumsByArtistId = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> artistCatalogErrors = new(StringComparer.Ordinal);
+    private readonly HashSet<string> addingCatalogAlbumIds = new(StringComparer.Ordinal);
     private Dictionary<long, int> tagCounts = new();
     private int? fromYear = null;
     private int? toYear = null;
@@ -582,7 +606,7 @@
 
     private void HandleActiveAlbumTagsChanged(string albumId, IReadOnlyList<TagBadge> tags)
     {
-        foreach (var album in albums.Where(album => string.Equals(album.Id, albumId, StringComparison.Ordinal)))
+        foreach (var album in GetLoadedAlbumsById(albumId))
         {
             album.Tags = tags.Select(tag => new AlbumTag
             {
@@ -598,7 +622,7 @@
 
     private void HandleActiveAlbumNoteChanged(string albumId, string? content)
     {
-        foreach (var album in albums.Where(album => string.Equals(album.Id, albumId, StringComparison.Ordinal)))
+        foreach (var album in GetLoadedAlbumsById(albumId))
             album.Note = content;
 
         _ = InvokeAsync(StateHasChanged);
@@ -798,7 +822,10 @@
     {
         var filters = CaptureCurrentFilters();
         if (await LoadAlbumsAsync(filters))
+        {
             appliedFilters = filters;
+            await RefreshExpandedArtistCatalogsAsync();
+        }
     }
 
     private async Task ReloadAppliedAlbumsAsync()
@@ -806,6 +833,8 @@
         var filters = appliedFilters ?? CaptureCurrentFilters();
         if (await LoadAlbumsAsync(filters) && appliedFilters is null)
             appliedFilters = filters;
+
+        await RefreshExpandedArtistCatalogsAsync();
     }
 
     private async Task<bool> LoadAlbumsAsync(AlbumFilterSnapshot filters, bool reset = true)
@@ -835,6 +864,8 @@
         if (reset)
         {
             albums = received;
+            artistCatalogAlbumsByArtistId.Clear();
+            artistCatalogErrors.Clear();
         }
         else
         {
@@ -1021,6 +1052,7 @@
         collapsedArtistGroupIds.Clear();
         if (state.collapsedArtistGroupIds != null)
             collapsedArtistGroupIds.UnionWith(state.collapsedArtistGroupIds);
+        expandedArtistCatalogIds.Clear();
         fromYear = state.fromYear;
         toYear = state.toYear;
 
@@ -1244,7 +1276,7 @@
     {
         var content = string.IsNullOrWhiteSpace(state.Content) ? null : state.Content;
         if (string.Equals(state.ItemType, "album", StringComparison.OrdinalIgnoreCase))
-            albums.Where(album => album.Id == state.SpotifyItemId).ToList().ForEach(album => album.Note = content);
+            GetLoadedAlbumsById(state.SpotifyItemId).ToList().ForEach(album => album.Note = content);
         else if (string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
             albums.SelectMany(album => album.Artists).Where(artist => artist.Id == state.SpotifyItemId).ToList().ForEach(artist => artist.Note = content);
         else
@@ -1493,9 +1525,12 @@
         if (!string.Equals(state.ItemType, "album", StringComparison.OrdinalIgnoreCase))
             return;
 
-        var album = albums.FirstOrDefault(item => item.Id == state.SpotifyItemId);
+        var album = FindLoadedAlbum(state.SpotifyItemId);
         if (album == null)
             return;
+
+        var isCatalogOnlyAlbum = !albums.Any(item => item.Id == state.SpotifyItemId)
+            && artistCatalogAlbumsByArtistId.Values.Any(items => items.Any(item => item.Id == state.SpotifyItemId));
 
         var previousTagIds = album.Tags.Select(tag => tag.TagId).ToHashSet();
         album.Tags = state.Tags.Select(tag => new AlbumTag
@@ -1505,6 +1540,12 @@
             TagGroupName = tag.TagGroupName,
             Strength = tag.Strength
         }).ToList();
+
+        if (isCatalogOnlyAlbum)
+        {
+            await ReloadAppliedAlbumsAsync();
+            return;
+        }
 
         var filters = appliedFilters ?? CaptureCurrentFilters();
         if (filters.IncludeArtistTags)
@@ -1692,6 +1733,9 @@
         excludeGenres.Clear();
         includeArtistTags = false;
         collapsedArtistGroupIds.Clear();
+        expandedArtistCatalogIds.Clear();
+        artistCatalogAlbumsByArtistId.Clear();
+        artistCatalogErrors.Clear();
         localSearch = null;
         includeTagIds.Clear();
         excludeTagIds.Clear();
@@ -1918,6 +1962,7 @@
         public List<AlbumTag> Tags { get; set; } = new();
         public List<SimpleArtist> Artists { get; set; } = new();
         public string? Note { get; set; }
+        public bool IsInLibrary { get; set; } = true;
     }
 
     private sealed class ArtistAlbumGroup
@@ -2027,6 +2072,17 @@
 
         foreach (var group in groups.Values)
         {
+            if (!string.IsNullOrWhiteSpace(group.Id)
+                && IsArtistCatalogExpanded(group.Id)
+                && artistCatalogAlbumsByArtistId.TryGetValue(group.Id, out var catalogAlbums))
+            {
+                group.Albums = group.Albums
+                    .Concat(catalogAlbums)
+                    .GroupBy(album => album.Id, StringComparer.Ordinal)
+                    .Select(albumGroup => albumGroup.First())
+                    .ToList();
+            }
+
             group.Albums = group.Albums
                 .GroupBy(album => album.Id, StringComparer.Ordinal)
                 .Select(albumGroup => albumGroup.First())
@@ -2060,11 +2116,121 @@
         }
     }
 
+    private bool IsArtistCatalogExpanded(string artistId) => !string.IsNullOrWhiteSpace(artistId) && expandedArtistCatalogIds.Contains(artistId);
+
+    private async Task ToggleArtistCatalogAsync(string artistId)
+    {
+        if (string.IsNullOrWhiteSpace(artistId) || isLoadingArtistCatalogIds.Contains(artistId))
+            return;
+
+        artistCatalogErrors.Remove(artistId);
+        if (expandedArtistCatalogIds.Remove(artistId))
+        {
+            await SaveToStore();
+            return;
+        }
+
+        if (await LoadArtistCatalogAsync(artistId))
+        {
+            expandedArtistCatalogIds.Add(artistId);
+            await SaveToStore();
+        }
+    }
+
+    private async Task RefreshExpandedArtistCatalogsAsync()
+    {
+        var availableIds = GetArtistAlbumGroups().Select(group => group.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var artistId in expandedArtistCatalogIds.Where(availableIds.Contains).ToList())
+            await LoadArtistCatalogAsync(artistId);
+    }
+
+    private async Task<bool> LoadArtistCatalogAsync(string artistId)
+    {
+        if (!isLoadingArtistCatalogIds.Add(artistId))
+            return false;
+
+        artistCatalogErrors.Remove(artistId);
+        try
+        {
+            var filters = appliedFilters ?? CaptureCurrentFilters();
+            var query = BuildArtistCatalogQuery(filters);
+            var response = await Http.GetAsync($"api/library/albums/catalog/{Uri.EscapeDataString(artistId)}?{string.Join('&', query)}");
+            if (!response.IsSuccessStatusCode)
+            {
+                artistCatalogErrors[artistId] = "Nie udało się pobrać pełnej dyskografii wykonawcy.";
+                return false;
+            }
+
+            artistCatalogAlbumsByArtistId[artistId] = await response.Content.ReadFromJsonAsync<List<Album>>() ?? new List<Album>();
+            return true;
+        }
+        catch
+        {
+            artistCatalogErrors[artistId] = "Nie udało się pobrać pełnej dyskografii wykonawcy.";
+            return false;
+        }
+        finally
+        {
+            isLoadingArtistCatalogIds.Remove(artistId);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static List<string> BuildArtistCatalogQuery(AlbumFilterSnapshot filters)
+    {
+        var query = new List<string>();
+        if (filters.ExcludeArtistIds.Length > 0)
+            query.Add($"excludeArtists={string.Join(',', filters.ExcludeArtistIds.Select(Uri.EscapeDataString))}");
+        if (filters.ExcludeGenres.Length > 0)
+            query.Add($"excludeGenres={string.Join(',', filters.ExcludeGenres.Select(Uri.EscapeDataString))}");
+        if (filters.ExcludeTagIds.Length > 0)
+        {
+            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+            query.Add($"excludeMode={filters.ExcludeMode}");
+            var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
+            if (!string.IsNullOrEmpty(strengths))
+                query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
+        }
+        if (filters.IncludeArtistTags)
+            query.Add("includeArtistTags=true");
+        return query;
+    }
+
+    private async Task AddCatalogAlbumToLibraryAsync(Album album)
+    {
+        if (album.IsInLibrary || !addingCatalogAlbumIds.Add(album.Id))
+            return;
+
+        try
+        {
+            var response = await Http.PostAsync($"api/library/albums/{Uri.EscapeDataString(album.Id)}", null);
+            var result = response.IsSuccessStatusCode
+                ? await response.Content.ReadFromJsonAsync<AlbumLibraryChangeResponse>()
+                : null;
+            if (result?.added != true)
+            {
+                var sourceArtistId = artistCatalogAlbumsByArtistId.FirstOrDefault(pair => pair.Value.Any(item => item.Id == album.Id)).Key;
+                artistCatalogErrors[sourceArtistId ?? string.Empty] = "Nie udało się dodać albumu do biblioteki.";
+                return;
+            }
+
+            album.IsInLibrary = true;
+        }
+        finally
+        {
+            addingCatalogAlbumIds.Remove(album.Id);
+        }
+    }
+
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
 
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class TopTracksResponse { public List<TopTrackItem> Items { get; set; } = new(); }
+    private sealed class AlbumLibraryChangeResponse { public bool added { get; set; } }
     private sealed class TopTrackItem { public string Uri { get; set; } = string.Empty; }
 
     
@@ -2094,6 +2260,7 @@
             showArtistFilters,
             showGenreFilters,
             collapsedArtistGroupIds = collapsedArtistGroupIds.ToArray(),
+            expandedArtistCatalogIds = expandedArtistCatalogIds.ToArray(),
             fromYear,
             toYear,
             isRandomSelection,
@@ -2137,6 +2304,8 @@
         showGenreFilters = state.showGenreFilters ?? showGenreFilters;
         if (state.collapsedArtistGroupIds != null)
             collapsedArtistGroupIds.UnionWith(state.collapsedArtistGroupIds);
+        if (state.expandedArtistCatalogIds != null)
+            expandedArtistCatalogIds.UnionWith(state.expandedArtistCatalogIds);
         isRandomSelection = state.isRandomSelection ?? false;
         randomSourceSearch = state.randomSourceSearch;
         randomAlbumId = state.randomAlbumId;
@@ -2166,6 +2335,7 @@
         public bool? showArtistFilters { get; set; }
         public bool? showGenreFilters { get; set; }
         public string[]? collapsedArtistGroupIds { get; set; }
+        public string[]? expandedArtistCatalogIds { get; set; }
         public int? fromYear { get; set; }
         public int? toYear { get; set; }
         public bool? isRandomSelection { get; set; }
@@ -2197,7 +2367,7 @@
         revealedBlindFields.Add(new BlindRevealKey(album.Id, field, artistId));
     }
 
-    private RenderFragment RenderAlbumCard(Album album) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty) @(IsLocallyRandomAlbum(album.Id) ? "is-locally-random-album" : string.Empty) @(HasDirectAlbumTagMatch(album) ? "has-direct-album-tag-match" : string.Empty)" data-album-card-id="@album.Id">
+    private RenderFragment RenderAlbumCard(Album album, bool isFilteredResultInExpandedCatalog = false) => @<div class="library-card-grid-item @(IsPlayingAlbum(album.Id) ? "is-playing-blind-album" : string.Empty) @(IsLocallyRandomAlbum(album.Id) ? "is-locally-random-album" : string.Empty) @(HasDirectAlbumTagMatch(album) ? "has-direct-album-tag-match" : string.Empty) @(isFilteredResultInExpandedCatalog ? "has-filtered-album-match" : string.Empty)" data-album-card-id="@album.Id">
         <div class="card bg-dark text-light h-100">
             @if (IsBlindMode)
             {
@@ -2221,10 +2391,13 @@
                             @onclick="() => PlayAlbum(album.Id, album.Uri)"><AppIcon Name="play" /></button>
                     <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Id"
                             disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
-                    <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Id"
-                            @onclick="() => OpenAlbumNote(album)"><AppIcon Name="edit" /></button>
-                    <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Id"
-                            @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
+                    @if (album.IsInLibrary)
+                    {
+                        <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Id"
+                                @onclick="() => OpenAlbumNote(album)"><AppIcon Name="edit" /></button>
+                        <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Id"
+                                @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
+                    }
                 </div>
             }
             else if (album.Images?.Any() == true)
@@ -2235,10 +2408,13 @@
                             @onclick="() => PlayAlbum(album.Id, album.Uri)"><AppIcon Name="play" /></button>
                     <button class="artist-queue-overlay album-card-queue" title="Dodaj album na koniec kolejki" aria-label="Dodaj album do kolejki: @album.Name"
                             disabled="@queuingAlbumIds.Contains(album.Id)" @onclick="() => QueueAlbum(album.Id)"><AppIcon Name="queue" /></button>
-                    <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Name"
-                            @onclick="() => OpenAlbumNote(album)"><AppIcon Name="edit" /></button>
-                    <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Name"
-                            @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
+                    @if (album.IsInLibrary)
+                    {
+                        <button class="artist-queue-overlay album-card-note" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @album.Name"
+                                @onclick="() => OpenAlbumNote(album)"><AppIcon Name="edit" /></button>
+                        <button class="album-card-delete" title="Usuń z biblioteki" aria-label="Usuń album z biblioteki: @album.Name"
+                                @onclick="() => ConfirmRemoveAlbum(album.Id)"><AppIcon Name="delete" /></button>
+                    }
                 </div>
             }
             <div class="card-body">
@@ -2328,12 +2504,23 @@
 
                 <div class="mt-2">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumTagging(album.Id)">
-                            <AppIcon Name="tag" /><span>Taguj</span>
-                        </button>
-                        <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumNote(album)">
-                            <AppIcon Name="edit" /><span>Notatka</span>
-                        </button>
+                        @if (album.IsInLibrary)
+                        {
+                            <button class="btn btn-sm album-card-tag" title="Zarządzaj tagami albumu" aria-label="Taguj album: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumTagging(album.Id)">
+                                <AppIcon Name="tag" /><span>Taguj</span>
+                            </button>
+                            <button class="btn btn-sm album-card-tag" title="Edytuj prywatną notatkę" aria-label="Edytuj notatkę albumu: @(IsBlindMode ? album.Id : album.Name)" @onclick="() => OpenAlbumNote(album)">
+                                <AppIcon Name="edit" /><span>Notatka</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm album-card-tag" title="Dodaj album do biblioteki Spotify i aplikacji" aria-label="Dodaj album do biblioteki: @(IsBlindMode ? album.Id : album.Name)"
+                                    disabled="@addingCatalogAlbumIds.Contains(album.Id)" @onclick="() => AddCatalogAlbumToLibraryAsync(album)">
+                                @if (addingCatalogAlbumIds.Contains(album.Id)) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Dodawanie</span> }
+                                else { <AppIcon Name="save" /><span>Dodaj do biblioteki</span> }
+                            </button>
+                        }
                         @if (aiAvailable)
                         {
                             <AiContextMenu Items="GetAlbumAiMenuItems(album)"
@@ -2360,6 +2547,12 @@
 
         return ordered.FirstOrDefault()?.Url ?? images.FirstOrDefault()?.Url;
     }
+
+    private Album? FindLoadedAlbum(string albumId) => GetLoadedAlbumsById(albumId).FirstOrDefault();
+
+    private IEnumerable<Album> GetLoadedAlbumsById(string albumId) => albums
+        .Concat(artistCatalogAlbumsByArtistId.Values.SelectMany(items => items))
+        .Where(album => string.Equals(album.Id, albumId, StringComparison.Ordinal));
 
     private void SelectAlbumTag(string albumId, long tagId)
     {
@@ -2862,7 +3055,7 @@
                              ItemType="album"
                              SpotifyItemId="@taggingAlbumId"
                              Items="albumTagItems"
-                             Tags="@(albums.FirstOrDefault(x => x.Id == taggingAlbumId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                             Tags="@(FindLoadedAlbum(taggingAlbumId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
                              Placeholder="Taguj album..."
                              OnChanged="ApplyTaggedAlbumState"
                              OnClose="CloseAlbumTagging" />

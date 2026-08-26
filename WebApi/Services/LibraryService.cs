@@ -1918,6 +1918,157 @@ namespace SpotifyBasicApi2025.Services
             return new { TotalRows = totalRows, total = totalRows, page, pageSize, items = albumModels };
         }
 
+        public async Task<List<object>> GetArtistAlbumCatalogAsync(
+            string artistId,
+            string? excludeArtists = null,
+            string? excludeTags = null,
+            string? excludeMode = null,
+            string? excludeTagStrengths = null,
+            string? excludeGenres = null,
+            bool includeArtistTags = false)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+                throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var normalizedArtistId = artistId?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedArtistId))
+                throw new ArgumentException("Id wykonawcy jest wymagane.");
+
+            var spotifyAlbums = (await spotifyApiService.GetArtistAlbumsAsync(normalizedArtistId, includeGroups: "album"))
+                .Where(album => !string.IsNullOrWhiteSpace(album.Id))
+                .GroupBy(album => album.Id, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList();
+
+            if (spotifyAlbums.Count == 0)
+                return new List<object>();
+
+            var albumIds = spotifyAlbums.Select(album => album.Id).ToList();
+            var artistIds = spotifyAlbums.SelectMany(album => album.Artists)
+                .Select(artist => artist.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var libraryAlbumIds = (await context.LibAlbumUserAssigns.AsNoTracking()
+                .Where(assign => assign.UserId == userId && albumIds.Contains(assign.AlbumId))
+                .Select(assign => assign.AlbumId)
+                .ToListAsync())
+                .ToHashSet(StringComparer.Ordinal);
+
+            var albumTagRows = await context.LibTagAssigns.AsNoTracking()
+                .Where(assign => assign.UserId == userId && assign.ItemType == "album" && albumIds.Contains(assign.SpotifyItemId))
+                .Select(assign => new { assign.SpotifyItemId, assign.TagId, assign.Strength, TagName = assign.Tag.Name, TagGroupName = assign.Tag.TagGroup.Name })
+                .ToListAsync();
+            var albumTagsById = albumTagRows.GroupBy(row => row.SpotifyItemId).ToDictionary(group => group.Key, group => group.Select(row => new AlbumTagModel
+            {
+                TagId = row.TagId,
+                TagName = row.TagName,
+                TagGroupName = row.TagGroupName,
+                Strength = row.Strength
+            }).ToList());
+
+            var artistTagRows = await context.LibTagAssigns.AsNoTracking()
+                .Where(assign => assign.UserId == userId && assign.ItemType == "artist" && artistIds.Contains(assign.SpotifyItemId))
+                .Select(assign => new { assign.SpotifyItemId, assign.TagId, assign.Strength, TagName = assign.Tag.Name, TagGroupName = assign.Tag.TagGroup.Name })
+                .ToListAsync();
+            var artistTagsById = artistTagRows.GroupBy(row => row.SpotifyItemId).ToDictionary(group => group.Key, group => group.Select(row => new ArtistTagModel
+            {
+                TagId = row.TagId,
+                TagName = row.TagName,
+                TagGroupName = row.TagGroupName,
+                Strength = row.Strength
+            }).ToList());
+
+            var notesByAlbum = await context.LibItemNotes.AsNoTracking()
+                .Where(note => note.UserId == userId && note.ItemType == "album" && albumIds.Contains(note.SpotifyItemId))
+                .ToDictionaryAsync(note => note.SpotifyItemId, note => note.Content);
+            var notesByArtist = await context.LibItemNotes.AsNoTracking()
+                .Where(note => note.UserId == userId && note.ItemType == "artist" && artistIds.Contains(note.SpotifyItemId))
+                .ToDictionaryAsync(note => note.SpotifyItemId, note => note.Content);
+
+            var storedGenresByArtist = await context.SpArtists.AsNoTracking()
+                .Where(artist => artistIds.Contains(artist.Id))
+                .Select(artist => new { artist.Id, artist.Genres })
+                .ToDictionaryAsync(artist => artist.Id, artist => ParseGenres(artist.Genres), StringComparer.Ordinal);
+
+            var missingGenreArtistIds = artistIds.Where(id => !storedGenresByArtist.TryGetValue(id, out var genres) || genres.Count == 0).ToList();
+            var spotifyArtists = await Task.WhenAll(missingGenreArtistIds.Select(async id =>
+            {
+                try { return await spotifyApiService.GetArtist(id); }
+                catch { return null; }
+            }));
+            foreach (var artist in spotifyArtists.Where(artist => artist is not null))
+                storedGenresByArtist[artist!.Id] = artist.Genres;
+
+            var excludedArtistIds = ParseSpotifyIds(excludeArtists).ToHashSet(StringComparer.Ordinal);
+            var excludedTagIds = ParseTagIds(excludeTags);
+            var excludedTagRules = ParseTagStrengthRules(excludeTagStrengths, excludedTagIds, "excludeTagStrengths");
+            var excludedGenresSet = ParseGenres(excludeGenres).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            bool TagMatches(long tagId, float strength, long expectedTagId) => tagId == expectedTagId
+                && (!excludedTagRules.TryGetValue(expectedTagId, out var rule)
+                    || rule.Operator == "gte" && strength >= rule.Value
+                    || rule.Operator == "lte" && strength <= rule.Value);
+
+            bool HasExcludedTags(IEnumerable<(long TagId, float Strength)> tags)
+            {
+                if (excludedTagIds.Count == 0)
+                    return false;
+
+                var tagList = tags.ToList();
+                return string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase)
+                    ? excludedTagIds.All(tagId => tagList.Any(tag => TagMatches(tag.TagId, tag.Strength, tagId)))
+                    : excludedTagIds.Any(tagId => tagList.Any(tag => TagMatches(tag.TagId, tag.Strength, tagId)));
+            }
+
+            var catalog = new List<object>();
+            foreach (var spotifyAlbum in spotifyAlbums)
+            {
+                var albumArtistIds = spotifyAlbum.Artists.Select(artist => artist.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
+                if (albumArtistIds.Any(excludedArtistIds.Contains))
+                    continue;
+
+                var allGenres = albumArtistIds.SelectMany(id => storedGenresByArtist.GetValueOrDefault(id, new List<string>()));
+                if (excludedGenresSet.Count > 0 && allGenres.Any(excludedGenresSet.Contains))
+                    continue;
+
+                var albumTags = albumTagsById.GetValueOrDefault(spotifyAlbum.Id, new List<AlbumTagModel>());
+                var tagSources = albumTags.Select(tag => (tag.TagId, tag.Strength));
+                if (includeArtistTags)
+                    tagSources = tagSources.Concat(albumArtistIds.SelectMany(id => artistTagsById.GetValueOrDefault(id, new List<ArtistTagModel>())).Select(tag => (tag.TagId, tag.Strength)));
+                if (HasExcludedTags(tagSources))
+                    continue;
+
+                catalog.Add(new
+                {
+                    spotifyAlbum.Id,
+                    spotifyAlbum.Name,
+                    spotifyAlbum.Uri,
+                    AlbumType = spotifyAlbum.AlbumType,
+                    spotifyAlbum.TotalTracks,
+                    spotifyAlbum.Popularity,
+                    ReleaseDate = spotifyAlbum.ReleaseDate,
+                    ReleaseYear = GetReleaseYear(spotifyAlbum.ReleaseDate),
+                    Images = spotifyAlbum.Images.Select(image => new SpotifyImage { Url = image.Url, Height = image.Height, Width = image.Width }).ToList(),
+                    Tags = albumTags,
+                    Note = notesByAlbum.GetValueOrDefault(spotifyAlbum.Id),
+                    IsInLibrary = libraryAlbumIds.Contains(spotifyAlbum.Id),
+                    Artists = spotifyAlbum.Artists.Select(artist => new SimpleArtist
+                    {
+                        Id = artist.Id,
+                        Name = artist.Name,
+                        Genres = storedGenresByArtist.GetValueOrDefault(artist.Id, new List<string>()),
+                        Tags = artistTagsById.GetValueOrDefault(artist.Id, new List<ArtistTagModel>()),
+                        Note = notesByArtist.GetValueOrDefault(artist.Id)
+                    }).ToList()
+                });
+            }
+
+            return catalog;
+        }
+
         public async Task<List<object>> GetAlbumTagCountsAsync(
             string? tags = null,
             string? artistId = null,
