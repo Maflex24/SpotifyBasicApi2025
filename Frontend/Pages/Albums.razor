@@ -438,7 +438,7 @@
 
 @if (!IsBlindMode && artistAlbumGroups.Count > 0)
 {
-    <nav class="album-artist-index @(artistNavigationPanelExpanded ? "is-expanded" : string.Empty)" aria-label="Indeks wykonawców">
+    <nav class="album-artist-index @(artistNavigationPanelExpanded ? "is-expanded" : string.Empty)" @ref="artistNavigationIndex" aria-label="Indeks wykonawców">
         @if (artistNavigationPanelExpanded)
         {
             <section id="album-artist-index-panel" class="album-artist-index-panel" aria-label="Wykonawcy w wynikach">
@@ -535,8 +535,10 @@
     private string? genreSearch;
     private ElementReference controlsSentinel;
     private ElementReference albumsSentinel;
+    private ElementReference artistNavigationIndex;
     private DotNetObjectReference<Albums>? controlsObserverRef;
     private bool artistNavigationObserved;
+    private bool artistNavigationIndexOutsideClickObserved;
     private bool canNavigateToPreviousArtist;
     private bool canNavigateToNextArtist;
     private bool artistNavigationPanelExpanded;
@@ -692,6 +694,25 @@
             canNavigateToNextArtist = false;
         }
 
+        var shouldObserveArtistNavigationIndexOutsideClick = artistNavigationPanelExpanded
+            && !IsBlindMode
+            && IsArtistGroupingEnabled
+            && GetArtistAlbumGroups().Count > 0
+            && controlsObserverRef != null;
+        if (shouldObserveArtistNavigationIndexOutsideClick)
+        {
+            if (!artistNavigationIndexOutsideClickObserved)
+            {
+                await JS.InvokeVoidAsync("albumsArtistIndex.observeOutsideClick", artistNavigationIndex, controlsObserverRef);
+                artistNavigationIndexOutsideClickObserved = true;
+            }
+        }
+        else if (artistNavigationIndexOutsideClickObserved)
+        {
+            await JS.InvokeVoidAsync("albumsArtistIndex.disconnectOutsideClick");
+            artistNavigationIndexOutsideClickObserved = false;
+        }
+
         if (!string.IsNullOrWhiteSpace(pendingAlbumScrollId))
         {
             var albumId = pendingAlbumScrollId;
@@ -756,6 +777,16 @@
 
     private void ToggleArtistNavigationPanel() => artistNavigationPanelExpanded = !artistNavigationPanelExpanded;
 
+    [JSInvokable]
+    public Task CloseArtistNavigationPanel()
+    {
+        if (!artistNavigationPanelExpanded)
+            return Task.CompletedTask;
+
+        artistNavigationPanelExpanded = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
     private async Task NavigateToArtistGroupAsync(ArtistAlbumGroup group)
     {
         if (string.IsNullOrWhiteSpace(group.NavigationId))
@@ -785,6 +816,7 @@
             await JS.InvokeVoidAsync("libraryControls.disconnect");
             await JS.InvokeVoidAsync("infiniteScroll.disconnect");
             await JS.InvokeVoidAsync("albumsArtistNavigation.disconnect");
+            await JS.InvokeVoidAsync("albumsArtistIndex.disconnectOutsideClick");
         }
         catch (JSDisconnectedException)
         {
