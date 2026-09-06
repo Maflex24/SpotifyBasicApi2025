@@ -395,6 +395,10 @@ button.tag-preview-tag {
     text-align: left;
 }
 
+.album-artist-index-item-letter-start {
+    margin-top: 1.5rem;
+}
+
 .album-artist-index-name {
     min-width: 0;
     flex: 1 1 auto;

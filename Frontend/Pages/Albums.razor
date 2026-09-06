@@ -444,9 +444,13 @@
             <section id="album-artist-index-panel" class="album-artist-index-panel" aria-label="Wykonawcy w wynikach">
                 <h2 class="album-artist-index-heading">Wykonawcy</h2>
                 <div class="album-artist-index-list">
+                    @{ string? previousArtistGroupName = null; }
                     @foreach (var group in GetArtistNavigationGroups())
                     {
-                        <button type="button" class="album-artist-index-item" title="Przejdź do wykonawcy: @group.Name" aria-label="Przejdź do wykonawcy: @group.Name" @onclick="() => NavigateToArtistGroupAsync(group)">
+                        var artistGroupName = GetArtistGroupName(group.Name);
+                        var isFirstArtistInGroup = previousArtistGroupName != null && !string.Equals(previousArtistGroupName, artistGroupName, StringComparison.Ordinal);
+                        previousArtistGroupName = artistGroupName;
+                        <button type="button" class="album-artist-index-item @(isFirstArtistInGroup ? "album-artist-index-item-letter-start" : string.Empty)" title="Przejdź do wykonawcy: @group.Name" aria-label="Przejdź do wykonawcy: @group.Name" @onclick="() => NavigateToArtistGroupAsync(group)">
                             <span class="album-artist-index-name">@group.Name</span>
                             <span class="album-artist-index-count" aria-label="@($"{group.Albums.Count} albumów")">@group.Albums.Count</span>
                         </button>
