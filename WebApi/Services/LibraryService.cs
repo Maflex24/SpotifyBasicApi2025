@@ -722,11 +722,19 @@ namespace SpotifyBasicApi2025.Services
                         continue;
                     }
 
-                    var albumIds = (await spotifyApiService.GetArtistAlbumsAsync(artistId, includeGroups: "album"))
+                    var albumIds = (await spotifyApiService.GetArtistAlbumsAsync(artistId, includeGroups: "album", market: "from_token"))
                         .Select(album => album.Id)
                         .Where(albumId => !string.IsNullOrWhiteSpace(albumId))
                         .Distinct(StringComparer.Ordinal)
                         .ToList();
+                    result.AlbumsFound = albumIds.Count;
+
+                    if (albumIds.Count == 0)
+                    {
+                        result.Error = "Spotify nie udostępniło albumów studyjnych tego wykonawcy dla bieżącego konta.";
+                        results.Add(result);
+                        continue;
+                    }
 
                     var existingAlbumIds = (await context.LibAlbumUserAssigns
                         .Where(assign => assign.UserId == userId && albumIds.Contains(assign.AlbumId))
@@ -752,6 +760,15 @@ namespace SpotifyBasicApi2025.Services
 
                     if (result.AlbumsFailed > 0)
                         result.Error = $"Nie udało się dodać {result.AlbumsFailed} albumów.";
+
+                    result.AlbumsInLibrary = await context.LibAlbumUserAssigns
+                        .Where(assign => assign.UserId == userId && albumIds.Contains(assign.AlbumId))
+                        .Select(assign => assign.AlbumId)
+                        .Distinct()
+                        .CountAsync();
+
+                    if (result.AlbumsInLibrary == 0 && string.IsNullOrWhiteSpace(result.Error))
+                        result.Error = "Albumy nie zostały zapisane w bibliotece aplikacji.";
                 }
                 catch (Exception ex)
                 {
@@ -1048,21 +1065,20 @@ namespace SpotifyBasicApi2025.Services
             if (string.IsNullOrEmpty(userId))
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany");
 
-            var already = await context.SpSavedAlbums.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId);
-
-            if (!already)
+            var alreadySavedInApplication = await context.SpSavedAlbums.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId);
+            var album = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == albumId);
+            if (album == null)
             {
-                // Upewnij się, że album istnieje w tabeli SpAlbums
-                var album = await context.SpAlbums.FirstOrDefaultAsync(a => a.Id == albumId);
-                if (album == null)
-                {
-                    var spAlbum = await spotifyApiService.GetAlbumAsync(albumId);
-                    if (spAlbum == null)
-                        throw new InvalidOperationException("Nie udało się pobrać informacji o albumie ze Spotify");
+                var spAlbum = await spotifyApiService.GetAlbumAsync(albumId);
+                if (spAlbum == null)
+                    throw new InvalidOperationException("Nie udało się pobrać informacji o albumie ze Spotify");
 
-                    album = await spotifyApiService.SaveAlbumFromSpotifyAsync(spAlbum);
-                }
+                album = await spotifyApiService.SaveAlbumFromSpotifyAsync(spAlbum);
+            }
 
+            var changed = false;
+            if (!alreadySavedInApplication)
+            {
                 // Zapisz jako zapisany album
                 context.SpSavedAlbums.Add(new SpSavedAlbum
                 {
@@ -1071,20 +1087,25 @@ namespace SpotifyBasicApi2025.Services
                     AddedAt = DateTime.UtcNow,
                     CreatedAt = DateTime.UtcNow
                 });
-
-                // Dodaj przypis Album-User do naszej tabeli (dla spójności)
-                if (!await context.LibAlbumUserAssigns.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId))
-                {
-                    context.LibAlbumUserAssigns.Add(new LibAlbumUserAssign
-                    {
-                        UserId = userId,
-                        AlbumId = albumId,
-                        DateCreatedUtc = DateTime.UtcNow
-                    });
-                }
-
-                await context.SaveChangesAsync();
+                changed = true;
             }
+
+            // Uzupełnij przypisanie także dla albumu, który był już zapisany po stronie Spotify.
+            // Dzięki temu dodanie wykonawcy nie wymaga późniejszej pełnej synchronizacji.
+            if (!await context.LibAlbumUserAssigns.AnyAsync(a => a.UserId == userId && a.AlbumId == albumId))
+            {
+                context.LibAlbumUserAssigns.Add(new LibAlbumUserAssign
+                {
+                    UserId = userId,
+                    AlbumId = albumId,
+                    AlbumName = album.Name,
+                    DateCreatedUtc = DateTime.UtcNow
+                });
+                changed = true;
+            }
+
+            if (changed)
+                await context.SaveChangesAsync();
 
             // Dodaj zapisany album w Spotify
             var endpoint = $"me/albums?ids={Uri.EscapeDataString(albumId)}";

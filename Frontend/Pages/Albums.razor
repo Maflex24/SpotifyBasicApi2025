@@ -1426,21 +1426,27 @@
             foreach (var result in results)
                 relatedArtistResults[result.ArtistId] = result;
 
-            var importedArtistIds = results.Where(result => result.AddedToLibrary).Select(result => result.ArtistId).ToList();
-            if (importedArtistIds.Count == 0)
-                return;
-
-            foreach (var artistId in importedArtistIds)
+            foreach (var result in results.Where(result => result.AddedToLibrary))
             {
-                includeArtistIds.Add(artistId);
-                excludeArtistIds.Remove(artistId);
-                selectedRelatedArtistIds.Remove(artistId);
-                var artist = relatedArtists.FirstOrDefault(item => item.Id == artistId);
+                selectedRelatedArtistIds.Remove(result.ArtistId);
+                var artist = relatedArtists.FirstOrDefault(item => item.Id == result.ArtistId);
                 if (artist != null)
                     artist.IsInLibrary = true;
             }
 
-            await ApplyFiltersAsync();
+            var artistIdsWithAlbums = results
+                .Where(result => result.AddedToLibrary && result.AlbumsInLibrary > 0)
+                .Select(result => result.ArtistId)
+                .ToList();
+
+            foreach (var artistId in artistIdsWithAlbums)
+            {
+                includeArtistIds.Add(artistId);
+                excludeArtistIds.Remove(artistId);
+            }
+
+            if (artistIdsWithAlbums.Count > 0)
+                await ApplyFiltersAsync();
         }
         finally
         {
@@ -1485,13 +1491,13 @@
 
     private static string GetRelatedArtistResultText(ArtistDiscoveryResult result)
     {
-        var summary = $"Dodano albumy: {result.AlbumsAdded}; już w bibliotece: {result.AlbumsAlreadyInLibrary}.";
+        var summary = $"Znaleziono albumy: {result.AlbumsFound}; dodano: {result.AlbumsAdded}; w bibliotece aplikacji: {result.AlbumsInLibrary}.";
         return string.IsNullOrWhiteSpace(result.Error) ? summary : $"{summary} {result.Error}";
     }
 
     private static string GetBlindRelatedArtistResultText(ArtistDiscoveryResult result)
     {
-        var summary = $"Dodano albumy: {result.AlbumsAdded}; już w bibliotece: {result.AlbumsAlreadyInLibrary}.";
+        var summary = $"Znaleziono albumy: {result.AlbumsFound}; dodano: {result.AlbumsAdded}; w bibliotece aplikacji: {result.AlbumsInLibrary}.";
         return string.IsNullOrWhiteSpace(result.Error) ? summary : $"{summary} Część operacji nie powiodła się.";
     }
 
@@ -2010,8 +2016,10 @@
     {
         public string ArtistId { get; set; } = string.Empty;
         public bool AddedToLibrary { get; set; }
+        public int AlbumsFound { get; set; }
         public int AlbumsAdded { get; set; }
         public int AlbumsAlreadyInLibrary { get; set; }
+        public int AlbumsInLibrary { get; set; }
         public int AlbumsFailed { get; set; }
         public string? Error { get; set; }
     }
