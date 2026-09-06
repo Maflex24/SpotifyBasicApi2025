@@ -69,6 +69,18 @@ window.albumsArtistNavigation = (() => {
         window.setTimeout(scheduleRefresh, 350);
     }
 
+    function scrollToGroup(groupId) {
+        if (!groupId) return false;
+
+        const target = getGroups().find(group => group.dataset.artistGroupId === groupId);
+        if (!target) return false;
+
+        const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - getTopOffset());
+        window.scrollTo({ top, behavior: "smooth" });
+        window.setTimeout(scheduleRefresh, 350);
+        return true;
+    }
+
     function disconnect() {
         window.removeEventListener("scroll", scheduleRefresh);
         window.removeEventListener("resize", scheduleRefresh);
@@ -79,5 +91,5 @@ window.albumsArtistNavigation = (() => {
         dotNetRef = null;
     }
 
-    return { observe, refresh: scheduleRefresh, move, disconnect };
+    return { observe, refresh: scheduleRefresh, move, scrollToGroup, disconnect };
 })();
