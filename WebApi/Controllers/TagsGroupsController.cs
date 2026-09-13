@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Services;
+using SpotifyBasicApi2025.Entities.Context;
+using SpotifyBasicApi2025.Entities.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace SpotifyBasicApi2025.Controllers
 {
@@ -11,12 +14,16 @@ namespace SpotifyBasicApi2025.Controllers
         private readonly TagsService tagsService;
         private readonly SpotifyApiService spotifyApiService;
         private readonly UserService userService;
+        private readonly DatabaseContext dbContext;
+        private readonly TagAssignmentHistoryService assignmentHistoryService;
 
-        public TagsGroupsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService)
+        public TagsGroupsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService, DatabaseContext dbContext, TagAssignmentHistoryService assignmentHistoryService)
         {
             this.tagsService = tagsService;
             this.spotifyApiService = spotifyApiService;
             this.userService = userService;
+            this.dbContext = dbContext;
+            this.assignmentHistoryService = assignmentHistoryService;
         }
 
         [HttpGet]
@@ -106,11 +113,25 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var success = await tagsService.DeleteTagGroupAsync(id);
+                var userId = await userService.GetCurrentUserIdAsync();
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Użytkownik nie jest zalogowany");
 
-                if (!success)
+                var group = await dbContext.LibTagGroups
+                    .Include(item => item.Tags)
+                    .FirstOrDefaultAsync(item => item.Id == id && item.UserId == userId);
+                if (group is null)
                     return NotFound($"Grupa tagów o ID {id} nie została znaleziona");
 
+                var tagIds = group.Tags.Select(tag => tag.Id).ToList();
+                var assignments = await dbContext.LibTagAssigns
+                    .Where(item => item.UserId == userId && tagIds.Contains(item.TagId))
+                    .ToListAsync();
+                foreach (var assignment in assignments)
+                    await assignmentHistoryService.RecordAsync(userId, assignment, TagAssignmentHistoryAction.Removed, assignment.Strength, null);
+
+                dbContext.LibTagGroups.Remove(group);
+                await dbContext.SaveChangesAsync();
                 return NoContent();
             }
             catch (Exception ex)

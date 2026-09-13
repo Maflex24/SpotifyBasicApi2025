@@ -28,6 +28,7 @@ namespace SpotifyBasicApi2025.Entities.Context
 
         public DbSet<LibTagGroup> LibTagGroups { get; set; }
         public DbSet<LibTagAssign> LibTagAssigns { get; set; }
+        public DbSet<LibTagAssignmentHistory> LibTagAssignmentHistories { get; set; }
         public DbSet<LibPlaylistFolder> LibPlaylistFolders { get; set; }
         public DbSet<LibPlaylistFolderAssign> LibPlaylistFolderAssigns { get; set; }
 
@@ -262,6 +263,9 @@ namespace SpotifyBasicApi2025.Entities.Context
             modelBuilder.Entity<LibTagAssign>()
                 .HasIndex(ti => new { ti.UserId, ti.TagId, ti.SpotifyItemId, ti.ItemType })
                 .IsUnique();
+
+            modelBuilder.Entity<LibTagAssignmentHistory>()
+                .HasIndex(history => new { history.UserId, history.ChangedAt });
 
             // Konfiguracja relacji many-to-many Artist-User
             modelBuilder.Entity<LibArtistUserAssign>()

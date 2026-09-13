@@ -2831,6 +2831,29 @@ button.tag-preview-tag {
     font-size: 0.72rem;
 }
 
+.assignment-history-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.assignment-history-filters {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.assignment-history-filters .form-select {
+    min-width: 160px;
+}
+
+.assignment-history-table th {
+    color: #b9c8dc;
+    font-weight: 600;
+}
+
 @media (max-width: 640.98px) {
     .ai-chat-backdrop {
         position: fixed;

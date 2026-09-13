@@ -1,0 +1,216 @@
+@page "/assignment-history"
+@inject HttpClient Http
+
+<PageTitle>Library Manager - Historia przypisań</PageTitle>
+
+<div class="container py-3 assignment-history-page">
+    <section class="assignment-history-toolbar" aria-label="Filtry historii przypisań">
+        <div>
+            <h4 class="mb-1">Historia przypisań</h4>
+            <span class="text-secondary small">@GetCountText()</span>
+        </div>
+        <div class="assignment-history-filters">
+            <select class="form-select form-select-sm select-dark" aria-label="Typ elementu" @bind="selectedItemType" @bind:after="ReloadFirstPageAsync">
+                <option value="">Wszystkie elementy</option>
+                <option value="artist">Artyści</option>
+                <option value="album">Albumy</option>
+                <option value="track">Utwory</option>
+                <option value="playlist">Playlisty</option>
+            </select>
+            <select class="form-select form-select-sm select-dark" aria-label="Tag" @bind="selectedTagId" @bind:after="ReloadFirstPageAsync">
+                <option value="">Wszystkie tagi</option>
+                @foreach (var tag in tags)
+                {
+                    <option value="@tag.Id.ToString()">@tag.Name</option>
+                }
+            </select>
+            <select class="form-select form-select-sm select-dark" aria-label="Akcja" @bind="selectedAction" @bind:after="ReloadFirstPageAsync">
+                <option value="">Wszystkie akcje</option>
+                <option value="added">Dodano</option>
+                <option value="strengthChanged">Zmieniono siłę</option>
+                <option value="removed">Usunięto</option>
+            </select>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger mt-3" role="alert">@error</div>
+    }
+    else if (isLoading)
+    {
+        <div class="text-secondary py-4">Wczytywanie historii…</div>
+    }
+    else if (history.Items.Count == 0)
+    {
+        <div class="library-empty-results mt-3" role="status">
+            <p>Brak wpisów pasujących do wybranych filtrów.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive mt-3">
+            <table class="table table-dark table-hover align-middle assignment-history-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Kiedy</th>
+                        <th scope="col">Akcja</th>
+                        <th scope="col">Tag</th>
+                        <th scope="col">Element</th>
+                        <th scope="col">Zmiana siły</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in history.Items)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@entry.ChangedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                            <td><span class="badge @GetActionClass(entry.Action)">@GetActionLabel(entry.Action)</span></td>
+                            <td><span class="fw-semibold">@entry.TagName</span><small class="d-block text-secondary">@entry.TagGroupName</small></td>
+                            <td>
+                                @if (GetItemHref(entry) is { } href)
+                                {
+                                    <a class="link-light" href="@href">@entry.ItemName</a>
+                                }
+                                else
+                                {
+                                    <span>@entry.ItemName</span>
+                                }
+                                <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
+                            </td>
+                            <td class="text-nowrap">@GetStrengthChange(entry)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <nav class="d-flex justify-content-between align-items-center" aria-label="Strony historii przypisań">
+            <button type="button" class="btn btn-sm btn-outline-light" disabled="@(history.Page <= 1)" @onclick="PreviousPageAsync">← Poprzednia</button>
+            <span class="text-secondary small">Strona @history.Page z @history.TotalPages</span>
+            <button type="button" class="btn btn-sm btn-outline-light" disabled="@(history.Page >= history.TotalPages)" @onclick="NextPageAsync">Następna →</button>
+        </nav>
+    }
+</div>
+
+@code {
+    private const int PageSize = 50;
+    private readonly List<TagOption> tags = new();
+    private PagedHistory history = new();
+    private string selectedItemType = string.Empty;
+    private string selectedTagId = string.Empty;
+    private string selectedAction = string.Empty;
+    private bool isLoading = true;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTagsAsync();
+        await LoadAsync(resetPage: true);
+    }
+
+    private async Task LoadTagsAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("api/tags");
+            if (response.IsSuccessStatusCode)
+                tags.AddRange(await response.Content.ReadFromJsonAsync<List<TagOption>>() ?? new List<TagOption>());
+        }
+        catch
+        {
+            // Historia jest użyteczna również, gdy lista aktywnych tagów nie jest dostępna.
+        }
+    }
+
+    private Task ReloadFirstPageAsync() => LoadAsync(resetPage: true);
+
+    private async Task PreviousPageAsync()
+    {
+        if (history.Page > 1)
+            await LoadAsync(page: history.Page - 1);
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (history.Page < history.TotalPages)
+            await LoadAsync(page: history.Page + 1);
+    }
+
+    private async Task LoadAsync(bool resetPage = false, int? page = null)
+    {
+        isLoading = true;
+        error = null;
+        var requestedPage = page ?? (resetPage ? 1 : Math.Max(history.Page, 1));
+        var query = new List<string> { $"page={requestedPage}", $"pageSize={PageSize}" };
+        if (!string.IsNullOrWhiteSpace(selectedItemType)) query.Add($"itemType={Uri.EscapeDataString(selectedItemType)}");
+        if (!string.IsNullOrWhiteSpace(selectedTagId)) query.Add($"tagId={Uri.EscapeDataString(selectedTagId)}");
+        if (!string.IsNullOrWhiteSpace(selectedAction)) query.Add($"action={Uri.EscapeDataString(selectedAction)}");
+
+        try
+        {
+            var response = await Http.GetAsync($"api/tags/assignment-history?{string.Join('&', query)}");
+            if (!response.IsSuccessStatusCode)
+            {
+                error = "Nie udało się pobrać historii przypisań.";
+                return;
+            }
+
+            history = await response.Content.ReadFromJsonAsync<PagedHistory>() ?? new PagedHistory();
+        }
+        catch
+        {
+            error = "Nie udało się pobrać historii przypisań.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string GetCountText() => history.Total switch
+    {
+        1 => "1 wpis",
+        _ => $"{history.Total} wpisów"
+    };
+
+    private static string GetActionLabel(string action) => action switch
+    {
+        "added" => "Dodano",
+        "removed" => "Usunięto",
+        "strengthChanged" => "Zmieniono siłę",
+        _ => action
+    };
+
+    private static string GetActionClass(string action) => action switch
+    {
+        "added" => "text-bg-success",
+        "removed" => "text-bg-danger",
+        _ => "text-bg-primary"
+    };
+
+    private static string GetItemTypeLabel(string itemType) => itemType switch
+    {
+        "artist" => "Artysta",
+        "album" => "Album",
+        "track" => "Utwór",
+        "playlist" => "Playlista",
+        _ => itemType
+    };
+
+    private static string? GetItemHref(HistoryEntry entry) => entry.ItemType switch
+    {
+        "artist" => $"/artist/{Uri.EscapeDataString(entry.SpotifyItemId)}",
+        "album" => $"/album/{Uri.EscapeDataString(entry.SpotifyItemId)}",
+        "playlist" => $"/playlists/{Uri.EscapeDataString(entry.SpotifyItemId)}",
+        _ => null
+    };
+
+    private static string GetStrengthChange(HistoryEntry entry) => $"{FormatStrength(entry.PreviousStrength)} → {FormatStrength(entry.NewStrength)}";
+
+    private static string FormatStrength(float? strength) => strength.HasValue ? strength.Value.ToString("0.0") : "—";
+
+    private sealed class TagOption { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private sealed class PagedHistory { public List<HistoryEntry> Items { get; set; } = new(); public int Total { get; set; } public int Page { get; set; } = 1; public int PageSize { get; set; } public int TotalPages { get; set; } }
+    private sealed class HistoryEntry { public string Action { get; set; } = string.Empty; public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public string SpotifyItemId { get; set; } = string.Empty; public string ItemName { get; set; } = string.Empty; public float? PreviousStrength { get; set; } public float? NewStrength { get; set; } public DateTime ChangedAt { get; set; } }
+}

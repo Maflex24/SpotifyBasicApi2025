@@ -101,6 +101,7 @@ builder.Services.AddScoped<PlayerService>();
 
 // Serwisy Library
 builder.Services.AddScoped<TagsService>();
+builder.Services.AddScoped<TagAssignmentHistoryService>();
 // Serwisy User
 builder.Services.AddScoped<UserService>();
 // Serwis Library

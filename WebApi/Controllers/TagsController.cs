@@ -3,6 +3,8 @@ using SpotifyBasicApi2025.Models;
 using SpotifyBasicApi2025.Services;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
+using SpotifyBasicApi2025.Entities.Enums;
+using SpotifyBasicApi2025.Models.Pagination;
 using Microsoft.EntityFrameworkCore;
 
 namespace SpotifyBasicApi2025.Controllers
@@ -15,13 +17,15 @@ namespace SpotifyBasicApi2025.Controllers
         private readonly SpotifyApiService spotifyApiService;
         private readonly UserService userService;
         private readonly DatabaseContext dbContext;
+        private readonly TagAssignmentHistoryService assignmentHistoryService;
 
-        public TagsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService, DatabaseContext dbContext)
+        public TagsController(TagsService tagsService, SpotifyApiService spotifyApiService, UserService userService, DatabaseContext dbContext, TagAssignmentHistoryService assignmentHistoryService)
         {
             this.tagsService = tagsService;
             this.spotifyApiService = spotifyApiService;
             this.userService = userService;
             this.dbContext = dbContext;
+            this.assignmentHistoryService = assignmentHistoryService;
         }
 
         [HttpGet]
@@ -148,6 +152,10 @@ namespace SpotifyBasicApi2025.Controllers
 
             if (existing is not null)
             {
+                if (existing.Strength == strength)
+                    return NoContent();
+
+                await assignmentHistoryService.RecordAsync(userId, existing, TagAssignmentHistoryAction.StrengthChanged, existing.Strength, strength);
                 existing.Strength = strength;
                 existing.UpdatedAt = DateTime.UtcNow;
                 await dbContext.SaveChangesAsync();
@@ -166,6 +174,7 @@ namespace SpotifyBasicApi2025.Controllers
             };
 
             dbContext.LibTagAssigns.Add(entity);
+            await assignmentHistoryService.RecordAsync(userId, entity, TagAssignmentHistoryAction.Added, null, strength);
             await dbContext.SaveChangesAsync();
 
             return Created($"api/tags/assign/{entity.Id}", entity.Id);
@@ -198,10 +207,15 @@ namespace SpotifyBasicApi2025.Controllers
                     UpdatedAt = DateTime.UtcNow
                 };
                 dbContext.LibTagAssigns.Add(created);
+                await assignmentHistoryService.RecordAsync(userId, created, TagAssignmentHistoryAction.Added, null, strength);
                 await dbContext.SaveChangesAsync();
                 return NoContent();
             }
 
+            if (entity.Strength == strength)
+                return NoContent();
+
+            await assignmentHistoryService.RecordAsync(userId, entity, TagAssignmentHistoryAction.StrengthChanged, entity.Strength, strength);
             entity.Strength = strength;
             entity.UpdatedAt = DateTime.UtcNow;
 
@@ -248,12 +262,16 @@ namespace SpotifyBasicApi2025.Controllers
                 var strength = Math.Clamp(tag.Strength, 0.0f, 6.0f);
                 if (existing.TryGetValue(tag.TagId, out var assign))
                 {
+                    if (assign.Strength == strength)
+                        continue;
+
+                    await assignmentHistoryService.RecordAsync(userId, assign, TagAssignmentHistoryAction.StrengthChanged, assign.Strength, strength, now);
                     assign.Strength = strength;
                     assign.UpdatedAt = now;
                     continue;
                 }
 
-                dbContext.LibTagAssigns.Add(new LibTagAssign
+                var created = new LibTagAssign
                 {
                     TagId = tag.TagId,
                     UserId = userId,
@@ -262,7 +280,9 @@ namespace SpotifyBasicApi2025.Controllers
                     Strength = strength,
                     CreatedAt = now,
                     UpdatedAt = now
-                });
+                };
+                dbContext.LibTagAssigns.Add(created);
+                await assignmentHistoryService.RecordAsync(userId, created, TagAssignmentHistoryAction.Added, null, strength, now);
             }
 
             await dbContext.SaveChangesAsync();
@@ -297,6 +317,7 @@ namespace SpotifyBasicApi2025.Controllers
             if (entity is null)
                 return NotFound();
 
+            await assignmentHistoryService.RecordAsync(userId, entity, TagAssignmentHistoryAction.Removed, entity.Strength, null);
             dbContext.LibTagAssigns.Remove(entity);
             await dbContext.SaveChangesAsync();
 
@@ -329,6 +350,75 @@ namespace SpotifyBasicApi2025.Controllers
                 .ToListAsync();
 
             return Ok(assigns);
+        }
+
+        [HttpGet("assignment-history")]
+        public async Task<IActionResult> GetAssignmentHistory(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50,
+            [FromQuery] string? itemType = null,
+            [FromQuery] long? tagId = null,
+            [FromQuery] string? action = null)
+        {
+            var userId = await userService.GetCurrentUserIdAsync();
+            if (userId is null)
+                return StatusCode(403);
+
+            page = Math.Max(page, 1);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+
+            var query = dbContext.LibTagAssignmentHistories
+                .AsNoTracking()
+                .Where(history => history.UserId == userId);
+
+            if (!string.IsNullOrWhiteSpace(itemType))
+            {
+                itemType = itemType.Trim().ToLowerInvariant();
+                if (!SpotifyItemType.IsValid(itemType))
+                    return BadRequest("Nieprawidłowy typ elementu.");
+                query = query.Where(history => history.ItemType == itemType);
+            }
+
+            if (tagId.HasValue)
+                query = query.Where(history => history.TagId == tagId.Value);
+
+            if (!string.IsNullOrWhiteSpace(action))
+            {
+                action = action.Trim();
+                if (!TagAssignmentHistoryAction.IsValid(action))
+                    return BadRequest("Nieprawidłowy typ akcji.");
+                query = query.Where(history => history.Action == action);
+            }
+
+            var total = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(history => history.ChangedAt)
+                .ThenByDescending(history => history.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(history => new TagAssignmentHistoryModel
+                {
+                    Id = history.Id,
+                    Action = history.Action,
+                    TagId = history.TagId,
+                    TagName = history.TagName,
+                    TagGroupName = history.TagGroupName,
+                    ItemType = history.ItemType,
+                    SpotifyItemId = history.SpotifyItemId,
+                    ItemName = history.ItemName,
+                    PreviousStrength = history.PreviousStrength,
+                    NewStrength = history.NewStrength,
+                    ChangedAt = history.ChangedAt
+                })
+                .ToListAsync();
+
+            return Ok(new PagedResult<TagAssignmentHistoryModel>
+            {
+                Items = items,
+                Total = total,
+                Page = page,
+                PageSize = pageSize
+            });
         }
 
         [HttpPut("{id}")]
@@ -368,11 +458,24 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                var success = await tagsService.DeleteTagAsync(id);
+                var userId = await userService.GetCurrentUserIdAsync();
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Użytkownik nie jest zalogowany");
 
-                if (!success)
+                var tag = await dbContext.LibTags
+                    .Include(item => item.TagGroup)
+                    .FirstOrDefaultAsync(item => item.Id == id && item.TagGroup.UserId == userId);
+                if (tag is null)
                     return NotFound($"Tag o ID {id} nie został znaleziony");
 
+                var assignments = await dbContext.LibTagAssigns
+                    .Where(item => item.UserId == userId && item.TagId == tag.Id)
+                    .ToListAsync();
+                foreach (var assignment in assignments)
+                    await assignmentHistoryService.RecordAsync(userId, assignment, TagAssignmentHistoryAction.Removed, assignment.Strength, null);
+
+                dbContext.LibTags.Remove(tag);
+                await dbContext.SaveChangesAsync();
                 return NoContent();
             }
             catch (Exception ex)
