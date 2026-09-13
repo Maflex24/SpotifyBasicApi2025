@@ -34,6 +34,9 @@ namespace SpotifyBasicApi2025.Entities
         [Required, MaxLength(512)]
         public string ItemName { get; set; } = string.Empty;
 
+        /// <summary>Snapshot of the item's thumbnail URL at the time of the change.</summary>
+        public string? ImageUrl { get; set; }
+
         public float? PreviousStrength { get; set; }
 
         public float? NewStrength { get; set; }

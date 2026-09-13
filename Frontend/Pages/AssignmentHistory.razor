@@ -68,15 +68,34 @@
                             <td><span class="badge @GetActionClass(entry.Action)">@GetActionLabel(entry.Action)</span></td>
                             <td><span class="fw-semibold">@entry.TagName</span><small class="d-block text-secondary">@entry.TagGroupName</small></td>
                             <td>
-                                @if (GetItemHref(entry) is { } href)
-                                {
-                                    <a class="link-light" href="@href">@entry.ItemName</a>
-                                }
-                                else
-                                {
-                                    <span>@entry.ItemName</span>
-                                }
-                                <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
+                                <div class="assignment-history-item">
+                                    @if (GetItemHref(entry) is { } href)
+                                    {
+                                        <a class="assignment-history-thumbnail" href="@href" aria-label="Otwórz: @entry.ItemName">
+                                            @if (!string.IsNullOrWhiteSpace(entry.ImageUrl))
+                                            {
+                                                <img src="@entry.ImageUrl" alt="" loading="lazy" onerror="this.style.display='none'" />
+                                            }
+                                        </a>
+                                        <span>
+                                            <a class="link-light" href="@href">@entry.ItemName</a>
+                                            <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="assignment-history-thumbnail" aria-hidden="true">
+                                            @if (!string.IsNullOrWhiteSpace(entry.ImageUrl))
+                                            {
+                                                <img src="@entry.ImageUrl" alt="" loading="lazy" onerror="this.style.display='none'" />
+                                            }
+                                        </span>
+                                        <span>
+                                            <span>@entry.ItemName</span>
+                                            <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
+                                        </span>
+                                    }
+                                </div>
                             </td>
                             <td class="text-nowrap">@GetStrengthChange(entry)</td>
                         </tr>
@@ -212,5 +231,5 @@
 
     private sealed class TagOption { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
     private sealed class PagedHistory { public List<HistoryEntry> Items { get; set; } = new(); public int Total { get; set; } public int Page { get; set; } = 1; public int PageSize { get; set; } public int TotalPages { get; set; } }
-    private sealed class HistoryEntry { public string Action { get; set; } = string.Empty; public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public string SpotifyItemId { get; set; } = string.Empty; public string ItemName { get; set; } = string.Empty; public float? PreviousStrength { get; set; } public float? NewStrength { get; set; } public DateTime ChangedAt { get; set; } }
+    private sealed class HistoryEntry { public string Action { get; set; } = string.Empty; public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public string SpotifyItemId { get; set; } = string.Empty; public string ItemName { get; set; } = string.Empty; public string? ImageUrl { get; set; } public float? PreviousStrength { get; set; } public float? NewStrength { get; set; } public DateTime ChangedAt { get; set; } }
 }

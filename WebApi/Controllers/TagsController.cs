@@ -406,6 +406,7 @@ namespace SpotifyBasicApi2025.Controllers
                     ItemType = history.ItemType,
                     SpotifyItemId = history.SpotifyItemId,
                     ItemName = history.ItemName,
+                    ImageUrl = history.ImageUrl,
                     PreviousStrength = history.PreviousStrength,
                     NewStrength = history.NewStrength,
                     ChangedAt = history.ChangedAt

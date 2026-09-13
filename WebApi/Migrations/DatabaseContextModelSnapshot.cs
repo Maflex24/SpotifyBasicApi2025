@@ -578,6 +578,9 @@ namespace SpotifyBasicApi2025.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("varchar(16)");
 
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("longtext");
+
                     b.Property<float?>("NewStrength")
                         .HasColumnType("float");
 

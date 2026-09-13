@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SpotifyBasicApi2025.Entities;
 using SpotifyBasicApi2025.Entities.Context;
+using SpotifyBasicApi2025.Models.Extensions;
 
 namespace SpotifyBasicApi2025.Services
 {
@@ -28,6 +29,8 @@ namespace SpotifyBasicApi2025.Services
                 .Select(item => new { item.Name, GroupName = item.TagGroup.Name })
                 .FirstOrDefaultAsync();
 
+            var item = await GetItemSnapshotAsync(assignment.ItemType, assignment.SpotifyItemId);
+
             context.LibTagAssignmentHistories.Add(new LibTagAssignmentHistory
             {
                 UserId = userId,
@@ -37,25 +40,35 @@ namespace SpotifyBasicApi2025.Services
                 TagGroupName = tag?.GroupName ?? "Usunięta grupa",
                 ItemType = assignment.ItemType,
                 SpotifyItemId = assignment.SpotifyItemId,
-                ItemName = await GetItemNameAsync(assignment.ItemType, assignment.SpotifyItemId),
+                ItemName = item.Name,
+                ImageUrl = SelectSmallestImageUrl(item.Images) ?? SelectSmallestImageUrl(item.FallbackImages),
                 PreviousStrength = previousStrength,
                 NewStrength = newStrength,
                 ChangedAt = changedAt ?? DateTime.UtcNow
             });
         }
 
-        private async Task<string> GetItemNameAsync(string itemType, string spotifyItemId)
+        private async Task<ItemSnapshot> GetItemSnapshotAsync(string itemType, string spotifyItemId)
         {
-            var name = itemType.ToLowerInvariant() switch
+            var item = itemType.ToLowerInvariant() switch
             {
-                "artist" => await context.SpArtists.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => item.Name).FirstOrDefaultAsync(),
-                "album" => await context.SpAlbums.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => item.Name).FirstOrDefaultAsync(),
-                "track" => await context.SpTracks.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => item.Name).FirstOrDefaultAsync(),
-                "playlist" => await context.SpPlaylists.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => item.Name).FirstOrDefaultAsync(),
+                "artist" => await context.SpArtists.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => new ItemSnapshot(item.Name, item.Images, null)).FirstOrDefaultAsync(),
+                "album" => await context.SpAlbums.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => new ItemSnapshot(item.Name, item.Images, null)).FirstOrDefaultAsync(),
+                "track" => await context.SpTracks.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => new ItemSnapshot(item.Name, item.Album == null ? null : item.Album.Images, item.Images)).FirstOrDefaultAsync(),
+                "playlist" => await context.SpPlaylists.AsNoTracking().Where(item => item.Id == spotifyItemId).Select(item => new ItemSnapshot(item.Name, item.Images, null)).FirstOrDefaultAsync(),
                 _ => null
             };
 
-            return string.IsNullOrWhiteSpace(name) ? spotifyItemId : name;
+            return item ?? new ItemSnapshot(spotifyItemId, null, null);
         }
+
+        private static string? SelectSmallestImageUrl(string? images) => ImageMappingExtensions.ParseSpotifyImages(images)
+            .Where(image => !string.IsNullOrWhiteSpace(image.Url))
+            .OrderBy(image => image.Width ?? int.MaxValue)
+            .ThenBy(image => image.Height ?? int.MaxValue)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+
+        private sealed record ItemSnapshot(string Name, string? Images, string? FallbackImages);
     }
 }
