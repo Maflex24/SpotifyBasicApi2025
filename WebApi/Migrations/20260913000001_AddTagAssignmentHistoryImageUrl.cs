@@ -13,8 +13,26 @@ namespace SpotifyBasicApi2025.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             // This migration may resume after MySQL has already committed the DDL while a
-            // later command failed. Keep it safely rerunnable until EF records it as applied.
-            migrationBuilder.Sql("ALTER TABLE `LibTagAssignmentHistories` ADD COLUMN IF NOT EXISTS `ImageUrl` longtext NULL;");
+            // later command failed. MySQL versions used on VPS do not all support
+            // ADD COLUMN IF NOT EXISTS, therefore check INFORMATION_SCHEMA and execute
+            // the DDL dynamically. The commands share EF's migration connection.
+            migrationBuilder.Sql(@"
+                SET @image_url_column_exists = (
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'LibTagAssignmentHistories'
+                      AND COLUMN_NAME = 'ImageUrl'
+                );");
+            migrationBuilder.Sql(@"
+                SET @add_image_url_column_sql = IF(
+                    @image_url_column_exists = 0,
+                    'ALTER TABLE `LibTagAssignmentHistories` ADD COLUMN `ImageUrl` longtext NULL',
+                    'SELECT 1'
+                );");
+            migrationBuilder.Sql("PREPARE add_image_url_column_statement FROM @add_image_url_column_sql;");
+            migrationBuilder.Sql("EXECUTE add_image_url_column_statement;");
+            migrationBuilder.Sql("DEALLOCATE PREPARE add_image_url_column_statement;");
 
             // Spotify returns images from the largest to the smallest, so prefer the third
             // entry (usually 64px) and fall back through the available collection. Legacy

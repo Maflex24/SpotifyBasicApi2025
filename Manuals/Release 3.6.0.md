@@ -24,5 +24,5 @@ Porównanie zmian: `3.5.0` → `3.6.0`.
 - Dodano dziennik `LibTagAssignmentHistories`, per użytkownik, przechowujący historię bezterminowo. Daty są zapisywane w UTC i prezentowane lokalnie w interfejsie.
 - Migracja `20260913000000_AddTagAssignmentHistory` tworzy strukturę historii oraz jednorazowo importuje obecne przypisania jako zdarzenia dodania z datą utworzenia przypisania.
 - Migracja `20260913000001_AddTagAssignmentHistoryImageUrl` dodaje migawkę adresu miniatury i uzupełnia obrazy dla istniejącej historii, jeżeli metadane Spotify są dostępne.
-- Druga migracja jest bezpieczna po częściowo wykonanej poprzedniej próbie na MariaDB: nie próbuje ponownie dodać istniejącej kolumny `ImageUrl` i uzupełnia wyłącznie puste wartości.
+- Druga migracja jest bezpieczna po częściowo wykonanej poprzedniej próbie na MySQL lub MariaDB: nie próbuje ponownie dodać istniejącej kolumny `ImageUrl` i uzupełnia wyłącznie puste wartości.
 - Po wdrożeniu należy uruchomić aplikację lub wykonać standardowe migracje EF Core, aby obie migracje zostały zastosowane na bazie danych.
