@@ -221,8 +221,14 @@
             <div class="album-artist-filter-groups" aria-label="Lista wykonawców">
                 @foreach (var group in GetGroupedAlbumArtists())
                 {
+                    var groupState = GetArtistGroupFilterState(group.Artists);
+                    var groupCss = GetArtistGroupFilterCss(groupState);
+                    var groupStateDescription = GetArtistGroupStateDescription(groupState);
+                    var groupNextAction = GetArtistGroupNextAction(groupState);
                     <section class="tag-group" aria-label="Wykonawcy na literę @group.Name">
-                        <h6 class="tag-group-heading">@group.Name</h6>
+                        <h6 class="tag-group-heading">
+                            <button type="button" class="album-artist-filter-group-heading @groupCss" aria-pressed="@(groupState is ArtistFilterGroupState.Include or ArtistFilterGroupState.Exclude)" title="@groupNextAction" aria-label="Grupa wykonawców @group.Name: @groupStateDescription. @groupNextAction" @onclick="() => CycleArtistGroupFilterStateAsync(group)">@group.Name</button>
+                        </h6>
                         <div class="tag-chips-container">
                             @foreach (var artist in group.Artists)
                             {
@@ -2785,6 +2791,67 @@
             return 1;
 
         return excludeArtistIds.Contains(artistId) ? 2 : 0;
+    }
+
+    private enum ArtistFilterGroupState { None, Include, Exclude, Mixed }
+
+    private ArtistFilterGroupState GetArtistGroupFilterState(IEnumerable<AlbumArtistOption> artists)
+    {
+        var states = artists.Select(artist => GetArtistFilterState(artist.Id)).Distinct().ToArray();
+        if (states.Length != 1)
+            return ArtistFilterGroupState.Mixed;
+
+        return states[0] switch
+        {
+            1 => ArtistFilterGroupState.Include,
+            2 => ArtistFilterGroupState.Exclude,
+            _ => ArtistFilterGroupState.None
+        };
+    }
+
+    private static string GetArtistGroupFilterCss(ArtistFilterGroupState state) => state switch
+    {
+        ArtistFilterGroupState.Include => "tag-include",
+        ArtistFilterGroupState.Exclude => "tag-exclude",
+        _ => "tag-none"
+    };
+
+    private static string GetArtistGroupStateDescription(ArtistFilterGroupState state) => state switch
+    {
+        ArtistFilterGroupState.Include => "wszyscy wykonawcy są uwzględnieni",
+        ArtistFilterGroupState.Exclude => "wszyscy wykonawcy są wykluczeni",
+        ArtistFilterGroupState.Mixed => "wykonawcy mają mieszane stany",
+        _ => "żaden wykonawca nie jest oznaczony"
+    };
+
+    private static string GetArtistGroupNextAction(ArtistFilterGroupState state) => state switch
+    {
+        ArtistFilterGroupState.Include => "Kliknij, aby wykluczyć wszystkich wykonawców z tej grupy.",
+        ArtistFilterGroupState.Exclude => "Kliknij, aby usunąć stan wszystkich wykonawców z tej grupy.",
+        _ => "Kliknij, aby uwzględnić wszystkich wykonawców z tej grupy."
+    };
+
+    private async Task CycleArtistGroupFilterStateAsync(ArtistFilterGroup group)
+    {
+        var nextState = GetArtistGroupFilterState(group.Artists) switch
+        {
+            ArtistFilterGroupState.Include => 2,
+            ArtistFilterGroupState.Exclude => 0,
+            _ => 1
+        };
+
+        foreach (var artistId in group.Artists.Select(artist => artist.Id).Distinct(StringComparer.Ordinal))
+        {
+            includeArtistIds.Remove(artistId);
+            excludeArtistIds.Remove(artistId);
+
+            if (nextState == 1)
+                includeArtistIds.Add(artistId);
+            else if (nextState == 2)
+                excludeArtistIds.Add(artistId);
+        }
+
+        await MarkFiltersDirtyAsync();
     }
 
     private async Task CycleArtistFilterStateAsync(string artistId)

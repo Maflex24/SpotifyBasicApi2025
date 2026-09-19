@@ -1843,6 +1843,31 @@ button.tag-preview-tag {
     text-transform: uppercase;
 }
 
+.album-artist-filter-group-heading {
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    border-radius: 999px;
+    padding: 0.25rem 0.65rem;
+    color: #f8fafc;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.album-artist-filter-group-heading:hover {
+    border-color: rgba(255,255,255,0.9);
+    box-shadow: 0 2px 7px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+}
+
+.album-artist-filter-group-heading:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(13,110,253,0.4);
+}
+
 @media (max-width: 767.98px) {
     .tag-chip,
     .tag-mode-chip,
