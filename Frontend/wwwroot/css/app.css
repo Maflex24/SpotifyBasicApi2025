@@ -368,9 +368,17 @@ button.tag-preview-tag {
 .album-artist-index-heading {
     margin: 0;
     padding: 0.8rem 0.9rem 0.55rem;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.2);
     font-size: 0.95rem;
     font-weight: 700;
+}
+
+.album-artist-index-search {
+    padding: 0 0.6rem 0.6rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.2);
+}
+
+.album-artist-index-search .form-control {
+    min-width: 0;
 }
 
 .album-artist-index-list {
@@ -379,6 +387,13 @@ button.tag-preview-tag {
     padding: 0.45rem;
     overflow-y: auto;
     overscroll-behavior: contain;
+}
+
+.album-artist-index-empty {
+    margin: 0;
+    padding: 0.5rem;
+    color: #cbd5e1;
+    font-size: 0.85rem;
 }
 
 .album-artist-index-item {

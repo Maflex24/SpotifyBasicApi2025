@@ -449,17 +449,35 @@
         {
             <section id="album-artist-index-panel" class="album-artist-index-panel" aria-label="Wykonawcy w wynikach">
                 <h2 class="album-artist-index-heading">Wykonawcy</h2>
-                <div class="album-artist-index-list">
-                    @{ string? previousArtistGroupName = null; }
-                    @foreach (var group in GetArtistNavigationGroups())
+                <div class="album-artist-index-search input-group input-group-sm">
+                    <label class="visually-hidden" for="album-artist-index-search-input">Szukaj wykonawcy w indeksie</label>
+                    <input id="album-artist-index-search-input" class="form-control input-dark" type="search" placeholder="Szukaj wykonawcy" aria-label="Szukaj wykonawcy w indeksie" @bind="artistNavigationSearch" @bind:event="oninput" />
+                    @if (!string.IsNullOrWhiteSpace(artistNavigationSearch))
                     {
-                        var artistGroupName = GetArtistGroupName(group.Name);
-                        var isFirstArtistInGroup = previousArtistGroupName != null && !string.Equals(previousArtistGroupName, artistGroupName, StringComparison.Ordinal);
-                        previousArtistGroupName = artistGroupName;
-                        <button type="button" class="album-artist-index-item @(isFirstArtistInGroup ? "album-artist-index-item-letter-start" : string.Empty)" title="Przejdź do wykonawcy: @group.Name" aria-label="Przejdź do wykonawcy: @group.Name" @onclick="() => NavigateToArtistGroupAsync(group)">
-                            <span class="album-artist-index-name">@group.Name</span>
-                            <span class="album-artist-index-count" aria-label="@($"{group.Albums.Count} albumów")">@group.Albums.Count</span>
-                        </button>
+                        <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie wykonawców" aria-label="Wyczyść wyszukiwanie wykonawców" @onclick="ClearArtistNavigationSearch">×</button>
+                    }
+                </div>
+                <div class="album-artist-index-list">
+                    @{
+                        var navigationGroups = GetVisibleArtistNavigationGroups().ToList();
+                        string? previousArtistGroupName = null;
+                    }
+                    @if (navigationGroups.Count == 0)
+                    {
+                        <p class="album-artist-index-empty" role="status">Brak pasujących wykonawców.</p>
+                    }
+                    else
+                    {
+                        @foreach (var group in navigationGroups)
+                        {
+                            var artistGroupName = GetArtistGroupName(group.Name);
+                            var isFirstArtistInGroup = previousArtistGroupName != null && !string.Equals(previousArtistGroupName, artistGroupName, StringComparison.Ordinal);
+                            previousArtistGroupName = artistGroupName;
+                            <button type="button" class="album-artist-index-item @(isFirstArtistInGroup ? "album-artist-index-item-letter-start" : string.Empty)" title="Przejdź do wykonawcy: @group.Name" aria-label="Przejdź do wykonawcy: @group.Name" @onclick="() => NavigateToArtistGroupAsync(group)">
+                                <span class="album-artist-index-name">@group.Name</span>
+                                <span class="album-artist-index-count" aria-label="@($"{group.Albums.Count} albumów")">@group.Albums.Count</span>
+                            </button>
+                        }
                     }
                 </div>
             </section>
@@ -552,6 +570,7 @@
     private bool canNavigateToPreviousArtist;
     private bool canNavigateToNextArtist;
     private bool artistNavigationPanelExpanded;
+    private string? artistNavigationSearch;
     private string? pendingArtistGroupScrollId;
     private bool controlsPastAnchor;
     private bool controlsManuallyCollapsed;
@@ -805,6 +824,7 @@
         if (!string.IsNullOrWhiteSpace(group.Id))
             collapsedArtistGroupIds.Remove(group.Id);
 
+        artistNavigationSearch = null;
         pendingArtistGroupScrollId = group.NavigationId;
         await InvokeAsync(StateHasChanged);
     }
@@ -2235,6 +2255,11 @@
             .OrderBy(group => group.Name, comparer)
             .ThenBy(group => group.NavigationId, StringComparer.Ordinal);
     }
+
+    private IEnumerable<ArtistAlbumGroup> GetVisibleArtistNavigationGroups() => GetArtistNavigationGroups()
+        .Where(group => string.IsNullOrWhiteSpace(artistNavigationSearch) || group.Name.Contains(artistNavigationSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private void ClearArtistNavigationSearch() => artistNavigationSearch = null;
 
     private bool IsArtistCatalogExpanded(string artistId) => !string.IsNullOrWhiteSpace(artistId) && expandedArtistCatalogIds.Contains(artistId);
 
