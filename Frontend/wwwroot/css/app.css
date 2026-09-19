@@ -373,8 +373,8 @@ button.tag-preview-tag {
 }
 
 .album-artist-index-search {
-    padding: 0 0.6rem 0.6rem;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.2);
+    padding: 0.6rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.2);
 }
 
 .album-artist-index-search .form-control {

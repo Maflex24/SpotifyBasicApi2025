@@ -449,14 +449,6 @@
         {
             <section id="album-artist-index-panel" class="album-artist-index-panel" aria-label="Wykonawcy w wynikach">
                 <h2 class="album-artist-index-heading">Wykonawcy</h2>
-                <div class="album-artist-index-search input-group input-group-sm">
-                    <label class="visually-hidden" for="album-artist-index-search-input">Szukaj wykonawcy w indeksie</label>
-                    <input id="album-artist-index-search-input" class="form-control input-dark" type="search" placeholder="Szukaj wykonawcy" aria-label="Szukaj wykonawcy w indeksie" @bind="artistNavigationSearch" @bind:event="oninput" />
-                    @if (!string.IsNullOrWhiteSpace(artistNavigationSearch))
-                    {
-                        <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie wykonawców" aria-label="Wyczyść wyszukiwanie wykonawców" @onclick="ClearArtistNavigationSearch">×</button>
-                    }
-                </div>
                 <div class="album-artist-index-list">
                     @{
                         var navigationGroups = GetVisibleArtistNavigationGroups().ToList();
@@ -478,6 +470,14 @@
                                 <span class="album-artist-index-count" aria-label="@($"{group.Albums.Count} albumów")">@group.Albums.Count</span>
                             </button>
                         }
+                    }
+                </div>
+                <div class="album-artist-index-search input-group input-group-sm">
+                    <label class="visually-hidden" for="album-artist-index-search-input">Szukaj wykonawcy w indeksie</label>
+                    <input id="album-artist-index-search-input" class="form-control input-dark" type="search" placeholder="Szukaj wykonawcy" aria-label="Szukaj wykonawcy w indeksie" @ref="artistNavigationSearchInput" @bind="artistNavigationSearch" @bind:event="oninput" />
+                    @if (!string.IsNullOrWhiteSpace(artistNavigationSearch))
+                    {
+                        <button type="button" class="btn btn-outline-light" title="Wyczyść wyszukiwanie wykonawców" aria-label="Wyczyść wyszukiwanie wykonawców" @onclick="ClearArtistNavigationSearch">×</button>
                     }
                 </div>
             </section>
@@ -564,12 +564,14 @@
     private ElementReference controlsSentinel;
     private ElementReference albumsSentinel;
     private ElementReference artistNavigationIndex;
+    private ElementReference artistNavigationSearchInput;
     private DotNetObjectReference<Albums>? controlsObserverRef;
     private bool artistNavigationObserved;
     private bool artistNavigationIndexOutsideClickObserved;
     private bool canNavigateToPreviousArtist;
     private bool canNavigateToNextArtist;
     private bool artistNavigationPanelExpanded;
+    private bool shouldFocusArtistNavigationSearch;
     private string? artistNavigationSearch;
     private string? pendingArtistGroupScrollId;
     private bool controlsPastAnchor;
@@ -742,6 +744,12 @@
             artistNavigationIndexOutsideClickObserved = false;
         }
 
+        if (shouldFocusArtistNavigationSearch)
+        {
+            shouldFocusArtistNavigationSearch = false;
+            await artistNavigationSearchInput.FocusAsync();
+        }
+
         if (!string.IsNullOrWhiteSpace(pendingAlbumScrollId))
         {
             var albumId = pendingAlbumScrollId;
@@ -804,7 +812,11 @@
         await JS.InvokeVoidAsync("albumsArtistNavigation.move", direction);
     }
 
-    private void ToggleArtistNavigationPanel() => artistNavigationPanelExpanded = !artistNavigationPanelExpanded;
+    private void ToggleArtistNavigationPanel()
+    {
+        artistNavigationPanelExpanded = !artistNavigationPanelExpanded;
+        shouldFocusArtistNavigationSearch = artistNavigationPanelExpanded;
+    }
 
     [JSInvokable]
     public Task CloseArtistNavigationPanel()
@@ -813,6 +825,7 @@
             return Task.CompletedTask;
 
         artistNavigationPanelExpanded = false;
+        shouldFocusArtistNavigationSearch = false;
         return InvokeAsync(StateHasChanged);
     }
 
