@@ -413,6 +413,42 @@ namespace SpotifyBasicApi2025.Controllers
                 })
                 .ToListAsync();
 
+            var albumIds = items.Where(item => item.ItemType == "album").Select(item => item.SpotifyItemId).Distinct().ToList();
+            var trackIds = items.Where(item => item.ItemType == "track").Select(item => item.SpotifyItemId).Distinct().ToList();
+
+            // Enrich the current page in batches so existing history entries also show their artists.
+            if (albumIds.Count > 0)
+            {
+                var albumArtists = await dbContext.SpAlbumArtistAssigns
+                    .AsNoTracking()
+                    .Where(assignment => albumIds.Contains(assignment.AlbumId))
+                    .OrderBy(assignment => assignment.Id)
+                    .Select(assignment => new { assignment.AlbumId, assignment.ArtistId, assignment.Artist.Name })
+                    .ToListAsync();
+                var artistsByAlbum = albumArtists.ToLookup(artist => artist.AlbumId);
+                foreach (var item in items.Where(item => item.ItemType == "album"))
+                    item.Artists = artistsByAlbum[item.SpotifyItemId]
+                        .DistinctBy(artist => artist.ArtistId)
+                        .Select(artist => new SimpleArtist { Id = artist.ArtistId, Name = artist.Name })
+                        .ToList();
+            }
+
+            if (trackIds.Count > 0)
+            {
+                var trackArtists = await dbContext.SpTrackArtists
+                    .AsNoTracking()
+                    .Where(assignment => trackIds.Contains(assignment.TrackId))
+                    .OrderBy(assignment => assignment.Id)
+                    .Select(assignment => new { assignment.TrackId, assignment.ArtistId, assignment.Artist.Name })
+                    .ToListAsync();
+                var artistsByTrack = trackArtists.ToLookup(artist => artist.TrackId);
+                foreach (var item in items.Where(item => item.ItemType == "track"))
+                    item.Artists = artistsByTrack[item.SpotifyItemId]
+                        .DistinctBy(artist => artist.ArtistId)
+                        .Select(artist => new SimpleArtist { Id = artist.ArtistId, Name = artist.Name })
+                        .ToList();
+            }
+
             return Ok(new PagedResult<TagAssignmentHistoryModel>
             {
                 Items = items,

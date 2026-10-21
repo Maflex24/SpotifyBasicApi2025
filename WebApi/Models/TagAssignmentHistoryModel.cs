@@ -11,6 +11,7 @@ namespace SpotifyBasicApi2025.Models
         public string SpotifyItemId { get; set; } = string.Empty;
         public string ItemName { get; set; } = string.Empty;
         public string? ImageUrl { get; set; }
+        public List<SimpleArtist> Artists { get; set; } = new();
         public float? PreviousStrength { get; set; }
         public float? NewStrength { get; set; }
         public DateTime ChangedAt { get; set; }

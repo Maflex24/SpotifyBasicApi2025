@@ -63,13 +63,14 @@
                 <tbody>
                     @foreach (var entry in history.Items)
                     {
+                        var href = GetItemHref(entry);
                         <tr>
                             <td class="text-nowrap">@entry.ChangedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                             <td><span class="badge @GetActionClass(entry.Action)">@GetActionLabel(entry.Action)</span></td>
                             <td><span class="fw-semibold">@entry.TagName</span><small class="d-block text-secondary">@entry.TagGroupName</small></td>
                             <td>
                                 <div class="assignment-history-item">
-                                    @if (GetItemHref(entry) is { } href)
+                                    @if (href is not null)
                                     {
                                         <a class="assignment-history-thumbnail" href="@href" aria-label="Otwórz: @entry.ItemName">
                                             @if (!string.IsNullOrWhiteSpace(entry.ImageUrl))
@@ -77,10 +78,6 @@
                                                 <img src="@entry.ImageUrl" alt="" loading="lazy" onerror="this.style.display='none'" />
                                             }
                                         </a>
-                                        <span>
-                                            <a class="link-light" href="@href">@entry.ItemName</a>
-                                            <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
-                                        </span>
                                     }
                                     else
                                     {
@@ -90,11 +87,32 @@
                                                 <img src="@entry.ImageUrl" alt="" loading="lazy" onerror="this.style.display='none'" />
                                             }
                                         </span>
-                                        <span>
-                                            <span>@entry.ItemName</span>
-                                            <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
-                                        </span>
                                     }
+                                    <span>
+                                        @if (href is not null)
+                                        {
+                                            <a class="link-light" href="@href">@entry.ItemName</a>
+                                        }
+                                        else
+                                        {
+                                            <span>@entry.ItemName</span>
+                                        }
+                                        @if ((entry.ItemType == "album" || entry.ItemType == "track") && entry.Artists.Count > 0)
+                                        {
+                                            <small class="d-block">
+                                                @for (var i = 0; i < entry.Artists.Count; i++)
+                                                {
+                                                    var artist = entry.Artists[i];
+                                                    if (i > 0)
+                                                    {
+                                                        <span class="text-secondary">, </span>
+                                                    }
+                                                    <a class="link-light" href="@($"/artist/{Uri.EscapeDataString(artist.Id)}")">@artist.Name</a>
+                                                }
+                                            </small>
+                                        }
+                                        <small class="d-block text-secondary">@GetItemTypeLabel(entry.ItemType)</small>
+                                    </span>
                                 </div>
                             </td>
                             <td class="text-nowrap">@GetStrengthChange(entry)</td>
@@ -230,6 +248,7 @@
     private static string FormatStrength(float? strength) => strength.HasValue ? strength.Value.ToString("0.0") : "—";
 
     private sealed class TagOption { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private sealed class ArtistReference { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class PagedHistory { public List<HistoryEntry> Items { get; set; } = new(); public int Total { get; set; } public int Page { get; set; } = 1; public int PageSize { get; set; } public int TotalPages { get; set; } }
-    private sealed class HistoryEntry { public string Action { get; set; } = string.Empty; public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public string SpotifyItemId { get; set; } = string.Empty; public string ItemName { get; set; } = string.Empty; public string? ImageUrl { get; set; } public float? PreviousStrength { get; set; } public float? NewStrength { get; set; } public DateTime ChangedAt { get; set; } }
+    private sealed class HistoryEntry { public string Action { get; set; } = string.Empty; public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public string SpotifyItemId { get; set; } = string.Empty; public string ItemName { get; set; } = string.Empty; public string? ImageUrl { get; set; } public List<ArtistReference> Artists { get; set; } = new(); public float? PreviousStrength { get; set; } public float? NewStrength { get; set; } public DateTime ChangedAt { get; set; } }
 }
