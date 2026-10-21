@@ -1,0 +1,20 @@
+<label class="tag-date-sort-control d-flex flex-column gap-1">
+    <span class="small text-secondary">Sortuj według przypisania</span>
+    <select class="form-select form-select-sm select-dark" aria-label="Sortuj według przypisania" required
+            value="@Value" @onchange="SelectionChanged">
+        <option value="" disabled>Wybierz tag lub najnowsze przypisanie…</option>
+        <option value="latest">Najnowsze przypisanie spośród wybranych tagów</option>
+        @foreach (var tag in Tags)
+        {
+            <option value="@tag.Id.ToString()">@tag.Name</option>
+        }
+    </select>
+</label>
+
+@code {
+    [Parameter] public IReadOnlyList<TagItem> Tags { get; set; } = Array.Empty<TagItem>();
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private Task SelectionChanged(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+}

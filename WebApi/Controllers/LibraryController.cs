@@ -223,11 +223,12 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? excludeMode = null,
             [FromQuery] string? excludeTagStrengths = null,
             [FromQuery] string? search = null,
-            [FromQuery] bool includeExternal = false)
+            [FromQuery] bool includeExternal = false,
+            [FromQuery] string? tagDateMode = null)
         {
             try
             {
-                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, search, includeExternal);
+                var result = await libraryService.GetUserArtistsAsync(sort, order, tags, sortTagId, genre, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, search, includeExternal, tagDateMode);
 
                 return Ok(result);
             }
@@ -514,15 +515,20 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? excludeTagStrengths = null,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 100,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] string? tagDateMode = null)
         {
             try
             {
                 var result = await libraryService.GetUserTracksAsync(
                     sort, order, tags, sortTagId, artistId, albumId, year,
                     includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths,
-                    page, pageSize, search);
+                    page, pageSize, search, tagDateMode);
                 return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
@@ -603,13 +609,18 @@ namespace SpotifyBasicApi2025.Controllers
             [FromQuery] string? search = null,
             [FromQuery] bool random = false,
             [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 100)
+            [FromQuery] int pageSize = 100,
+            [FromQuery] string? tagDateMode = null)
         {
             try
             {
-                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, includeGenres, excludeGenres, includeArtistTags, search, random, page, pageSize);
+                var result = await libraryService.GetUserAlbumsAsync(sort, order, tags, sortTagId, artistId, includeArtists, excludeArtists, fromYear, toYear, includeTags, includeMode, includeTagStrengths, excludeTags, excludeMode, excludeTagStrengths, includeGenres, excludeGenres, includeArtistTags, search, random, page, pageSize, tagDateMode);
 
                 return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (InvalidOperationException ex)
             {

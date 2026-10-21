@@ -1,0 +1,10 @@
+.tag-date-sort-control {
+    min-width: 0;
+    width: min(100%, 30rem);
+    grid-column: 1 / -1;
+}
+
+.tag-date-sort-control select {
+    min-width: 0;
+    width: 100%;
+}

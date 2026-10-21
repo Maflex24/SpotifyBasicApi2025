@@ -253,7 +253,8 @@ namespace SpotifyBasicApi2025.Services
             string? excludeMode = null,
             string? excludeTagStrengths = null,
             string? search = null,
-            bool includeExternal = false)
+            bool includeExternal = false,
+            string? tagDateMode = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
@@ -265,6 +266,10 @@ namespace SpotifyBasicApi2025.Services
                 || !string.IsNullOrWhiteSpace(excludeTags)
                 || sortTagId.HasValue))
                 throw new ArgumentException("External search cannot be combined with tag filters.");
+
+            var dateSortTagIds = string.Equals(sort, "tagAdded", StringComparison.OrdinalIgnoreCase)
+                ? TagAssignmentDateSorting.ResolveTagIds(tags, includeTags, sortTagId, tagDateMode)
+                : Array.Empty<long>();
 
             var query = context.LibArtistUserAssigns
                 .Where(a => a.UserId == userId)
@@ -364,7 +369,11 @@ namespace SpotifyBasicApi2025.Services
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortOrderDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
+            if (sortKey == "tagadded")
+            {
+                query = TagAssignmentDateSorting.Apply(query, context.LibTagAssigns, userId, "artist", dateSortTagIds, sortOrderDesc);
+            }
+            else if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
             {
                 var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
 
@@ -1277,12 +1286,17 @@ namespace SpotifyBasicApi2025.Services
             string? excludeTagStrengths = null,
             int page = 1,
             int pageSize = 100,
-            string? search = null)
+            string? search = null,
+            string? tagDateMode = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
             if (string.IsNullOrEmpty(userId))
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var dateSortTagIds = string.Equals(sort, "tagAdded", StringComparison.OrdinalIgnoreCase)
+                ? TagAssignmentDateSorting.ResolveTagIds(tags, includeTags, sortTagId, tagDateMode)
+                : Array.Empty<long>();
 
             var query = context.LibTrackUserAssigns
                 .Where(a => a.UserId == userId)
@@ -1376,7 +1390,11 @@ namespace SpotifyBasicApi2025.Services
             var sortKey = (sort ?? "name").ToLowerInvariant();
             var sortDesc = string.Equals(order, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
+            if (sortKey == "tagadded")
+            {
+                query = TagAssignmentDateSorting.Apply(query, context.LibTagAssigns, userId, "track", dateSortTagIds, sortDesc);
+            }
+            else if (sortKey == "weight" && !string.IsNullOrWhiteSpace(includeTags))
             {
                 var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
 
@@ -1611,12 +1629,17 @@ namespace SpotifyBasicApi2025.Services
             string? search = null,
             bool random = false,
             int page = 1,
-            int pageSize = 100)
+            int pageSize = 100,
+            string? tagDateMode = null)
         {
             var userId = await userService.GetCurrentUserIdAsync();
 
             if (string.IsNullOrEmpty(userId))
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany");
+
+            var dateSortTagIds = string.Equals(sort, "tagAdded", StringComparison.OrdinalIgnoreCase)
+                ? TagAssignmentDateSorting.ResolveTagIds(tags, includeTags, sortTagId, tagDateMode)
+                : Array.Empty<long>();
 
             var query = context.LibAlbumUserAssigns
                 .Where(a => a.UserId == userId)
@@ -1711,7 +1734,11 @@ namespace SpotifyBasicApi2025.Services
                     weightTagId = tagIds.First();
             }
 
-            if (sortKey == "weight" && weightTagId.HasValue)
+            if (sortKey == "tagadded")
+            {
+                query = TagAssignmentDateSorting.Apply(query, context.LibTagAssigns, userId, "album", dateSortTagIds, sortOrderDesc);
+            }
+            else if (sortKey == "weight" && weightTagId.HasValue)
             {
                 var tagId = weightTagId.Value;
                 query = sortOrderDesc

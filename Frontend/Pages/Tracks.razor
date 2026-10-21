@@ -8,6 +8,8 @@
 @using Microsoft.JSInterop
 @using System.Text.Json
 
+@{ NormalizeTagDateSort(); }
+
 <PageTitle>Library Manager - Utwory</PageTitle>
 
 <div class="container-fluid py-3">
@@ -28,18 +30,24 @@
         <div class="library-toolbar-heading"><h4 class="mb-0">Utwory <span class="library-results-count">@GetResultCountText(total, "utwór", "utwory", "utworów")</span></h4></div>
         <div class="library-search-group"><input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" /></div>
         <div class="library-filter-fields">
-            <select class="form-select form-select-sm w-auto select-dark" @bind="sortKey">
+            <select class="form-select form-select-sm w-auto select-dark" @bind="SortKeySelection">
                 <option value="name">Nazwa</option>
                 <option value="album">Album</option>
                 <option value="artists">Wykonawcy</option>
                 <option value="popularity">Popularność</option>
                 <option value="weight">Waga tagu</option>
+                <option value="tagAdded" disabled="@(TagDateCandidates.Length == 0)">Data przypisania tagu</option>
                 <option value="year">Rok</option>
             </select>
             <select class="form-select form-select-sm w-auto select-dark" @bind="sortOrder">
-                <option value="asc">Rosnąco</option>
-                <option value="desc">Malejąco</option>
+                <option value="asc">@(sortKey == "tagAdded" ? "Od najstarszych" : "Rosnąco")</option>
+                <option value="desc">@(sortKey == "tagAdded" ? "Od najnowszych" : "Malejąco")</option>
             </select>
+            @if (sortKey == "tagAdded")
+            {
+                <TagDateSortSelect Tags="@TagDateOptions" @bind-Value="TagDateSelection" />
+            }
+
 
             <select class="form-select form-select-sm w-auto select-dark" @bind="selectedArtistId">
                 <option value="">Wszyscy wykonawcy</option>
@@ -62,7 +70,7 @@
         </div>
         <div class="library-toolbar-actions">
             <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść wszystkie filtry" @onclick="ResetFilters"><AppIcon Name="reset" /><span class="album-action-label">Resetuj</span></button>
-            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-apply" disabled="@(!CanApplyTagDateSort)" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters"><AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span></button>
         </div>
         <div class="library-playback-actions"><button class="btn btn-sm album-action-button album-action-play-all" title="Odtwórz bieżące wyniki" @onclick="PlayFiltered"><AppIcon Name="play" /><span class="album-action-label">Odtwórz</span></button></div>
@@ -253,6 +261,38 @@
 </div>
 
 @code {
+    private string tagDateMode = "single";
+    private long[] TagDateCandidates => TagDateSortSelection.Candidates(includeTagIds, selectedTagFilter);
+    private List<TagItem> TagDateOptions => TagDateCandidates
+        .Select(id => new TagItem { Id = id, Name = availableTags.FirstOrDefault(tag => tag.Id == id)?.Name ?? $"Tag {id}" })
+        .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    private bool CanApplyTagDateSort => sortKey != "tagAdded" || tagDateMode == "latest" || !string.IsNullOrEmpty(selectedTagSort);
+    private string SortKeySelection
+    {
+        get => sortKey;
+        set
+        {
+            if (value == "tagAdded" && sortKey != value)
+                sortOrder = "desc";
+            sortKey = value;
+            NormalizeTagDateSort();
+        }
+    }
+    private string TagDateSelection
+    {
+        get => tagDateMode == "latest" ? "latest" : selectedTagSort ?? string.Empty;
+        set
+        {
+            tagDateMode = value == "latest" ? "latest" : "single";
+            selectedTagSort = value == "latest" ? null : value;
+            NormalizeTagDateSort();
+        }
+    }
+    private string TagDateSortLabel => TagDateSortSelection.Label(tagDateMode, sortOrder,
+        TagDateOptions.FirstOrDefault(tag => tag.Id.ToString() == selectedTagSort)?.Name);
+    private void NormalizeTagDateSort() => TagDateSortSelection.Normalize(ref _sortKey, ref _sortOrder,
+        ref tagDateMode, ref selectedTagSort, TagDateCandidates);
+
     private string _sortKey = "name";
     private string sortKey
     {
@@ -365,12 +405,14 @@
 
     private TracksState BuildCurrentState()
     {
+        NormalizeTagDateSort();
         return new TracksState
         {
             sortKey = sortKey,
             sortOrder = sortOrder,
             selectedTagFilter = selectedTagFilter,
             selectedTagSort = selectedTagSort,
+            tagDateMode = tagDateMode,
             selectedArtistId = selectedArtistId,
             selectedAlbumId = selectedAlbumId,
             selectedYear = selectedYear,
@@ -391,7 +433,7 @@
         if (!string.IsNullOrWhiteSpace(selectedArtistId)) chips.Add(new($"Wykonawca: {availableArtists.FirstOrDefault(a => a.Id == selectedArtistId)?.Name ?? selectedArtistId}", "active-library-filter-chip", () => { selectedArtistId = null; return Task.CompletedTask; }));
         if (!string.IsNullOrWhiteSpace(selectedAlbumId)) chips.Add(new($"Album: {availableAlbums.FirstOrDefault(a => a.Id == selectedAlbumId)?.Name ?? selectedAlbumId}", "active-library-filter-chip", () => { selectedAlbumId = null; return Task.CompletedTask; }));
         if (selectedYear.HasValue) chips.Add(new($"Rok: {selectedYear}", "active-library-filter-chip", () => { selectedYear = null; return Task.CompletedTask; }));
-        if (sortKey != "name" || sortOrder != "asc") chips.Add(new($"Sortowanie: {sortKey} ({sortOrder})", "active-library-filter-chip", () => { sortKey = "name"; sortOrder = "asc"; return Task.CompletedTask; }));
+        if (sortKey != "name" || sortOrder != "asc") chips.Add(new(sortKey == "tagAdded" ? TagDateSortLabel : $"Sortowanie: {sortKey} ({sortOrder})", "active-library-filter-chip", () => { sortKey = "name"; sortOrder = "asc"; return Task.CompletedTask; }));
         foreach (var id in includeTagIds) { var name = availableTags.FirstOrDefault(t => t.Id == id)?.Name ?? id.ToString(); chips.Add(new($"Włącz: {name} ({includeMode.ToUpperInvariant()})", "active-library-filter-chip active-library-filter-chip-include", () => { includeTagIds.Remove(id); return Task.CompletedTask; })); }
         foreach (var id in excludeTagIds) { var name = availableTags.FirstOrDefault(t => t.Id == id)?.Name ?? id.ToString(); chips.Add(new($"Wyklucz: {name} ({excludeMode.ToUpperInvariant()})", "active-library-filter-chip active-library-filter-chip-exclude", () => { excludeTagIds.Remove(id); return Task.CompletedTask; })); }
         return chips;
@@ -400,7 +442,8 @@
     private sealed record ActiveFilterChip(string Label, string CssClass, Func<Task> ClearAsync);
     private sealed record TrackFilterSnapshot(string SortKey, string SortOrder, string? SelectedTagFilter, string? SelectedTagSort, string? SelectedArtistId, string? SelectedAlbumId, int? SelectedYear, string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, TagStrengthFilterRule[] IncludeTagStrengths, TagStrengthFilterRule[] ExcludeTagStrengths)
     {
-        public bool Matches(TrackFilterSnapshot? other) => other is not null && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && SelectedArtistId == other.SelectedArtistId && SelectedAlbumId == other.SelectedAlbumId && SelectedYear == other.SelectedYear && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds) && TagStrengthFilters.Equal(IncludeTagStrengths, other.IncludeTagStrengths) && TagStrengthFilters.Equal(ExcludeTagStrengths, other.ExcludeTagStrengths);
+        public string TagDateMode { get; init; } = "single";
+        public bool Matches(TrackFilterSnapshot? other) => other is not null && TagDateMode == other.TagDateMode && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && SelectedArtistId == other.SelectedArtistId && SelectedAlbumId == other.SelectedAlbumId && SelectedYear == other.SelectedYear && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds) && TagStrengthFilters.Equal(IncludeTagStrengths, other.IncludeTagStrengths) && TagStrengthFilters.Equal(ExcludeTagStrengths, other.ExcludeTagStrengths);
     }
 
     private async Task SaveCurrentFilter()
@@ -429,6 +472,7 @@
         sortOrder = state.sortOrder ?? sortOrder;
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
+        tagDateMode = state.tagDateMode ?? "single";
         selectedArtistId = state.selectedArtistId;
         selectedAlbumId = state.selectedAlbumId;
         selectedYear = state.selectedYear;
@@ -467,11 +511,16 @@
         }
     }
 
-    private TrackFilterSnapshot CaptureCurrentFilters() => new(sortKey, sortOrder, selectedTagFilter, selectedTagSort, selectedArtistId, selectedAlbumId, selectedYear, localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters), TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters));
+    private TrackFilterSnapshot CaptureCurrentFilters()
+    {
+        NormalizeTagDateSort();
+        return new TrackFilterSnapshot(sortKey, sortOrder, selectedTagFilter, selectedTagSort, selectedArtistId, selectedAlbumId, selectedYear, localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters), TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters)) { TagDateMode = tagDateMode };
+    }
 
     private async Task ApplyFiltersAsync()
     {
         var filters = CaptureCurrentFilters();
+        if (!CanApplyTagDateSort) return;
         if (await LoadTracks(true, filters))
             appliedFilters = filters;
     }
@@ -504,7 +553,7 @@
 
         if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
 
-        if (!string.IsNullOrEmpty(filters.SelectedTagSort)) query.Add($"sortTagId={filters.SelectedTagSort}");
+        TagDateSortSelection.AppendQuery(query, filters.SortKey, filters.TagDateMode, filters.SelectedTagSort);
 
         if (!string.IsNullOrEmpty(filters.SelectedArtistId)) query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
 
@@ -615,6 +664,7 @@
         sortOrder = "asc";
         selectedTagFilter = null;
         selectedTagSort = null;
+        tagDateMode = "single";
         selectedArtistId = null;
         selectedAlbumId = null;
         selectedYear = null;
@@ -790,6 +840,12 @@
         if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase))
             return;
 
+        if ((appliedFilters ?? CaptureCurrentFilters()).SortKey == "tagAdded")
+        {
+            await LoadTracks(true, appliedFilters ?? CaptureCurrentFilters());
+            return;
+        }
+
         var track = tracks.FirstOrDefault(item => item.Id == state.SpotifyItemId);
         if (track == null)
             return;
@@ -901,6 +957,7 @@
 
         selectedTagFilter = tag;
         selectedTagSort = tag;
+        tagDateMode = "single";
         sortKey = "weight";
         sortOrder = "desc";
 
@@ -1178,6 +1235,12 @@
             return;
         }
 
+        if ((appliedFilters ?? CaptureCurrentFilters()).SortKey == "tagAdded")
+        {
+            await LoadTracks(true, appliedFilters ?? CaptureCurrentFilters());
+            return;
+        }
+
         if (tracks.Any(t => t.Id == spotifyItemId))
             await RefreshTrackTags(spotifyItemId);
     }
@@ -1322,12 +1385,14 @@
 
     private async Task SaveToStore()
     {
+        NormalizeTagDateSort();
         var state = new
         {
             sortKey,
             sortOrder,
             selectedTagFilter,
             selectedTagSort,
+            tagDateMode,
             selectedArtistId,
             selectedAlbumId,
             selectedYear,
@@ -1351,6 +1416,7 @@
         sortOrder = state.sortOrder ?? sortOrder;
         selectedTagFilter = state.selectedTagFilter;
         selectedTagSort = state.selectedTagSort;
+        tagDateMode = state.tagDateMode ?? "single";
         selectedArtistId = state.selectedArtistId;
         selectedAlbumId = state.selectedAlbumId;
         selectedYear = state.selectedYear;
@@ -1382,7 +1448,7 @@
     private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
     private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public TagStrengthFilterRule[]? includeTagStrengths { get; set; } public TagStrengthFilterRule[]? excludeTagStrengths { get; set; } public bool? showTagFilters { get; set; } }
+    private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? tagDateMode { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public TagStrengthFilterRule[]? includeTagStrengths { get; set; } public TagStrengthFilterRule[]? excludeTagStrengths { get; set; } public bool? showTagFilters { get; set; } }
 
     private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 
