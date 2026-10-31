@@ -25,6 +25,7 @@ builder.Services.AddScoped<LocalStorageService>();
 builder.Services.AddScoped<AiChatDrawerService>();
 builder.Services.AddScoped<BlindModeService>();
 builder.Services.AddScoped<ActivePlaybackService>();
+builder.Services.AddScoped<PlaybackService>();
 builder.Services.AddScoped<TagClipboardService>();
 
 await builder.Build().RunAsync();

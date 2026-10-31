@@ -1,5 +1,6 @@
 @page "/album/{Id}"
 @inject HttpClient Http
+@inject PlaybackService Playback
 @inject AiChatDrawerService AiDrawer
 @using System.Net.Http.Json
 @using Frontend.Components
@@ -139,17 +140,7 @@
     {
         if (string.IsNullOrWhiteSpace(uri)) return;
         var body = new { uris = new[] { uri } };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        await Playback.PlayAsync(body);
     }
 
     private async Task AddAlbum()
@@ -220,8 +211,6 @@
     }
 
     private sealed class TracksPayload { public List<TrackDto> items { get; set; } = new(); }
-    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
-    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
 
     private sealed class ItemStatusRequest { public string ItemType { get; set; } = string.Empty; public List<string> SpotifyItemIds { get; set; } = new(); }
     private sealed class ItemStatus { public string SpotifyItemId { get; set; } = string.Empty; public bool IsInLibrary { get; set; } public List<TagBadge> Tags { get; set; } = new(); }

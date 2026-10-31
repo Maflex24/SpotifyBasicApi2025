@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject LocalStorageService Store
 @inject HttpClient Http
+@inject PlaybackService Playback
 @inject AiChatDrawerService AiDrawer
 @implements IAsyncDisposable
 
@@ -990,18 +991,8 @@
     {
         if (string.IsNullOrWhiteSpace(uri)) return;
         var body = new { uris = new[] { uri } };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        if (!await Playback.PlayAsync(body))
+            return;
     }
 
     private async Task PlayFiltered()
@@ -1015,19 +1006,8 @@
             return;
 
         var body = new { uris = uris };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        if (!await Playback.PlayAsync(body))
+            return;
     }
 
     private bool showTrackTagging = false;
@@ -1048,8 +1028,6 @@
     private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
-    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForTrack { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
     private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public bool IsPinnedGroup { get; set; } public List<TagDto> Tags { get; set; } = new(); }

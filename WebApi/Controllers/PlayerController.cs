@@ -49,8 +49,10 @@ namespace SpotifyBasicApi2025.Controllers
         {
             try
             {
-                await playerService.PlayAsync(deviceId, body);
-                
+                var result = await playerService.PlayAsync(deviceId, body);
+                if (result.Warning != null)
+                    return Ok(new { warning = result.Warning });
+
                 return NoContent();
             }
             catch (InvalidOperationException ex)

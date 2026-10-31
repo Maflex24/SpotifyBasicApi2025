@@ -3,6 +3,7 @@
 @inject LocalStorageService Store
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject PlaybackService Playback
 @inject AiChatDrawerService AiDrawer
 @implements IDisposable
 @using Microsoft.JSInterop
@@ -1026,18 +1027,8 @@
             return;
         
         var body = new { uris = new[] { uri } };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        if (!await Playback.PlayAsync(body))
+            return;
 
         // Ustal bieżące ID utworu z URI (spotify:track:XYZ)
         var lastColon = uri.LastIndexOf(':');
@@ -1064,19 +1055,8 @@
             return;
 
         var body = new { uris };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        if (!await Playback.PlayAsync(body))
+            return;
     }
 
     private async Task PlayTrackAndFollowing(string? trackId)
@@ -1105,19 +1085,8 @@
             return;
 
         var body = new { uris };
-        var res = await Http.PutAsJsonAsync("api/player/play", body);
-
-        if (!res.IsSuccessStatusCode)
-        {
-            var devices = await Http.GetFromJsonAsync<DevicesResponse>("api/player/devices");
-            var first = devices?.Devices?.FirstOrDefault();
-
-            if (first != null)
-            {
-                await Http.PutAsync($"api/player?deviceIdsCsv={Uri.EscapeDataString(first.Id)}&play=true", null);
-                await Http.PutAsJsonAsync("api/player/play", body);
-            }
-        }
+        if (!await Playback.PlayAsync(body))
+            return;
 
         // ustaw bieżące ID na pierwszy z listy
         var firstUri = uris.FirstOrDefault();
@@ -1445,8 +1414,6 @@
     private sealed class AssignDto { public long TagId { get; set; } public string SpotifyItemId { get; set; } = string.Empty; public string ItemType { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class ArtistOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class AlbumOption { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class DevicesResponse { public List<DeviceItem> Devices { get; set; } = new(); }
-    private sealed class DeviceItem { public string Id { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class TracksState { public string? sortKey { get; set; } public string? sortOrder { get; set; } public string? selectedTagFilter { get; set; } public string? selectedTagSort { get; set; } public string? tagDateMode { get; set; } public string? selectedArtistId { get; set; } public string? selectedAlbumId { get; set; } public int? selectedYear { get; set; } public string? localSearch { get; set; } public string? includeMode { get; set; } public string? excludeMode { get; set; } public long[]? includeTagIds { get; set; } public long[]? excludeTagIds { get; set; } public TagStrengthFilterRule[]? includeTagStrengths { get; set; } public TagStrengthFilterRule[]? excludeTagStrengths { get; set; } public bool? showTagFilters { get; set; } }
 

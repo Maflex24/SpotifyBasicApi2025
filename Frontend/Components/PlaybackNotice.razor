@@ -1,0 +1,16 @@
+@inject PlaybackService Playback
+@implements IDisposable
+
+@if (!string.IsNullOrWhiteSpace(Playback.Error) || !string.IsNullOrWhiteSpace(Playback.Warning))
+{
+    <div class="alert @(Playback.Error != null ? "alert-danger" : "alert-warning") mx-4 mt-3 d-flex align-items-center gap-3" role="alert">
+        <span class="flex-grow-1">@(Playback.Error ?? Playback.Warning)</span>
+        <button type="button" class="btn-close" aria-label="Zamknij" @onclick="Playback.ClearError"></button>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => Playback.Changed += OnChanged;
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Playback.Changed -= OnChanged;
+}
