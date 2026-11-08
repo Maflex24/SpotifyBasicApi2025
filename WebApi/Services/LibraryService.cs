@@ -292,53 +292,6 @@ namespace SpotifyBasicApi2025.Services
                 }
             }
 
-            // Nowe filtrowanie: include/exclude z AND/OR
-            if (!string.IsNullOrWhiteSpace(includeTags))
-            {
-                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
-
-                if (tagIds.Count > 0)
-                {
-                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
-
-                    if (andMode)
-                    {
-                        // artysta musi mieć wszystkie wskazane tagi
-                        foreach (var tid in tagIds)
-                        {
-                            var idLocal = tid;
-                            query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && ass.TagId == idLocal));
-                        }
-                    }
-                    else
-                    {
-                        // OR – artysta musi mieć dowolny z tagów
-                        query = query.Where(artist => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
-                    }
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(excludeTags))
-            {
-                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
-
-                if (tagIds.Count > 0)
-                {
-                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
-
-                    if (andMode)
-                    {
-                        // wyklucz artystów, którzy mają wszystkie wskazane tagi (czyli AND w warunku wykluczenia)
-                        query = query.Where(artist => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && ass.TagId == tid)));
-                    }
-                    else
-                    {
-                        // OR – wyklucz jeśli ma choć jeden z tagów
-                        query = query.Where(artist => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "artist" && ass.SpotifyItemId == artist.Id && tagIds.Contains(ass.TagId)));
-                    }
-                }
-            }
-
             // Filtrowanie po gatunku
             if (!string.IsNullOrWhiteSpace(genre))
             {
@@ -1332,40 +1285,6 @@ namespace SpotifyBasicApi2025.Services
                     query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
             }
 
-            if (!string.IsNullOrWhiteSpace(includeTags))
-            {
-                var tagIds = includeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
-                if (tagIds.Count > 0)
-                {
-                    var andMode = string.Equals(includeMode, "and", StringComparison.OrdinalIgnoreCase);
-                    if (andMode)
-                    {
-                        foreach (var tid in tagIds)
-                        {
-                            var idLocal = tid;
-                            query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == idLocal));
-                        }
-                    }
-                    else
-                    {
-                        query = query.Where(track => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
-                    }
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(excludeTags))
-            {
-                var tagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(long.Parse).ToList();
-                if (tagIds.Count > 0)
-                {
-                    var andMode = string.Equals(excludeMode, "and", StringComparison.OrdinalIgnoreCase);
-                    if (andMode)
-                        query = query.Where(track => !tagIds.All(tid => context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && ass.TagId == tid)));
-                    else
-                        query = query.Where(track => !context.LibTagAssigns.Any(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == track.Id && tagIds.Contains(ass.TagId)));
-                }
-            }
-
             // Wyszukiwanie (AND po słowach kluczowych): nazwa utworu, nazwa albumu, artyści, nazwy tagów
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -1402,14 +1321,15 @@ namespace SpotifyBasicApi2025.Services
                 {
                     var firstTagId = tagIds.First();
 
-                    query = sortDesc
-                    ? query.OrderByDescending(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault())
-                    : query.OrderBy(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault());
+                    query = (sortDesc
+                        ? query.OrderByDescending(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault())
+                        : query.OrderBy(t => context.LibTagAssigns.Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == t.Id && ass.TagId == firstTagId).Select(ass => ass.Strength).FirstOrDefault()))
+                        .ThenBy(track => track.Id);
                 }
             }
             else
             {
-                query = sortKey switch
+                query = (sortKey switch
                 {
                     "year" => sortDesc ? query.OrderByDescending(x => x.Album!.ReleaseDate) : query.OrderBy(x => x.Album!.ReleaseDate),
                     "popularity" => sortDesc ? query.OrderByDescending(x => x.Popularity) : query.OrderBy(x => x.Popularity),
@@ -1433,7 +1353,7 @@ namespace SpotifyBasicApi2025.Services
                             .Where(ass => ass.UserId == userId && ass.ItemType == "track" && ass.SpotifyItemId == x.Id)
                             .Count()),
                     _ => sortDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
-                };
+                }).ThenBy(track => track.Id);
             }
 
             // Liczba całkowita przed paginacją
@@ -1670,7 +1590,6 @@ namespace SpotifyBasicApi2025.Services
             if (toYear.HasValue)
                 query = query.Where(album => album.Year <= toYear);
 
-            query = ApplyAlbumTags(query, userId, includeTags, includeMode, excludeTags, excludeMode, includeArtistTags);
             query = ApplyAlbumGenres(query, includeGenres, excludeGenres);
 
             foreach (var term in GetSearchTerms(search))

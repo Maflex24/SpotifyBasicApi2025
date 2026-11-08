@@ -2935,3 +2935,16 @@ button.tag-preview-tag {
         border-left: 0;
     }
 }
+.album-action-button.library-apply-pending {
+    box-shadow: 0 0 0 2px #ffd166;
+}
+
+.library-tags-changed {
+    background-color: #ffd166;
+    color: #211900;
+}
+
+.library-refresh-message {
+    color: #ffd166;
+    margin-block: 0.5rem;
+}

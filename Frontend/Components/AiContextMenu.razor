@@ -121,9 +121,9 @@
 
             var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
             if (OnTagsChanged.HasDelegate)
-                await OnTagsChanged.InvokeAsync(new TagAssignmentState { ItemType = ItemType, SpotifyItemId = SpotifyItemId, Tags = tags });
+                await OnTagsChanged.InvokeAsync(new TagAssignmentState { ItemType = request.ItemType, SpotifyItemId = request.SpotifyItemId, Tags = tags });
 
-            try { await JS.InvokeVoidAsync("tagSync.notify", ItemType, SpotifyItemId); } catch { }
+            try { await JS.InvokeVoidAsync("tagSync.notify", request.ItemType, request.SpotifyItemId, tags); } catch { }
             isOpen = false;
         }
         catch

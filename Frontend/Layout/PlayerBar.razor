@@ -269,10 +269,13 @@
         currentAlbumAssigns = assigns ?? new List<TagBadge>();
     }
 
-    private async Task RefreshCurrentTrackAssigns(string trackId)
+    private async Task NotifyTrackTagsChanged(string trackId)
     {
-        var assigns = await Http.GetFromJsonAsync<List<TagBadge>>($"api/tags/assign/track/{Uri.EscapeDataString(trackId)}");
-        currentTrackAssigns = assigns ?? new List<TagBadge>();
+        var tags = await Http.GetFromJsonAsync<List<TagBadge>>($"api/tags/assign/track/{Uri.EscapeDataString(trackId)}") ?? new();
+        if (trackId == GetCurrentTrackId())
+            currentTrackAssigns = tags;
+
+        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId, tags); } catch { }
     }
 
     private Task ApplyCurrentTrackTagState(TagAssignmentState state)
@@ -318,10 +321,7 @@
         var res = await Http.PostAsJsonAsync("api/tags/assign", body);
 
         if (res.IsSuccessStatusCode)
-        {
-            await RefreshCurrentTrackAssigns(trackId);
-            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
-        }
+            await NotifyTrackTagsChanged(trackId);
     }
 
     private async Task AdjustAssignStrength(long tagId, float delta)
@@ -346,10 +346,7 @@
         var res = await Http.PutAsJsonAsync("api/tags/assign", body);
 
         if (res.IsSuccessStatusCode)
-        {
-            await RefreshCurrentTrackAssigns(trackId);
-            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
-        }
+            await NotifyTrackTagsChanged(trackId);
     }
 
     private async Task RemoveAssign(long tagId)
@@ -368,8 +365,7 @@
         if (!req.IsSuccessStatusCode)
             return;
 
-        await RefreshCurrentTrackAssigns(trackId);
-        try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", "track", trackId); } catch { }
+        await NotifyTrackTagsChanged(trackId);
     }
 
     private List<TagBadge> GetCurrentTrackTagBadges()

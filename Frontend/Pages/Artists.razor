@@ -62,7 +62,7 @@
         </div>
         <div class="library-toolbar-actions" aria-label="Akcje filtrowania">
             <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść wszystkie filtry" @onclick="ResetFilters"><AppIcon Name="reset" /><span class="album-action-label">Resetuj</span></button>
-            <button class="btn btn-sm album-action-button album-action-apply" disabled="@(!CanApplyTagDateSort)" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-apply @(pendingTags.Any ? "library-apply-pending" : null)" disabled="@(!CanApplyTagDateSort || isLoadingArtists)" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters"><AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span></button>
         </div>
         <div class="library-playback-actions">
@@ -151,21 +151,26 @@
     @{
         var activeFilterChips = GetActiveFilterChips();
     }
-    @if (activeFilterChips.Count > 0 || FiltersPending)
+    @if (activeFilterChips.Count > 0 || FiltersPending || pendingTags.Any)
     {
         <section class="active-library-filters mb-3" aria-label="Aktywne filtry artystów">
-            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
+            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : pendingTags.Any ? "Wyniki po zmianie tagów" : "Aktywne filtry:")</span>
             <div class="active-library-filter-chips">
                 @foreach (var chip in activeFilterChips)
                 {
                     <button type="button" class="@chip.CssClass" title="Usuń filtr: @chip.Label" @onclick="chip.ClearAsync"><span>@chip.Label</span><span class="active-library-filter-chip-remove" aria-hidden="true">×</span></button>
                 }
             </div>
-            @if (FiltersPending)
+            @if (FiltersPending || pendingTags.Any)
             {
-                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>Filtruj</span></button>
+                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" disabled="@(!CanApplyTagDateSort || isLoadingArtists)" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>@(pendingTags.Any ? "Zastosuj" : "Filtruj")</span></button>
             }
         </section>
+    }
+
+    @if (refreshMessage is not null)
+    {
+        <p class="library-refresh-message" role="status">@refreshMessage</p>
     }
 
     @if (filteredArtists.Count == 0)
@@ -222,12 +227,16 @@
                             </div>
                         }
                         
+                        @if (pendingTags.Contains("artist", a.Id))
+                        {
+                            <span class="badge library-tags-changed mb-2">Zmieniono tagi</span>
+                        }
                         @if (a.Tags?.Any() == true)
                         {
                             <div class="mb-2">
                                 <small class="text-muted">Tagi:</small>
                                 <div class="mt-1">
-                                    <TagPreview Tags="@(a.Tags.Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" OnTagClick="@(tagId => SelectArtistTag(a.Id, tagId))" />
+                                    <TagPreview Tags="@a.Tags" OnTagClick="@(tagId => SelectArtistTag(a.Id, tagId))" />
                                 </div>
                             </div>
                         }
@@ -254,7 +263,7 @@
                                                ItemType="artist"
                                                SpotifyItemId="@a.Id"
                                                DisplayName="@a.Name"
-                                               Tags="@((a.Tags ?? new List<ArtistTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())"
+                                               Tags="@a.Tags"
                                                IsInLibrary="@a.IsInLibrary"
                                                OnTagsChanged="ApplyTaggedArtistState" />
                             </div>
@@ -366,6 +375,9 @@
     private Dictionary<long, int> tagCounts = new();
     private bool aiAvailable;
     private ArtistFilterSnapshot? appliedFilters;
+    private readonly PendingTagChanges pendingTags = new();
+    private bool isLoadingArtists;
+    private string? refreshMessage;
     private bool HasTagCriteria => !string.IsNullOrWhiteSpace(selectedTagFilter) || !string.IsNullOrWhiteSpace(selectedTagSort) || includeTagIds.Count > 0 || excludeTagIds.Count > 0 || sortKey == "weight";
     private bool FiltersPending => appliedFilters is null || !CaptureCurrentFilters().Matches(appliedFilters);
 
@@ -454,55 +466,87 @@
     {
         var filters = CaptureCurrentFilters();
         if (!CanApplyTagDateSort) return;
-        if (await LoadArtists(filters))
-            appliedFilters = filters;
+        await LoadArtists(filters);
     }
 
     private async Task<bool> LoadArtists(ArtistFilterSnapshot? requestedFilters = null)
     {
-        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
-        var query = new List<string> { $"sort={filters.SortKey}", $"order={filters.SortOrder}" };
-
-        if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
-        if (!string.IsNullOrEmpty(filters.SelectedGenre)) query.Add($"genre={Uri.EscapeDataString(filters.SelectedGenre)}");
-        TagDateSortSelection.AppendQuery(query, filters.SortKey, filters.TagDateMode, filters.SelectedTagSort);
-        if (!string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
-        if (filters.SearchOutsideLibrary && !string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add("includeExternal=true");
-        if (filters.IncludeTagIds.Length > 0)
-        {
-            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
-            query.Add($"includeMode={filters.IncludeMode}");
-            var strengths = TagStrengthFilters.ToQuery(filters.IncludeTagStrengths);
-            if (!string.IsNullOrEmpty(strengths)) query.Add($"includeTagStrengths={Uri.EscapeDataString(strengths)}");
-        }
-        if (filters.ExcludeTagIds.Length > 0)
-        {
-            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
-            query.Add($"excludeMode={filters.ExcludeMode}");
-            var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
-            if (!string.IsNullOrEmpty(strengths)) query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
-        }
-
-        var res = await Http.GetAsync($"api/library/artists?{string.Join('&', query)}");
-        if (!res.IsSuccessStatusCode)
+        if (isLoadingArtists)
             return false;
 
-        var payload = await res.Content.ReadFromJsonAsync<ArtistsResponse>();
-        artists = payload?.items ?? new List<Artist>();
-        // Utrzymaj wybór tagu jeśli nadal istnieje
-        foreach (var a in artists)
+        isLoadingArtists = true;
+        refreshMessage = null;
+        var revision = pendingTags.Revision;
+        try
         {
-            if (!selectedTagByArtist.ContainsKey(a.Id))
+            var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
+            var query = new List<string> { $"sort={filters.SortKey}", $"order={filters.SortOrder}" };
+
+            if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
+            if (!string.IsNullOrEmpty(filters.SelectedGenre)) query.Add($"genre={Uri.EscapeDataString(filters.SelectedGenre)}");
+            TagDateSortSelection.AppendQuery(query, filters.SortKey, filters.TagDateMode, filters.SelectedTagSort);
+            if (!string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
+            if (filters.SearchOutsideLibrary && !string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add("includeExternal=true");
+            if (filters.IncludeTagIds.Length > 0)
             {
-                selectedTagByArtist[a.Id] = null;
+                query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
+                query.Add($"includeMode={filters.IncludeMode}");
+                var strengths = TagStrengthFilters.ToQuery(filters.IncludeTagStrengths);
+                if (!string.IsNullOrEmpty(strengths)) query.Add($"includeTagStrengths={Uri.EscapeDataString(strengths)}");
             }
+            if (filters.ExcludeTagIds.Length > 0)
+            {
+                query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+                query.Add($"excludeMode={filters.ExcludeMode}");
+                var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
+                if (!string.IsNullOrEmpty(strengths)) query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
+            }
+
+            var res = await Http.GetAsync($"api/library/artists?{string.Join('&', query)}");
+            if (!res.IsSuccessStatusCode)
+            {
+                refreshMessage = PendingTagChanges.RefreshFailed;
+                return false;
+            }
+
+            var payload = await res.Content.ReadFromJsonAsync<ArtistsResponse>();
+            var counts = await FetchArtistTagCounts(filters);
+            if (revision != pendingTags.Revision || (counts is null && pendingTags.Any))
+            {
+                refreshMessage = PendingTagChanges.RefreshFailed;
+                return false;
+            }
+
+            artists = payload?.items ?? new List<Artist>();
+            // Utrzymaj wybór tagu jeśli nadal istnieje
+            foreach (var a in artists)
+            {
+                if (!selectedTagByArtist.ContainsKey(a.Id))
+                {
+                    selectedTagByArtist[a.Id] = null;
+                }
+            }
+
+            ApplyLocalFilter(filters.LocalSearch);
+            if (taggingArtistId is not null && !filteredArtists.Any(artist => artist.Id == taggingArtistId))
+                CloseArtistTagging();
+            appliedFilters = filters;
+            pendingTags.Clear();
+            if (counts is not null)
+                tagCounts = counts;
+
+            await SaveToStore();
+            return true;
         }
-
-        ApplyLocalFilter(filters.LocalSearch);
-        await LoadArtistTagCounts(filters);
-
-        await SaveToStore();
-        return true;
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            refreshMessage = PendingTagChanges.RefreshFailed;
+            return false;
+        }
+        finally
+        {
+            isLoadingArtists = false;
+        }
     }
 
     private async Task LoadAvailableTags()
@@ -523,7 +567,6 @@
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForArtist).OrderBy(t => t.Name).ToList();
         artistTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
-        await LoadArtistTagCounts();
     }
 
     private async Task LoadGenres()
@@ -661,16 +704,14 @@
 
         artist.Note = string.IsNullOrWhiteSpace(state.Content) ? null : state.Content;
         taggingNoteContent = artist.Note;
-        ApplyLocalFilter();
+        if (!pendingTags.Any)
+            ApplyLocalFilter();
         return InvokeAsync(StateHasChanged);
     }
 
-    private List<TagBadge> GetArtistTagBadges()
-    {
-        return artists.FirstOrDefault(artist => artist.Id == taggingArtistId)?.Tags?
-            .Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength })
-            .ToList() ?? new List<TagBadge>();
-    }
+    private List<TagBadge> GetArtistTagBadges() =>
+        artists.FirstOrDefault(artist => artist.Id == taggingArtistId)?.Tags ?? new();
+
 
     private async Task RefreshArtistTags(string artistId)
     {
@@ -682,79 +723,18 @@
         await ApplyTaggedArtistState(new TagAssignmentState { ItemType = "artist", SpotifyItemId = artistId, Tags = tags });
     }
 
-    private async Task ApplyTaggedArtistState(TagAssignmentState state)
+    private Task ApplyTaggedArtistState(TagAssignmentState state)
     {
         if (!string.Equals(state.ItemType, "artist", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        if ((appliedFilters ?? CaptureCurrentFilters()).SortKey == "tagAdded")
-        {
-            await LoadArtists(appliedFilters ?? CaptureCurrentFilters());
-            return;
-        }
+            return Task.CompletedTask;
 
         var artist = artists.FirstOrDefault(item => item.Id == state.SpotifyItemId);
-        if (artist == null)
-            return;
+        if (artist is null || PendingTagChanges.SameTags(artist.Tags, state.Tags))
+            return Task.CompletedTask;
 
-        var previousTagIds = artist.Tags.Select(tag => tag.TagId).ToHashSet();
-        artist.Tags = state.Tags.Select(tag => new ArtistTag
-        {
-            TagId = tag.TagId,
-            TagName = tag.TagName,
-            TagGroupName = tag.TagGroupName,
-            Strength = tag.Strength
-        }).ToList();
-
-        if (!MatchesArtistTagFilters(artist))
-            artists.Remove(artist);
-
-        SortArtistsByTagStrength();
-        ApplyLocalFilter();
-
-        if (!previousTagIds.SetEquals(artist.Tags.Select(tag => tag.TagId)))
-            await LoadArtistTagCounts();
-    }
-
-    private bool MatchesArtistTagFilters(Artist artist)
-    {
-        var filters = appliedFilters ?? CaptureCurrentFilters();
-        var tagIds = artist.Tags.Select(tag => tag.TagId).ToHashSet();
-        if (long.TryParse(filters.SelectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
-            return false;
-
-        if (filters.IncludeTagIds.Length > 0)
-        {
-            var matchesInclude = string.Equals(filters.IncludeMode, "and", StringComparison.OrdinalIgnoreCase)
-                ? filters.IncludeTagIds.All(tagIds.Contains)
-                : filters.IncludeTagIds.Any(tagIds.Contains);
-            if (!matchesInclude)
-                return false;
-        }
-
-        if (filters.ExcludeTagIds.Length > 0)
-        {
-            var matchesExcluded = string.Equals(filters.ExcludeMode, "and", StringComparison.OrdinalIgnoreCase)
-                ? filters.ExcludeTagIds.All(tagIds.Contains)
-                : filters.ExcludeTagIds.Any(tagIds.Contains);
-            if (matchesExcluded)
-                return false;
-        }
-
-        return true;
-    }
-
-    private void SortArtistsByTagStrength()
-    {
-        var filters = appliedFilters ?? CaptureCurrentFilters();
-        if (!string.Equals(filters.SortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(filters.SelectedTagSort, out var tagId))
-            return;
-
-        artists = (string.Equals(filters.SortOrder, "asc", StringComparison.OrdinalIgnoreCase)
-                ? artists.OrderBy(artist => artist.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0)
-                : artists.OrderByDescending(artist => artist.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0))
-            .ThenBy(artist => artist.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        artist.Tags = state.Tags;
+        pendingTags.Record("artist", artist.Id, state.Tags);
+        return InvokeAsync(StateHasChanged);
     }
 
     private async Task AddArtistTagFromPanel(long? tagId)
@@ -775,7 +755,7 @@
         public bool IsInLibrary { get; set; } = true;
         public List<string> Genres { get; set; } = new();
         public List<SpotifyImage> Images { get; set; } = new();
-        public List<ArtistTag> Tags { get; set; } = new();
+        public List<TagBadge> Tags { get; set; } = new();
         public string? Note { get; set; }
     }
 
@@ -857,13 +837,6 @@
         public string Url { get; set; } = string.Empty;
         public int? Height { get; set; }
         public int? Width { get; set; }
-    }
-    private sealed class ArtistTag
-    {
-        public long TagId { get; set; }
-        public string TagName { get; set; } = string.Empty;
-        public string TagGroupName { get; set; } = string.Empty;
-        public float Strength { get; set; }
     }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForArtist { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
@@ -1322,9 +1295,8 @@
         return groups;
     }
 
-    private async Task LoadArtistTagCounts(ArtistFilterSnapshot? requestedFilters = null)
+    private async Task<Dictionary<long, int>?> FetchArtistTagCounts(ArtistFilterSnapshot filters)
     {
-        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
         var query = new List<string>();
 
         if (!string.IsNullOrEmpty(filters.SelectedTagFilter))
@@ -1351,11 +1323,10 @@
         var res = await Http.GetAsync($"api/library/artists/tags/counts?{string.Join('&', query)}");
 
         if (!res.IsSuccessStatusCode)
-            return;
+            return null;
 
         var list = await res.Content.ReadFromJsonAsync<List<TagCountItem>>() ?? new List<TagCountItem>();
-        tagCounts = list.ToDictionary(x => x.id, x => x.count);
-        await InvokeAsync(StateHasChanged);
+        return list.ToDictionary(x => x.id, x => x.count);
     }
 
     private int GetTagCount(long tagId)

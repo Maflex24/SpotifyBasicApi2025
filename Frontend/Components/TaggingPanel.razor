@@ -178,21 +178,26 @@
         if (isMutating)
             return;
 
+        var itemType = ItemType;
+        var itemId = SpotifyItemId;
         isMutating = true;
         try
         {
             if (!await mutation())
                 return;
 
-            var response = await Http.GetAsync($"api/tags/assign/{Uri.EscapeDataString(ItemType)}/{Uri.EscapeDataString(SpotifyItemId)}");
+            var response = await Http.GetAsync($"api/tags/assign/{Uri.EscapeDataString(itemType)}/{Uri.EscapeDataString(itemId)}");
             if (!response.IsSuccessStatusCode)
                 return;
 
-            localTags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
-            if (OnChanged.HasDelegate)
-                await OnChanged.InvokeAsync(new TagAssignmentState { ItemType = ItemType, SpotifyItemId = SpotifyItemId, Tags = localTags });
+            var tags = await response.Content.ReadFromJsonAsync<List<TagBadge>>() ?? new List<TagBadge>();
+            if (itemType == ItemType && itemId == SpotifyItemId)
+                localTags = tags;
 
-            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", ItemType, SpotifyItemId); } catch { }
+            if (OnChanged.HasDelegate)
+                await OnChanged.InvokeAsync(new TagAssignmentState { ItemType = itemType, SpotifyItemId = itemId, Tags = tags });
+
+            try { await Microsoft.JSInterop.JSRuntimeExtensions.InvokeVoidAsync(JS, "tagSync.notify", itemType, itemId, tags); } catch { }
         }
         finally
         {

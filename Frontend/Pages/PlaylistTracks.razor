@@ -30,7 +30,7 @@
         <div class="library-search-group"><input class="form-control form-control-sm input-dark" type="text" placeholder="Szukaj (AND)" @bind="LocalSearch" @bind:event="oninput" /></div>
         <div class="library-toolbar-actions">
             <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść filtry" @onclick="ResetFilters"><AppIcon Name="reset" /><span class="album-action-label">Resetuj</span></button>
-            <button class="btn btn-sm album-action-button album-action-apply" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-apply @(pendingTags.Any ? "library-apply-pending" : null)" disabled="@isApplyingFilters" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters"><AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span></button>
         </div>
         <div class="library-playback-actions"><button class="btn btn-sm album-action-button album-action-play-all" title="Odtwórz bieżące wyniki" @onclick="PlayFiltered"><AppIcon Name="play" /><span class="album-action-label">Odtwórz</span></button></div>
@@ -114,21 +114,26 @@
     @{
         var activeFilterChips = GetActiveFilterChips();
     }
-    @if (activeFilterChips.Count > 0 || FiltersPending)
+    @if (activeFilterChips.Count > 0 || FiltersPending || pendingTags.Any)
     {
         <section class="active-library-filters mb-3" aria-label="Aktywne filtry playlisty">
-            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
+            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : pendingTags.Any ? "Wyniki po zmianie tagów" : "Aktywne filtry:")</span>
             <div class="active-library-filter-chips">
                 @foreach (var chip in activeFilterChips)
                 {
                     <button type="button" class="@chip.CssClass" title="Usuń filtr: @chip.Label" @onclick="chip.ClearAsync"><span>@chip.Label</span><span class="active-library-filter-chip-remove" aria-hidden="true">×</span></button>
                 }
             </div>
-            @if (FiltersPending)
+            @if (FiltersPending || pendingTags.Any)
             {
-                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>Filtruj</span></button>
+                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" disabled="@isApplyingFilters" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>@(pendingTags.Any ? "Zastosuj" : "Filtruj")</span></button>
             }
         </section>
+    }
+
+    @if (refreshMessage is not null)
+    {
+        <p class="library-refresh-message" role="status">@refreshMessage</p>
     }
 
     @if (tracks.Count > 0 && filteredTracks.Count == 0)
@@ -162,7 +167,7 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrack(t.Uri)">▶</button>
                             </div>
                         </td>
-                        <td><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextMenu Items="@(aiAvailable ? GetTrackAiMenuItems(t) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla utworu" ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" Tags="@((t.Tags ?? new List<TrackTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" IsInLibrary="true" OnTagsChanged="ApplyTaggedPlaylistTrackState" /></span></td>
+                        <td><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextMenu Items="@(aiAvailable ? GetTrackAiMenuItems(t) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla utworu" ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" Tags="@t.Tags" IsInLibrary="true" OnTagsChanged="ApplyTaggedPlaylistTrackState" /></span></td>
                         <td>
                             @foreach (var a in t.Artists)
                             {
@@ -181,7 +186,11 @@
                         </td>
                         <td>@(t.ReleaseYear?.ToString() ?? "—")</td>
                         <td>
-                            <TagPreview Tags="@((t.Tags ?? new List<TrackTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" BadgeClass="badge bg-primary" OverflowClass="badge bg-outline-primary text-primary" />
+                            @if (pendingTags.Contains("track", t.Id))
+                            {
+                                <span class="badge library-tags-changed me-1">Zmieniono tagi</span>
+                            }
+                            <TagPreview Tags="@(t.Tags ?? new())" BadgeClass="badge bg-primary" OverflowClass="badge bg-outline-primary text-primary" />
                         </td>
                         <td>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -199,9 +208,9 @@
                                  ItemType="track"
                                  SpotifyItemId="@taggingTrackId"
                                  Items="trackTagItems"
-                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags ?? new())"
                                  Placeholder="Taguj utwór..."
-                                 OnChanged="ApplyTaggedPlaylistTrackStateFromPanel"
+                                 OnChanged="ApplyTaggedPlaylistTrackState"
                                  OnClose="CloseTrackTagging" />
     }
 </div>
@@ -269,9 +278,6 @@
         await LoadTagVisibility();
         await LoadAvailableTags();
         appliedFilters = CaptureCurrentFilters();
-        await LoadTracks();
-        await LoadPlaylistName();
-        await LoadSavedFilters();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -279,7 +285,23 @@
         if (!string.Equals(lastPlaylistId, PlaylistId, StringComparison.Ordinal))
         {
             lastPlaylistId = PlaylistId;
-            await LoadTracks();
+            var version = ++playlistVersion;
+            isApplyingFilters = true;
+            refreshMessage = null;
+            pendingTags.Clear();
+            CloseTrackTagging();
+            tracks = new();
+            filteredTracks = new();
+            tagCounts = new();
+            try
+            {
+                await LoadTracks();
+            }
+            finally
+            {
+                if (version == playlistVersion)
+                    isApplyingFilters = false;
+            }
             await LoadPlaylistName();
             await LoadSavedFilters();
         }
@@ -297,20 +319,48 @@
         catch { }
     }
 
-    private async Task Reload()
-    {
-        await LoadTracks();
-    }
-
     private PlaylistFilterSnapshot CaptureCurrentFilters() => new(localSearch, includeMode, excludeMode, includeTagIds.OrderBy(id => id).ToArray(), excludeTagIds.OrderBy(id => id).ToArray(), TagStrengthFilters.Capture(includeTagIds, tagStrengthFilters), TagStrengthFilters.Capture(excludeTagIds, tagStrengthFilters), clientSortColumn, clientSortAsc);
 
     private async Task ApplyFiltersAsync()
     {
+        if (isApplyingFilters)
+            return;
+
         var filters = CaptureCurrentFilters();
-        appliedFilters = filters;
-        ApplyLocalFilter(filters);
-        ApplyClientSort(filters);
-        await LoadPlaylistTagCounts(filters);
+        var revision = pendingTags.Revision;
+        var version = playlistVersion;
+        isApplyingFilters = true;
+        refreshMessage = null;
+        try
+        {
+            var counts = await FetchPlaylistTagCounts(PlaylistId, filters);
+            if (version != playlistVersion)
+                return;
+
+            if (counts is null || revision != pendingTags.Revision)
+            {
+                refreshMessage = PendingTagChanges.RefreshFailed;
+                return;
+            }
+
+            appliedFilters = filters;
+            ApplyLocalFilter(filters);
+            ApplyClientSort(filters);
+            if (taggingTrackId is not null && !filteredTracks.Any(track => track.Id == taggingTrackId))
+                CloseTrackTagging();
+            tagCounts = counts;
+            pendingTags.Clear();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            if (version == playlistVersion)
+                refreshMessage = PendingTagChanges.RefreshFailed;
+        }
+        finally
+        {
+            if (version == playlistVersion)
+                isApplyingFilters = false;
+        }
     }
 
     private Task ResetFilters()
@@ -429,23 +479,27 @@
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForTrack).OrderBy(t => t.Name).ToList();
         trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
-        await LoadPlaylistTagCounts();
     }
 
     private async Task LoadTracks()
     {
-        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tracks?page=1&pageSize=500");
+        var playlistId = PlaylistId;
+        var version = playlistVersion;
+        var filters = appliedFilters ?? CaptureCurrentFilters();
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(playlistId)}/tracks?page=1&pageSize=500");
         if (!res.IsSuccessStatusCode)
             return;
 
         var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
-        tracks = payload?.items ?? new List<Track>();
-        filteredTracks = tracks.ToList();
+        if (version != playlistVersion)
+            return;
 
-        var filters = appliedFilters ?? CaptureCurrentFilters();
+        tracks = payload?.items ?? new List<Track>();
         ApplyLocalFilter(filters);
         ApplyClientSort(filters);
-        await LoadPlaylistTagCounts(filters);
+        var counts = await FetchPlaylistTagCounts(playlistId, filters);
+        if (version == playlistVersion && !pendingTags.Any && counts is not null)
+            tagCounts = counts;
     }
 
     private async Task LoadPlaylistName()
@@ -460,21 +514,8 @@
     }
 
     [JSInvokable]
-    public async Task OnTagsEvent(string itemType, string spotifyItemId)
-    {
-        if (!string.Equals(itemType, "track", StringComparison.OrdinalIgnoreCase))
-
-            return;
-
-        if (string.Equals(lastPanelTagUpdateId, spotifyItemId, StringComparison.Ordinal))
-        {
-            lastPanelTagUpdateId = null;
-            return;
-        }
-
-        if (tracks.Any(t => t.Id == spotifyItemId))
-            await RefreshPlaylistTrackTags(spotifyItemId);
-    }
+    public Task OnTagsEvent(string itemType, string spotifyItemId, List<TagBadge> tags) =>
+        ApplyTaggedPlaylistTrackState(new TagAssignmentState { ItemType = itemType, SpotifyItemId = spotifyItemId, Tags = tags });
 
     private void ApplyLocalFilter(PlaylistFilterSnapshot? requestedFilters = null)
     {
@@ -509,7 +550,7 @@
             }).ToList();
         }
 
-        bool MatchesTag(TrackTag tag, long tagId, IReadOnlyDictionary<long, TagStrengthFilterRule> rules)
+        bool MatchesTag(TagBadge tag, long tagId, IReadOnlyDictionary<long, TagStrengthFilterRule> rules)
         {
             if (tag.TagId != tagId)
                 return false;
@@ -743,37 +784,26 @@
         await ApplyTaggedPlaylistTrackState(new TagAssignmentState { ItemType = "track", SpotifyItemId = trackId, Tags = tags });
     }
 
-    private async Task ApplyTaggedPlaylistTrackState(TagAssignmentState state)
+    private Task ApplyTaggedPlaylistTrackState(TagAssignmentState state)
     {
         if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase))
-            return;
+            return Task.CompletedTask;
 
-        var track = tracks.FirstOrDefault(item => item.Id == state.SpotifyItemId);
-        if (track == null)
-            return;
-
-        var previousTagIds = track.Tags.Select(tag => tag.TagId).ToHashSet();
-        track.Tags = state.Tags.Select(tag => new TrackTag
+        var changed = false;
+        foreach (var track in tracks.Where(track => track.Id == state.SpotifyItemId))
         {
-            TagId = tag.TagId,
-            TagName = tag.TagName,
-            TagGroupName = tag.TagGroupName,
-            Strength = tag.Strength
-        }).ToList();
+            if (PendingTagChanges.SameTags(track.Tags, state.Tags))
+                continue;
 
-        ApplyLocalFilter();
-        ApplyClientSort();
+            track.Tags = state.Tags;
+            changed = true;
+        }
 
-        if (!previousTagIds.SetEquals(track.Tags.Select(tag => tag.TagId)))
-            await LoadPlaylistTagCounts();
+        if (!changed)
+            return Task.CompletedTask;
 
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ApplyTaggedPlaylistTrackStateFromPanel(TagAssignmentState state)
-    {
-        lastPanelTagUpdateId = state.SpotifyItemId;
-        await ApplyTaggedPlaylistTrackState(state);
+        pendingTags.Record("track", state.SpotifyItemId, state.Tags);
+        return InvokeAsync(StateHasChanged);
     }
 
     private void OnTrackTagSelectChanged(string trackId, string? value)
@@ -1012,7 +1042,10 @@
 
     private bool showTrackTagging = false;
     private string? taggingTrackId;
-    private string? lastPanelTagUpdateId;
+    private readonly PendingTagChanges pendingTags = new();
+    private bool isApplyingFilters;
+    private int playlistVersion;
+    private string? refreshMessage;
     private void OpenTrackTagging(string trackId) { taggingTrackId = trackId; showTrackTagging = true; }
     private void CloseTrackTagging() { showTrackTagging = false; taggingTrackId = null; }
 
@@ -1024,8 +1057,7 @@
     }
 
     private sealed class TracksResponse { public int total { get; set; } public List<Track> items { get; set; } = new(); }
-    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
-    private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
+    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TagBadge> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
     private sealed class SimpleArtist { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForTrack { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
@@ -1037,9 +1069,8 @@
 
     private sealed class TagCountItem { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 
-    private async Task LoadPlaylistTagCounts(PlaylistFilterSnapshot? requestedFilters = null)
+    private async Task<Dictionary<long, int>?> FetchPlaylistTagCounts(string playlistId, PlaylistFilterSnapshot filters)
     {
-        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
         var query = new List<string>();
 
         if (filters.IncludeTagIds.Length > 0)
@@ -1057,13 +1088,12 @@
         if (!string.IsNullOrWhiteSpace(filters.LocalSearch))
             query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
 
-        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(PlaylistId)}/tags/counts?{string.Join('&', query)}");
+        var res = await Http.GetAsync($"api/library/playlists/{Uri.EscapeDataString(playlistId)}/tags/counts?{string.Join('&', query)}");
         if (!res.IsSuccessStatusCode)
-            return;
+            return null;
 
         var items = await res.Content.ReadFromJsonAsync<List<TagCountItem>>() ?? new List<TagCountItem>();
-        tagCounts = items.ToDictionary(x => x.id, x => x.count);
-        await InvokeAsync(StateHasChanged);
+        return items.ToDictionary(x => x.id, x => x.count);
     }
 
     private int GetTagCount(long tagId)

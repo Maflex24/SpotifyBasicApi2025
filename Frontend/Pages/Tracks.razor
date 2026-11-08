@@ -71,10 +71,10 @@
         </div>
         <div class="library-toolbar-actions">
             <button class="btn btn-sm album-action-button album-action-muted" title="Wyczyść wszystkie filtry" @onclick="ResetFilters"><AppIcon Name="reset" /><span class="album-action-label">Resetuj</span></button>
-            <button class="btn btn-sm album-action-button album-action-apply" disabled="@(!CanApplyTagDateSort)" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
+            <button class="btn btn-sm album-action-button album-action-apply @(pendingTags.Any ? "library-apply-pending" : null)" disabled="@(!CanApplyTagDateSort || isLoading)" title="Zastosuj filtry" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span class="album-action-label">Zastosuj</span></button>
             <button class="btn btn-sm album-action-button album-action-muted" title="Pokaż lub ukryj filtry tagów" aria-expanded="@showTagFilters" @onclick="ToggleTagFilters"><AppIcon Name="tag" /><span class="album-action-label">Tagi</span><span class="album-action-state" aria-hidden="true">@(showTagFilters ? "▼" : "▶")</span></button>
         </div>
-        <div class="library-playback-actions"><button class="btn btn-sm album-action-button album-action-play-all" title="Odtwórz bieżące wyniki" @onclick="PlayFiltered"><AppIcon Name="play" /><span class="album-action-label">Odtwórz</span></button></div>
+        <div class="library-playback-actions"><button class="btn btn-sm album-action-button album-action-play-all" title="@(PaginationPaused ? "Odtwórz wczytane utwory" : "Odtwórz bieżące wyniki")" @onclick="PlayFiltered"><AppIcon Name="play" /><span class="album-action-label">@(PaginationPaused ? "Odtwórz wczytane" : "Odtwórz")</span></button></div>
     </section>
 
     <section class="saved-filters-panel" aria-labelledby="tracks-saved-filters-heading">
@@ -155,19 +155,19 @@
     @{
         var activeFilterChips = GetActiveFilterChips();
     }
-    @if (activeFilterChips.Count > 0 || FiltersPending)
+    @if (activeFilterChips.Count > 0 || FiltersPending || pendingTags.Any)
     {
         <section class="active-library-filters mb-3" aria-label="Aktywne filtry utworów">
-            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : "Aktywne filtry:")</span>
+            <span class="active-library-filters-label">@(FiltersPending ? "Oczekuje zastosowania:" : pendingTags.Any ? "Wyniki po zmianie tagów" : "Aktywne filtry:")</span>
             <div class="active-library-filter-chips">
                 @foreach (var chip in activeFilterChips)
                 {
                     <button type="button" class="@chip.CssClass" title="Usuń filtr: @chip.Label" @onclick="chip.ClearAsync"><span>@chip.Label</span><span class="active-library-filter-chip-remove" aria-hidden="true">×</span></button>
                 }
             </div>
-            @if (FiltersPending)
+            @if (FiltersPending || pendingTags.Any)
             {
-                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>Filtruj</span></button>
+                <button type="button" class="btn btn-sm album-action-button album-action-apply active-library-filters-apply" disabled="@(!CanApplyTagDateSort || isLoading)" @onclick="ApplyFiltersAsync"><AppIcon Name="apply" /><span>@(pendingTags.Any ? "Zastosuj" : "Filtruj")</span></button>
             }
         </section>
     }
@@ -178,10 +178,19 @@
                                  ItemType="track"
                                  SpotifyItemId="@taggingTrackId"
                                  Items="trackTagItems"
-                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags?.Select(t => new Frontend.Components.TagBadge{ TagId=t.TagId, TagName=t.TagName, TagGroupName=t.TagGroupName, Strength=t.Strength}).ToList() ?? new List<Frontend.Components.TagBadge>())"
+                                 Tags="@(tracks.FirstOrDefault(x => x.Id == taggingTrackId)?.Tags ?? new())"
                                  Placeholder="Taguj utwór..."
-                                 OnChanged="ApplyTaggedTrackStateFromPanel"
+                                 OnChanged="ApplyTaggedTrackState"
                                  OnClose="CloseTrackTagging" />
+    }
+
+    @if (refreshMessage is not null)
+    {
+        <p class="library-refresh-message" role="status">@refreshMessage</p>
+    }
+    @if (PaginationPaused)
+    {
+        <p class="library-refresh-message" role="status">Zastosuj, aby wczytać kolejne wyniki</p>
     }
 
     @if (!isLoading && total == 0)
@@ -217,7 +226,7 @@
                                 <button class="cover-overlay" title="Odtwórz" @onclick="() => PlayTrackAndFollowing(t.Id)">▶</button>
                             </div>
                         </td>
-                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextMenu Items="@(aiAvailable ? GetTrackAiMenuItems(t) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla utworu" ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" Tags="@((t.Tags ?? new List<TrackTag>()).Select(tag => new TagBadge { TagId = tag.TagId, TagName = tag.TagName, TagGroupName = tag.TagGroupName, Strength = tag.Strength }).ToList())" IsInLibrary="true" OnTagsChanged="ApplyTaggedTrackState" /></span></td>
+                        <td class="trackTd"><span class="d-inline-flex align-items-center gap-2">@t.Name <AiContextMenu Items="@(aiAvailable ? GetTrackAiMenuItems(t) : Array.Empty<AiContextMenuItem>())" AriaLabel="Więcej opcji dla utworu" ItemType="track" SpotifyItemId="@t.Id" DisplayName="@t.Name" Tags="@t.Tags" IsInLibrary="true" OnTagsChanged="ApplyTaggedTrackState" /></span></td>
                         <td class="trackTd">
                             @foreach (var a in t.Artists)
                             {
@@ -236,7 +245,11 @@
                         </td>
                         <td class="trackTd">@(t.ReleaseYear?.ToString() ?? "—")</td>
                         <td class="trackTd">
-                            @foreach (var tag in (t.Tags ?? new List<TrackTag>()).Take(3))
+                            @if (pendingTags.Contains("track", t.Id))
+                            {
+                                <span class="badge library-tags-changed me-1">Zmieniono tagi</span>
+                            }
+                            @foreach (var tag in (t.Tags ?? new List<TagBadge>()).Take(3))
                             {
                                 <span class="badge badge-tag me-1">@tag.TagName (@tag.Strength)</span>
                             }
@@ -329,12 +342,15 @@
     private bool showTagFilters = true;
     private bool showTrackTagging = false;
     private string? taggingTrackId;
-    private string? lastPanelTagUpdateId;
+    private readonly PendingTagChanges pendingTags = new();
+    private string? refreshMessage;
+    private bool observeTrackScroll = true;
     private int page = 1;
     private int pageSize = 100;
     private int total = 0;
     private bool isLoading = false;
     private bool hasMore => tracks.Count < total;
+    private bool PaginationPaused => hasMore && pendingTags.AffectsPagination;
     private ElementReference containerRef;
     private ElementReference sentinelRef;
     private ElementReference controlsSentinel;
@@ -444,6 +460,27 @@
     private sealed record TrackFilterSnapshot(string SortKey, string SortOrder, string? SelectedTagFilter, string? SelectedTagSort, string? SelectedArtistId, string? SelectedAlbumId, int? SelectedYear, string? LocalSearch, string IncludeMode, string ExcludeMode, long[] IncludeTagIds, long[] ExcludeTagIds, TagStrengthFilterRule[] IncludeTagStrengths, TagStrengthFilterRule[] ExcludeTagStrengths)
     {
         public string TagDateMode { get; init; } = "single";
+        public bool CanChangeWithTags => SelectedTagFilter is not null || IncludeTagIds.Length > 0 || ExcludeTagIds.Length > 0
+            || !string.IsNullOrWhiteSpace(LocalSearch) || SortKey is "weight" or "tagAdded" or "tags";
+
+        public bool TagsAffectPagination(List<TagBadge>? previous, List<TagBadge> next)
+        {
+            previous ??= new();
+            if (SortKey == "tags" && previous.Count != next.Count)
+                return true;
+            if (!string.IsNullOrWhiteSpace(LocalSearch)
+                && !previous.Select(tag => tag.TagName).ToHashSet().SetEquals(next.Select(tag => tag.TagName)))
+                return true;
+
+            var ids = IncludeTagIds.Concat(ExcludeTagIds);
+            if (long.TryParse(SelectedTagFilter, out var filterId))
+                ids = ids.Append(filterId);
+            if (SortKey == "tagAdded" && long.TryParse(SelectedTagSort, out var sortId))
+                ids = ids.Append(sortId);
+
+            return PendingTagChanges.TouchesTags(previous, next, ids);
+        }
+
         public bool Matches(TrackFilterSnapshot? other) => other is not null && TagDateMode == other.TagDateMode && SortKey == other.SortKey && SortOrder == other.SortOrder && SelectedTagFilter == other.SelectedTagFilter && SelectedTagSort == other.SelectedTagSort && SelectedArtistId == other.SelectedArtistId && SelectedAlbumId == other.SelectedAlbumId && SelectedYear == other.SelectedYear && LocalSearch == other.LocalSearch && IncludeMode == other.IncludeMode && ExcludeMode == other.ExcludeMode && IncludeTagIds.SequenceEqual(other.IncludeTagIds) && ExcludeTagIds.SequenceEqual(other.ExcludeTagIds) && TagStrengthFilters.Equal(IncludeTagStrengths, other.IncludeTagStrengths) && TagStrengthFilters.Equal(ExcludeTagStrengths, other.ExcludeTagStrengths);
     }
 
@@ -522,107 +559,117 @@
     {
         var filters = CaptureCurrentFilters();
         if (!CanApplyTagDateSort) return;
-        if (await LoadTracks(true, filters))
-            appliedFilters = filters;
+        await LoadTracks(true, filters);
     }
 
     private async Task<bool> LoadTracks(bool reset = true, TrackFilterSnapshot? requestedFilters = null)
     {
-        if (isLoading)
+        if (isLoading || (!reset && (!hasMore || PaginationPaused)))
             return false;
 
         var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
-
+        var requestedPage = reset ? 1 : page + 1;
+        var revision = pendingTags.Revision;
         isLoading = true;
+        refreshMessage = null;
         try
         {
+            var query = new List<string>();
+            query.Add($"sort={filters.SortKey}");
+            query.Add($"order={filters.SortOrder}");
+
+            if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
+
+            TagDateSortSelection.AppendQuery(query, filters.SortKey, filters.TagDateMode, filters.SelectedTagSort);
+
+            if (!string.IsNullOrEmpty(filters.SelectedArtistId)) query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
+
+            if (!string.IsNullOrEmpty(filters.SelectedAlbumId)) query.Add($"albumId={Uri.EscapeDataString(filters.SelectedAlbumId)}");
+
+            if (filters.SelectedYear.HasValue) query.Add($"year={filters.SelectedYear.Value}");
+
+            if (filters.IncludeTagIds.Length > 0)
+            {
+                query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
+                query.Add($"includeMode={filters.IncludeMode}");
+                var strengths = TagStrengthFilters.ToQuery(filters.IncludeTagStrengths);
+                if (!string.IsNullOrEmpty(strengths)) query.Add($"includeTagStrengths={Uri.EscapeDataString(strengths)}");
+            }
+
+            if (filters.ExcludeTagIds.Length > 0)
+            {
+                query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
+                query.Add($"excludeMode={filters.ExcludeMode}");
+                var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
+                if (!string.IsNullOrEmpty(strengths)) query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
+
+            query.Add($"page={requestedPage}");
+            query.Add($"pageSize={pageSize}");
+
+            var res = await Http.GetAsync($"api/library/tracks?{string.Join('&', query)}");
+            if (!res.IsSuccessStatusCode)
+            {
+                refreshMessage = PendingTagChanges.RefreshFailed;
+                return false;
+            }
+
+            var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
+            var counts = reset ? await FetchTrackTagCounts(filters) : null;
+            if (revision != pendingTags.Revision || (reset && counts is null && pendingTags.Any))
+            {
+                if (reset)
+                    refreshMessage = PendingTagChanges.RefreshFailed;
+                else if (!PaginationPaused)
+                    observeTrackScroll = true;
+                return false;
+            }
+
+            var received = payload?.items ?? new List<Track>();
+            page = payload?.page > 0 ? payload.page : requestedPage;
+            total = payload?.total ?? 0;
+
             if (reset)
             {
-                page = 1;
-                total = 0;
-                tracks = new List<Track>();
-                filteredTracks = new List<Track>();
+                tracks = received;
+                if (taggingTrackId is not null && !tracks.Any(track => track.Id == taggingTrackId))
+                    CloseTrackTagging();
+                appliedFilters = filters;
+                pendingTags.Clear();
+                observeTrackScroll = true;
+                if (counts is not null)
+                    tagCounts = counts;
             }
             else
             {
-                page++;
+                var existingIds = tracks.Select(track => track.Id).ToHashSet(StringComparer.Ordinal);
+                tracks.AddRange(received.Where(track => existingIds.Add(track.Id)));
             }
 
-        var query = new List<string>();
-        query.Add($"sort={filters.SortKey}");
-        query.Add($"order={filters.SortOrder}");
+            filteredTracks = tracks.ToList();
+            foreach (var track in received)
+                selectedTagByTrack.TryAdd(track.Id, null);
 
-        if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
-
-        TagDateSortSelection.AppendQuery(query, filters.SortKey, filters.TagDateMode, filters.SelectedTagSort);
-
-        if (!string.IsNullOrEmpty(filters.SelectedArtistId)) query.Add($"artistId={Uri.EscapeDataString(filters.SelectedArtistId)}");
-
-        if (!string.IsNullOrEmpty(filters.SelectedAlbumId)) query.Add($"albumId={Uri.EscapeDataString(filters.SelectedAlbumId)}");
-
-        if (filters.SelectedYear.HasValue) query.Add($"year={filters.SelectedYear.Value}");
-
-        if (filters.IncludeTagIds.Length > 0)
-        {
-            query.Add($"includeTags={string.Join(',', filters.IncludeTagIds)}");
-            query.Add($"includeMode={filters.IncludeMode}");
-            var strengths = TagStrengthFilters.ToQuery(filters.IncludeTagStrengths);
-            if (!string.IsNullOrEmpty(strengths)) query.Add($"includeTagStrengths={Uri.EscapeDataString(strengths)}");
+            if (reset)
+                await SaveToStore();
+            return true;
         }
-
-        if (filters.ExcludeTagIds.Length > 0)
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
         {
-            query.Add($"excludeTags={string.Join(',', filters.ExcludeTagIds)}");
-            query.Add($"excludeMode={filters.ExcludeMode}");
-            var strengths = TagStrengthFilters.ToQuery(filters.ExcludeTagStrengths);
-            if (!string.IsNullOrEmpty(strengths)) query.Add($"excludeTagStrengths={Uri.EscapeDataString(strengths)}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(filters.LocalSearch)) query.Add($"search={Uri.EscapeDataString(filters.LocalSearch)}");
-
-        query.Add($"page={page}");
-        query.Add($"pageSize={pageSize}");
-
-        var res = await Http.GetAsync($"api/library/tracks?{string.Join('&', query)}");
-        if (!res.IsSuccessStatusCode)
+            refreshMessage = PendingTagChanges.RefreshFailed;
             return false;
-
-        var payload = await res.Content.ReadFromJsonAsync<TracksResponse>();
-        total = payload?.total ?? 0;
-        var received = payload?.items ?? new List<Track>();
-
-        if (reset)
-            tracks = received.ToList();
-        else
-            tracks.AddRange(received);
-
-        filteredTracks = tracks.ToList();
-
-        foreach (var tr in tracks)
-        {
-            if (!selectedTagByTrack.ContainsKey(tr.Id))
-                selectedTagByTrack[tr.Id] = null;
-        }
-
-        // sortowanie serwerowe według sort/order, dodatkowe sortowanie klienta na klik kolumny pozostaje
-        await LoadTrackTagCounts(filters);
-
-        await SaveToStore();
-        await InvokeAsync(StateHasChanged);
-        return true;
         }
         finally
         {
             isLoading = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
     [JSInvokable]
-    public async Task OnBottomReached()
-    {
-        if (!isLoading && hasMore)
-            await LoadTracks(reset: false);
-    }
+    public Task OnBottomReached() => LoadTracks(reset: false);
 
     private async Task LoadAvailableTags()
     {
@@ -639,7 +686,6 @@
             : new List<TagGroupDto>();
         availableTags = allTags.Where(t => t.ForTrack).OrderBy(t => t.Name).ToList();
         trackTagItems = availableTags.Select(t => new TagItem { Id = t.Id, Name = t.Name, Aliases = t.Aliases, TagGroupId = t.TagGroupId, IsPinned = t.IsPinned }).ToList();
-        await LoadTrackTagCounts();
     }
 
     private async Task LoadArtistsOptions()
@@ -836,87 +882,29 @@
         await ApplyTaggedTrackState(new TagAssignmentState { ItemType = "track", SpotifyItemId = trackId, Tags = tags });
     }
 
-    private async Task ApplyTaggedTrackState(TagAssignmentState state)
+    private Task ApplyTaggedTrackState(TagAssignmentState state)
     {
         if (!string.Equals(state.ItemType, "track", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        if ((appliedFilters ?? CaptureCurrentFilters()).SortKey == "tagAdded")
-        {
-            await LoadTracks(true, appliedFilters ?? CaptureCurrentFilters());
-            return;
-        }
+            return Task.CompletedTask;
 
         var track = tracks.FirstOrDefault(item => item.Id == state.SpotifyItemId);
-        if (track == null)
-            return;
-
-        var previousTagIds = track.Tags.Select(tag => tag.TagId).ToHashSet();
-        track.Tags = state.Tags.Select(tag => new TrackTag
+        var affectsPagination = appliedFilters is { CanChangeWithTags: true };
+        if (track is null)
         {
-            TagId = tag.TagId,
-            TagName = tag.TagName,
-            TagGroupName = tag.TagGroupName,
-            Strength = tag.Strength
-        }).ToList();
-
-        if (!MatchesTrackTagFilters(track))
-            tracks.Remove(track);
-
-        SortTracksByTagStrength();
-        ApplyLocalFilter();
-
-        if (!previousTagIds.SetEquals(track.Tags.Select(tag => tag.TagId)))
-            await LoadTrackTagCounts();
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ApplyTaggedTrackStateFromPanel(TagAssignmentState state)
-    {
-        lastPanelTagUpdateId = state.SpotifyItemId;
-        await ApplyTaggedTrackState(state);
-    }
-
-    private bool MatchesTrackTagFilters(Track track)
-    {
-        var filters = appliedFilters ?? CaptureCurrentFilters();
-        var tagIds = track.Tags.Select(tag => tag.TagId).ToHashSet();
-        if (long.TryParse(filters.SelectedTagFilter, out var selectedTagId) && !tagIds.Contains(selectedTagId))
-            return false;
-
-        if (filters.IncludeTagIds.Length > 0)
+            if (!affectsPagination)
+                return Task.CompletedTask;
+        }
+        else
         {
-            var matchesInclude = string.Equals(filters.IncludeMode, "and", StringComparison.OrdinalIgnoreCase)
-                ? filters.IncludeTagIds.All(tagIds.Contains)
-                : filters.IncludeTagIds.Any(tagIds.Contains);
-            if (!matchesInclude)
-                return false;
+            if (PendingTagChanges.SameTags(track.Tags, state.Tags))
+                return Task.CompletedTask;
+
+            affectsPagination = appliedFilters?.TagsAffectPagination(track.Tags, state.Tags) == true;
+            track.Tags = state.Tags;
         }
 
-        if (filters.ExcludeTagIds.Length > 0)
-        {
-            var matchesExcluded = string.Equals(filters.ExcludeMode, "and", StringComparison.OrdinalIgnoreCase)
-                ? filters.ExcludeTagIds.All(tagIds.Contains)
-                : filters.ExcludeTagIds.Any(tagIds.Contains);
-            if (matchesExcluded)
-                return false;
-        }
-
-        return true;
-    }
-
-    private void SortTracksByTagStrength()
-    {
-        var filters = appliedFilters ?? CaptureCurrentFilters();
-        if (!string.Equals(filters.SortKey, "weight", StringComparison.OrdinalIgnoreCase) || !long.TryParse(filters.SelectedTagSort, out var tagId))
-            return;
-
-        tracks = (string.Equals(filters.SortOrder, "asc", StringComparison.OrdinalIgnoreCase)
-                ? tracks.OrderBy(track => track.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0)
-                : tracks.OrderByDescending(track => track.Tags.FirstOrDefault(tag => tag.TagId == tagId)?.Strength ?? 0))
-            .ThenBy(track => track.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        pendingTags.Record("track", state.SpotifyItemId, state.Tags, affectsPagination);
+        return InvokeAsync(StateHasChanged);
     }
 
     private void OpenTrackTagging(string trackId)
@@ -1006,7 +994,7 @@
                 return;
         }
 
-        await LoadTracks(reset: false);
+        await RefreshTrackTags(trackId);
     }
 
     private async Task RemoveSelectedTrackTagIfAny(string trackId)
@@ -1041,10 +1029,7 @@
     private async Task PlayFiltered()
     {
         // Dociągnij wszystkie strony, aby odtwarzanie objęło pełny wynik filtrowania
-        while (hasMore && !isLoading)
-            await LoadTracks(reset: false);
-
-        ApplyLocalFilter();
+        while (hasMore && !PaginationPaused && await LoadTracks(reset: false)) { }
 
         var uris = filteredTracks
             .Where(t => !string.IsNullOrWhiteSpace(t.Uri))
@@ -1066,8 +1051,7 @@
             return;
 
         // Upewnij się, że mamy wszystkie strony wyników
-        while (hasMore && !isLoading)
-            await LoadTracks(reset: false);
+        while (hasMore && !PaginationPaused && await LoadTracks(reset: false)) { }
 
         // Zbuduj listę URI od klikniętego utworu do końca widocznej listy (filteredTracks)
         var startIndex = filteredTracks.FindIndex(t => string.Equals(t.Id, trackId, StringComparison.OrdinalIgnoreCase));
@@ -1105,8 +1089,16 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
+        {
+            if (observeTrackScroll && dotNetRef is not null)
+            {
+                observeTrackScroll = false;
+                await JS.InvokeVoidAsync("infiniteScroll.observe", containerRef, sentinelRef, dotNetRef);
+            }
             return;
+        }
 
+        observeTrackScroll = false;
         pollCts = new CancellationTokenSource();
         _ = Task.Run(async () =>
         {
@@ -1192,27 +1184,8 @@
     }
 
     [JSInvokable]
-    public async Task OnTagsEvent(string itemType, string spotifyItemId)
-    {
-        if (!string.Equals(itemType, "track", StringComparison.OrdinalIgnoreCase))
-
-            return;
-
-        if (string.Equals(lastPanelTagUpdateId, spotifyItemId, StringComparison.Ordinal))
-        {
-            lastPanelTagUpdateId = null;
-            return;
-        }
-
-        if ((appliedFilters ?? CaptureCurrentFilters()).SortKey == "tagAdded")
-        {
-            await LoadTracks(true, appliedFilters ?? CaptureCurrentFilters());
-            return;
-        }
-
-        if (tracks.Any(t => t.Id == spotifyItemId))
-            await RefreshTrackTags(spotifyItemId);
-    }
+    public Task OnTagsEvent(string itemType, string spotifyItemId, List<TagBadge> tags) =>
+        ApplyTaggedTrackState(new TagAssignmentState { ItemType = itemType, SpotifyItemId = spotifyItemId, Tags = tags });
 
     [JSInvokable]
     public Task SetControlsPastAnchor(bool isPastAnchor)
@@ -1404,9 +1377,8 @@
     private sealed class TracksResponse { public int total { get; set; } public int page { get; set; } public int pageSize { get; set; } public List<Track> items { get; set; } = new(); }
     private sealed class AlbumsResponse { public int total { get; set; } public List<AlbumShort> items { get; set; } = new(); }
     private sealed class AlbumShort { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; }
-    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TrackTag> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
+    private sealed class Track { public string Id { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? Uri { get; set; } public int DurationMs { get; set; } public int Popularity { get; set; } public int TrackNumber { get; set; } public string? AlbumId { get; set; } public string? AlbumName { get; set; } public int? ReleaseYear { get; set; } public List<SpotifyImage> Images { get; set; } = new(); public string? AlbumImage64 { get; set; } public List<TagBadge> Tags { get; set; } = new(); public List<SimpleArtist> Artists { get; set; } = new(); }
     private sealed class SpotifyImage { public string Url { get; set; } = string.Empty; public int? Height { get; set; } public int? Width { get; set; } }
-    private sealed class TrackTag { public long TagId { get; set; } public string TagName { get; set; } = string.Empty; public string TagGroupName { get; set; } = string.Empty; public float Strength { get; set; } }
     private sealed class TagDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; public List<string> Aliases { get; set; } = new(); public bool ForTrack { get; set; } public bool IsPinned { get; set; } public bool IsPinnedShortcut { get; set; } public long TagGroupId { get; set; } }
     private sealed class TagGroupDto { public long Id { get; set; } public string Name { get; set; } = string.Empty; }
     private sealed class TagGroupView { public string Name { get; set; } = string.Empty; public bool IsPinnedGroup { get; set; } public List<TagDto> Tags { get; set; } = new(); }
@@ -1419,9 +1391,8 @@
 
     private sealed class TagCountDto { public long id { get; set; } public string name { get; set; } = string.Empty; public int count { get; set; } }
 
-    private async Task LoadTrackTagCounts(TrackFilterSnapshot? requestedFilters = null)
+    private async Task<Dictionary<long, int>?> FetchTrackTagCounts(TrackFilterSnapshot filters)
     {
-        var filters = requestedFilters ?? appliedFilters ?? CaptureCurrentFilters();
         var query = new List<string>();
 
         if (!string.IsNullOrEmpty(filters.SelectedTagFilter)) query.Add($"tags={filters.SelectedTagFilter}");
@@ -1449,11 +1420,10 @@
         var res = await Http.GetAsync($"api/library/tracks/tags/counts?{string.Join('&', query)}");
 
         if (!res.IsSuccessStatusCode)
-            return;
+            return null;
 
         var list = await res.Content.ReadFromJsonAsync<List<TagCountDto>>() ?? new List<TagCountDto>();
-        tagCounts = list.ToDictionary(x => x.id, x => x.count);
-        await InvokeAsync(StateHasChanged);
+        return list.ToDictionary(x => x.id, x => x.count);
     }
 
     private int GetTagCount(long tagId)

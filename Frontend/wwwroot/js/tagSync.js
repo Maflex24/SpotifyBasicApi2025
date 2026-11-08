@@ -1,9 +1,9 @@
 window.tagSync = (function () {
     let listeners = new Set();
 
-    function notify(itemType, id) {
+    function notify(itemType, id, tags) {
         try {
-            const detail = { itemType, id };
+            const detail = { itemType, id, tags };
             window.dispatchEvent(new CustomEvent('tagsChanged', { detail }));
         } catch (e) { }
     }
@@ -13,7 +13,9 @@ window.tagSync = (function () {
         const handler = (e) => {
             try {
                 const d = e.detail || {};
-                dotNetRef.invokeMethodAsync(methodName, d.itemType || '', d.id || '');
+                if (d.itemType && d.id && Array.isArray(d.tags)) {
+                    dotNetRef.invokeMethodAsync(methodName, d.itemType, d.id, d.tags).catch(() => {});
+                }
             } catch (err) { }
         };
         listeners.add({ dotNetRef, handler });

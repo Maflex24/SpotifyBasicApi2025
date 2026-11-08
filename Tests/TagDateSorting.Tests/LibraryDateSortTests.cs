@@ -51,17 +51,20 @@ public class LibraryDateSortTests
         var controller = new LibraryController(new LibraryService(db, users, null!, null!), null!);
 
         async Task<string[]> Get(string order = "desc", string mode = "latest", long? tag = null,
-            string includeMode = "or", string? strengths = null, string? excluded = null, bool inherited = false, int page = 1, int pageSize = 100)
+            string includeMode = "or", string? strengths = null, string? excluded = null, bool inherited = false, int page = 1, int pageSize = 100,
+            string? excludedStrengths = null, string excludeMode = "or")
         {
             var result = type switch
             {
                 "album" => await controller.GetUserAlbums(sort: "tagAdded", order: order, tagDateMode: mode, sortTagId: tag,
                     includeTags: "1,2", includeMode: includeMode, includeTagStrengths: strengths, excludeTags: excluded,
-                    includeArtistTags: inherited, page: page, pageSize: pageSize),
+                    includeArtistTags: inherited, page: page, pageSize: pageSize, excludeTagStrengths: excludedStrengths, excludeMode: excludeMode),
                 "track" => await controller.GetUserTracks(sort: "tagAdded", order: order, tagDateMode: mode, sortTagId: tag,
-                    includeTags: "1,2", includeMode: includeMode, includeTagStrengths: strengths, excludeTags: excluded, page: page, pageSize: pageSize),
+                    includeTags: "1,2", includeMode: includeMode, includeTagStrengths: strengths, excludeTags: excluded, page: page, pageSize: pageSize,
+                    excludeTagStrengths: excludedStrengths, excludeMode: excludeMode),
                 _ => await controller.GetUserArtists(sort: "tagAdded", order: order, tagDateMode: mode, sortTagId: tag,
-                    includeTags: "1,2", includeMode: includeMode, includeTagStrengths: strengths, excludeTags: excluded)
+                    includeTags: "1,2", includeMode: includeMode, includeTagStrengths: strengths, excludeTags: excluded,
+                    excludeTagStrengths: excludedStrengths, excludeMode: excludeMode)
             };
             Assert.That(result, Is.InstanceOf<OkObjectResult>(), JsonSerializer.Serialize((result as ObjectResult)?.Value));
             var json = JsonSerializer.SerializeToElement(((OkObjectResult)result).Value);
@@ -74,6 +77,8 @@ public class LibraryDateSortTests
         Assert.That(await Get(includeMode: "and"), Is.EqualTo(new[] { "a" }));
         Assert.That(await Get(strengths: "1:gte:4,2:gte:4"), Is.EqualTo(new[] { "c", "b" }));
         Assert.That(await Get(excluded: "1"), Is.EqualTo(new[] { "c", "d" }));
+        Assert.That(await Get(excluded: "1", excludedStrengths: "1:gte:4"), Is.EqualTo(new[] { "a", "c", "d" }));
+        Assert.That(await Get(excluded: "1,2", excludeMode: "and", excludedStrengths: "1:gte:4,2:gte:4"), Is.EqualTo(new[] { "a", "c", "d", "b" }));
         if (type != "artist")
         {
             Assert.That(await Get(pageSize: 2), Is.EqualTo(new[] { "a", "c" }));
@@ -83,6 +88,12 @@ public class LibraryDateSortTests
         {
             Assert.That(await Get(inherited: true), Is.EqualTo(new[] { "a", "c", "d", "b", "e" }));
             Assert.That(await Get(inherited: true, order: "asc"), Is.EqualTo(new[] { "b", "a", "c", "d", "e" }));
+            Assert.That(await Get(inherited: true, excluded: "2", excludedStrengths: "2:gte:4"), Is.EqualTo(new[] { "a", "d", "b" }));
         }
+
+        var editedAssignment = await db.LibTagAssigns.SingleAsync(assign => assign.ItemType == type && assign.SpotifyItemId == "a" && assign.TagId == 1);
+        editedAssignment.Strength = 4;
+        await db.SaveChangesAsync();
+        Assert.That(await Get(excluded: "1", excludedStrengths: "1:gte:4"), Is.EqualTo(new[] { "c", "d" }));
     }
 }
